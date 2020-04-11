@@ -125,12 +125,12 @@ impl DnsServer {
         Ok(outreply)
     }
 
-    async fn recvinquery(&mut self, pkt: &[u8]) {
+    async fn recvinquery(&mut self, pkt: &[u8], from : std::net::SocketAddr) {
         println!("Received {}", pkt.len());
         let inquery = parse::PktParser::new(pkt)
             .get_dns()
             .expect("Failed to parse InQuery"); // TODO
-        println!("InQuery {:?}", inquery);
+        println!("InQuery {:?} {:?}", from, inquery);
         let key = CacheKey {
             qname: inquery.question.qdomain.clone(),
             qtype: inquery.question.qtype.clone(),
@@ -142,7 +142,7 @@ impl DnsServer {
                 let inreply = self.create_inreply(&inquery, &outreply);
                 println!("InReply: {:?}", inreply);
                 self.listener
-                    .send(inreply.serialise().as_slice())
+                    .send_to(inreply.serialise().as_slice(), from)
                     .await
                     .expect("Failed to send reply"); // TODO
             }
@@ -154,8 +154,8 @@ impl DnsServer {
         loop {
             let mut buf = [0; 65536];
             let mut cmsg = nix::cmsg_space!(nix::sys::socket::sockopt::Ipv4PacketInfo);
-            match self.listener.recv(&mut buf).await {
-                Ok(n) => self.recvinquery(&buf[0..n]).await,
+            match self.listener.recv_from(&mut buf).await {
+                Ok((n, sa)) => self.recvinquery(&buf[0..n], sa).await,
                 Err(e) => println!("Error {}", e),
             }
         }
