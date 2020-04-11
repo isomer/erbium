@@ -6,6 +6,8 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::PollEvented;
 use libc;
+use std::convert::TryFrom;
+
 
 struct UdpMsg {
     poll_evented: PollEvented<mio::net::UdpSocket>,
@@ -34,9 +36,11 @@ impl<'l> RecvMsgFuture<'l> {
     }
 }
 
+
+#[derive(Debug)]
 struct RecvMsg {
-    bytes: usize,
-    address: Option<nix::sys::socket::SockAddr>,
+    pub bytes: usize,
+    pub address: Option<nix::sys::socket::SockAddr>,
     /* TODO: These should probably return std types */
     /* Or possibly have accessors that convert them for you */
     pub timestamp : Option<nix::sys::time::TimeVal>,
@@ -112,10 +116,33 @@ impl UdpMsg {
     }
 }
 
+impl TryFrom<std::net::UdpSocket> for UdpMsg {
+    type Error = std::io::Error;
+    fn try_from(socket: std::net::UdpSocket) -> Result<Self, Self::Error> {
+        let io = mio::net::UdpSocket::from_socket(socket)?;
+        let io = PollEvented::new(io)?;
+        Ok(UdpMsg { poll_evented: io })
+    }
+}
+
+#[cfg(test)]
 async fn example(m : &mut UdpMsg) {
     let mut buffer = [0; 4096];
     let iov = [ nix::sys::uio::IoVec::from_mut_slice(&mut buffer[..]) ];
     let mut cmsg_buffer = nix::cmsg_space!([ std::os::unix::io::RawFd; 2]);
     m.recvmsg(&iov, &mut cmsg_buffer, nix::sys::socket::MsgFlags::empty()).await.expect("recvmsg");
-    println!("{:?}", cmsg_buffer);
+    println!("buffer: {:?}", cmsg_buffer);
+}
+
+
+#[tokio::test]
+async fn recvmsgtest() {
+    use std::convert::TryInto;
+    let listener = std::net::UdpSocket::bind("[::]:1053").expect("bind");
+    nix::sys::socket::setsockopt(
+        listener.as_raw_fd(),
+        nix::sys::socket::sockopt::Ipv4PacketInfo,
+        &true).expect("setsockopt(ipv4packetinfo, true)");
+
+    example(&mut listener.try_into().expect("try_into UdpMsg")).await;
 }
