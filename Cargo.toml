@@ -1,0 +1,16 @@
+[package]
+name = "networksrv-async"
+version = "0.1.0"
+authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "0.2", features = ["full"] }
+async-std = { version = "", features = ["unstable"] }
+rand = ""
+nix = { version = "0.17" }
+futures = ""
+mio = ""
+libc = ""
