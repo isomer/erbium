@@ -53,7 +53,7 @@ impl<'l> EdnsParser<'l> {
 }
 
 struct Label {
-    label: Vec<u8>,
+    label: dnspkt::Label,
     next: Option<u16>,
 }
 
@@ -94,13 +94,14 @@ impl<'l> PktParser<'l> {
         self.offset += count;
         return Ok(ret);
     }
-    fn get_label(&mut self) -> Result<Vec<u8>, String> {
+    fn get_label(&mut self) -> Result<dnspkt::Label, String> {
         let size = self.get_u8()? as usize;
         assert!(size & 0b1100_0000 == 0b0000_0000);
-        return self.get_bytes(size);
+        return Ok(dnspkt::Label::from(self.get_bytes(size)?));
     }
-    fn get_domain(&mut self) -> Result<Vec<Vec<u8>>, String> {
-        let mut domain: Vec<Vec<u8>> = Vec::new();
+
+    fn get_domain(&mut self) -> Result<dnspkt::Domain, String> {
+        let mut domain: dnspkt::Domain = Vec::new();
         loop {
             let prefix = self.peek_u8()?;
             match prefix & 0b1100_0000 {
@@ -159,12 +160,32 @@ impl<'l> PktParser<'l> {
         return Ok(dnspkt::Type(self.get_u16()?));
     }
 
+    fn get_soa(&mut self) -> Result<dnspkt::SoaData, String> {
+        let _rdlen = self.get_u16()? as usize;
+        Ok(dnspkt::SoaData {
+            mname: self.get_domain()?,
+            rname: self.get_domain()?,
+            serial: self.get_u32()?,
+            refresh: self.get_u32()?,
+            retry: self.get_u32()?,
+            expire: self.get_u32()?,
+            minimum: self.get_u32()?,
+        })
+    }
+
     fn get_rdata(&mut self, rtype: &dnspkt::Type) -> Result<dnspkt::RData, String> {
-        let rdlen = self.get_u16()? as usize;
-        let rdata = self.get_bytes(rdlen)?;
         match rtype {
-            &dnspkt::RR_OPT => Ok(dnspkt::RData::OPT(EdnsParser::new(&rdata).get_options()?)),
-            _ => Ok(dnspkt::RData::Other(rdata)),
+            &dnspkt::RR_OPT => {
+                let rdlen = self.get_u16()? as usize;
+                let rdata = self.get_bytes(rdlen)?;
+                Ok(dnspkt::RData::OPT(EdnsParser::new(&rdata).get_options()?))
+            }
+            &dnspkt::RR_SOA => Ok(dnspkt::RData::SOA(self.get_soa()?)),
+            _ => {
+                let rdlen = self.get_u16()? as usize;
+                let rdata = self.get_bytes(rdlen)?;
+                Ok(dnspkt::RData::Other(rdata))
+            }
         }
     }
 

@@ -100,24 +100,39 @@ impl fmt::Debug for RCode {
     }
 }
 
-fn display_byte(b: &u8) -> String {
+fn display_byte(b: u8) -> String {
     match b {
-        n @ 32..=127 => char::from(*n).to_string(),
+        n @ 32..=127 => char::from(n).to_string(),
         n => format!("\\{}", n),
     }
 }
 
-pub type Label = Vec<u8>;
-pub type Domain = Vec<Label>;
+#[derive(Clone, PartialEq, Eq, PartialOrd, Hash, Debug)]
+pub struct Label(Vec<u8>);
 
-fn label_to_string(label: &Vec<u8>) -> String {
-    String::from_iter(label.into_iter().map(display_byte))
+impl From<Vec<u8>> for Label {
+    fn from(v: Vec<u8>) -> Self {
+        return Label(v);
+    }
 }
+impl Ord for Label {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl ToString for Label {
+    fn to_string(&self) -> String {
+        String::from_iter((&self.0).into_iter().map(|&b| display_byte(b)))
+    }
+}
+
+pub type Domain = Vec<Label>;
 
 fn domain_to_string(domain: &Domain) -> String {
     domain
         .into_iter()
-        .map(label_to_string)
+        .map(|x| x.to_string())
         .collect::<Vec<String>>()
         .join(".")
 }
@@ -182,7 +197,19 @@ pub struct EdnsData {
 }
 
 #[derive(Debug, Clone)]
+pub struct SoaData {
+    pub mname: Domain,
+    pub rname: Domain,
+    pub serial: u32,
+    pub refresh: u32,
+    pub retry: u32,
+    pub expire: u32,
+    pub minimum: u32,
+}
+
+#[derive(Debug, Clone)]
 pub enum RData {
+    SOA(SoaData),
     OPT(EdnsData),
     Other(Vec<u8>),
 }
@@ -190,6 +217,10 @@ pub enum RData {
 impl ToString for RData {
     fn to_string(&self) -> String {
         match &self {
+            &RData::SOA(v) => format!(
+                "{:?} {:?} {} {} {} {} {}",
+                v.mname, v.rname, v.serial, v.refresh, v.retry, v.expire, v.minimum
+            ),
             &RData::OPT(v) => format!("{:?}", v),
             &RData::Other(v) => format!("\\#{} {:?}", v.len(), v),
         }
@@ -297,8 +328,8 @@ fn push_u32(v: &mut Vec<u8>, d: u32) {
 }
 
 fn push_label(v: &mut Vec<u8>, l: &Label) {
-    v.push(l.len() as u8);
-    v.extend_from_slice(l.as_slice())
+    v.push(l.0.len() as u8);
+    v.extend_from_slice(l.0.as_slice())
 }
 
 fn push_domain(v: &mut Vec<u8>, d: &Domain) {
@@ -324,6 +355,11 @@ fn push_rr(v: &mut Vec<u8>, rr: &RR) {
     push_u16(v, rr.class.0);
     push_u32(v, rr.ttl);
     match &rr.rdata {
+        RData::SOA(s) => {
+            let mut vs = Vec::<u8>::new();
+            push_domain(&mut vs, &s.mname);
+            v.extend_from_slice(vs.as_slice());
+        }
         RData::OPT(o) => {
             let mut vo = Vec::<u8>::new();
             o.push_opt(&mut vo);
