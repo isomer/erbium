@@ -189,8 +189,14 @@ impl<'l> PktParser<'l> {
         let flag1 = self.get_u8()?;
         let flag2 = self.get_u8()?;
         let qcount = self.get_u16()?;
+
+        let opcode = dnspkt::Opcode((flag1 & 0b0111_1000) >> 3);
+        let rcode = dnspkt::RCode((flag2 & 0b0000_1111) as u16);
         if qcount != 1 {
-            return Err(String::from("Incorrect number of questions"));
+            return Err(format!(
+                "Incorrect number of questions ({} / {:?} / {:?})",
+                qcount, opcode, rcode
+            ));
         }
         let arcount = self.get_u16()?;
         let nscount = self.get_u16()?;
@@ -232,7 +238,7 @@ impl<'l> PktParser<'l> {
             tc: (flag1 & 0b0000_0010) != 0,
             aa: (flag1 & 0b0000_0100) != 0,
             qr: (flag1 & 0b1000_0000) != 0,
-            opcode: dnspkt::Opcode((flag1 & 0b0111_1000) >> 3),
+            opcode: opcode,
 
             cd: (flag2 & 0b0010_0000) != 0,
             ad: (flag2 & 0b0100_0000) != 0,

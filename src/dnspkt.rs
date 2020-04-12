@@ -74,6 +74,7 @@ impl fmt::Debug for Type {
 #[derive(PartialOrd, PartialEq, Eq, Clone)]
 pub struct RCode(pub u16);
 pub const NOERROR: RCode = RCode(0);
+pub const FORMERR: RCode = RCode(1);
 pub const NXDOMAIN: RCode = RCode(3);
 
 impl Ord for RCode {
@@ -85,6 +86,7 @@ impl Ord for RCode {
 impl ToString for RCode {
     fn to_string(&self) -> String {
         match self {
+            &FORMERR => String::from("FORMERR"),
             &NOERROR => String::from("NOERROR"),
             &NXDOMAIN => String::from("NXDOMAIN"),
             RCode(x) => format!("#{}", x),
@@ -304,6 +306,12 @@ fn push_domain(v: &mut Vec<u8>, d: &Domain) {
     v.push(0)
 }
 
+fn make_edns_opt(v: &mut Vec<u8>, t: &EdnsOption) {
+    push_u16(v, t.code.0);
+    push_u16(v, t.data.len() as u16);
+    v.extend_from_slice(t.data.as_slice());
+}
+
 impl EdnsData {
     fn push_opt(&self, mut v: &mut Vec<u8>) {
         self.other.iter().for_each(|o| make_edns_opt(&mut v, o));
@@ -316,26 +324,17 @@ fn push_rr(v: &mut Vec<u8>, rr: &RR) {
     push_u16(v, rr.class.0);
     push_u32(v, rr.ttl);
     match &rr.rdata {
-        RData::OPT(o) => o.push_opt(v),
+        RData::OPT(o) => {
+            let mut vo = Vec::<u8>::new();
+            o.push_opt(&mut vo);
+            push_u16(v, vo.len() as u16);
+            v.extend_from_slice(vo.as_slice());
+        }
         RData::Other(x) => {
             push_u16(v, x.len() as u16);
             v.extend_from_slice(x.as_slice());
         }
     }
-}
-
-fn make_edns_opt(v: &mut Vec<u8>, t: &EdnsOption) {
-    push_u16(v, t.code.0);
-    push_u16(v, t.data.len() as u16);
-    v.extend_from_slice(t.data.as_slice());
-}
-
-fn make_edns_data(t: &EdnsData) -> RData {
-    let mut v: Vec<u8> = Vec::new();
-
-    t.other.iter().for_each(|o| make_edns_opt(&mut v, o));
-
-    return RData::Other(v);
 }
 
 impl DNSPkt {
@@ -354,8 +353,7 @@ impl DNSPkt {
         let mut additional = self.additional.clone();
 
         if self.edns.is_some() && self.bufsize != 512 {
-            let ednsdata =
-                make_edns_data(&self.edns.as_ref().unwrap_or(&EdnsData { other: vec![] }));
+            let edns = self.edns.clone().unwrap_or(EdnsData { other: vec![] });
 
             additional.push(RR {
                 domain: vec![],
@@ -367,7 +365,7 @@ impl DNSPkt {
                     } else {
                         0b0
                     }),
-                rdata: ednsdata,
+                rdata: RData::OPT(edns),
             });
         }
 

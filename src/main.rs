@@ -116,6 +116,7 @@ impl DnsServer {
         outsock.connect("8.8.8.8:53").await?;
 
         println!("OutQuery: {:?}", oq);
+        println!("OutQuery (parsed): {:?}", parse::PktParser::new(&oq.serialise()).get_dns());
         outsock.send(oq.serialise().as_slice()).await?;
 
         let mut buf = [0; 65536];
