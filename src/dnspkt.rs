@@ -179,24 +179,38 @@ pub struct EdnsData {
     pub other: Vec<EdnsOption>,
 }
 
+#[derive(Debug, Clone)]
+pub enum RData {
+    OPT(EdnsData),
+    Other(Vec<u8>),
+}
+
+impl ToString for RData {
+    fn to_string(&self) -> String {
+        match &self {
+            &RData::OPT(v) => format!("{:?}", v),
+            &RData::Other(v) => format!("\\#{} {:?}", v.len(), v),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct RR {
     pub domain: Domain,
     pub class: Class,
     pub rrtype: Type,
     pub ttl: u32,
-    pub rdata: Vec<u8>,
+    pub rdata: RData,
 }
 
 impl ToString for RR {
     fn to_string(&self) -> String {
         format!(
-            "{} {} {:?} {:?} \\#{} {:?}",
+            "{} {} {:?} {:?} {:?}",
             domain_to_string(&self.domain),
             self.ttl,
             self.class,
             self.rrtype,
-            self.rdata.len(),
             self.rdata
         )
     }
@@ -290,13 +304,24 @@ fn push_domain(v: &mut Vec<u8>, d: &Domain) {
     v.push(0)
 }
 
+impl EdnsData {
+    fn push_opt(&self, mut v: &mut Vec<u8>) {
+        self.other.iter().for_each(|o| make_edns_opt(&mut v, o));
+    }
+}
+
 fn push_rr(v: &mut Vec<u8>, rr: &RR) {
     push_domain(v, &rr.domain);
     push_u16(v, rr.rrtype.0);
     push_u16(v, rr.class.0);
     push_u32(v, rr.ttl);
-    push_u16(v, rr.rdata.len() as u16);
-    v.extend_from_slice(rr.rdata.as_slice())
+    match &rr.rdata {
+        RData::OPT(o) => o.push_opt(v),
+        RData::Other(x) => {
+            push_u16(v, x.len() as u16);
+            v.extend_from_slice(x.as_slice());
+        }
+    }
 }
 
 fn make_edns_opt(v: &mut Vec<u8>, t: &EdnsOption) {
@@ -305,12 +330,12 @@ fn make_edns_opt(v: &mut Vec<u8>, t: &EdnsOption) {
     v.extend_from_slice(t.data.as_slice());
 }
 
-fn make_edns_data(t: &EdnsData) -> Vec<u8> {
+fn make_edns_data(t: &EdnsData) -> RData {
     let mut v: Vec<u8> = Vec::new();
 
     t.other.iter().for_each(|o| make_edns_opt(&mut v, o));
 
-    return v;
+    return RData::Other(v);
 }
 
 impl DNSPkt {

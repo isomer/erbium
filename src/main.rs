@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tokio::io;
 use tokio::net::UdpSocket;
 use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 use std::os::unix::io::AsRawFd;
 
 extern crate rand;
@@ -40,19 +41,22 @@ impl Cache {
     }
 }
 
+
+#[derive(Clone)]
 struct DnsServer {
-    listener: UdpSocket,
+    listener: Arc<Mutex<UdpSocket>>,
     cache: Arc<RwLock<Cache>>,
-    rng: Cell<rand::rngs::OsRng>,
+    rng: Arc<Mutex<Cell<rand::rngs::OsRng>>>,
 }
 
+
 impl DnsServer {
-    fn get_random_id(&self) -> u16 {
-        self.rng.get().next_u32() as u16
+    async fn get_random_id(&self) -> u16 {
+        self.rng.lock().await.get().next_u32() as u16
     }
-    fn create_outquery(&self, q: &dnspkt::Question) -> dnspkt::DNSPkt {
+    async fn create_outquery(&self, q: &dnspkt::Question) -> dnspkt::DNSPkt {
         return dnspkt::DNSPkt {
-            qid: self.get_random_id(),
+            qid: self.get_random_id().await,
             rd: true,
             tc: false,
             aa: false,
@@ -106,13 +110,13 @@ impl DnsServer {
     }
 
     async fn send_outquery(&self, q: &dnspkt::Question) -> Result<dnspkt::DNSPkt, std::io::Error> {
-        let oq = self.create_outquery(q).serialise();
+        let oq = self.create_outquery(q).await;
 
         let mut outsock = UdpSocket::bind("0.0.0.0:0").await?;
         outsock.connect("8.8.8.8:53").await?;
 
         println!("OutQuery: {:?}", oq);
-        outsock.send(oq.as_slice()).await?;
+        outsock.send(oq.serialise().as_slice()).await?;
 
         let mut buf = [0; 65536];
         let l = outsock.recv(&mut buf).await?;
@@ -140,11 +144,14 @@ impl DnsServer {
         match self.send_outquery(&inquery.question).await {
             Ok(outreply) => {
                 let inreply = self.create_inreply(&inquery, &outreply);
-                println!("InReply: {:?}", inreply);
+                println!("InReply: {:?} <- {:?}", from, inreply);
                 self.listener
+                    .lock()
+                    .await
                     .send_to(inreply.serialise().as_slice(), from)
                     .await
                     .expect("Failed to send reply"); // TODO
+                println!("Reply sent");
             }
             Err(e) => println!("Error: {:?}", e),
         };
@@ -153,10 +160,11 @@ impl DnsServer {
     async fn run(mut self) -> Result<(), io::Error> {
         loop {
             let mut buf = [0; 65536];
-            let mut cmsg = nix::cmsg_space!(nix::sys::socket::sockopt::Ipv4PacketInfo);
-            match self.listener.recv_from(&mut buf).await {
-                Ok((n, sa)) => self.recvinquery(&buf[0..n], sa).await,
-                Err(e) => println!("Error {}", e),
+            match self.listener.lock().await.recv_from(&mut buf).await {
+                Ok((n, sa)) => { let mut q = self.clone();
+                                 tokio::spawn(async move { q.recvinquery(&buf[0..n], sa).await });
+                },
+                Err(e) => { println!("Error {}", e); },
             }
         }
     }
@@ -177,9 +185,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rng = rand::rngs::OsRng::default();
 
     let server = DnsServer {
-        listener: listener,
+        listener: Arc::new(Mutex::new(listener)),
         cache: cache,
-        rng: Cell::new(rng),
+        rng: Arc::new(Mutex::new(Cell::new(rng))),
     };
 
     server.run().await?;

@@ -159,18 +159,28 @@ impl<'l> PktParser<'l> {
         return Ok(dnspkt::Type(self.get_u16()?));
     }
 
-    fn get_rdata(&mut self) -> Result<Vec<u8>, String> {
+    fn get_rdata(&mut self, rtype: &dnspkt::Type) -> Result<dnspkt::RData, String> {
         let rdlen = self.get_u16()? as usize;
-        return Ok(self.get_bytes(rdlen)?);
+        let rdata = self.get_bytes(rdlen)?;
+        match rtype {
+            &dnspkt::RR_OPT => Ok(dnspkt::RData::OPT(EdnsParser::new(&rdata).get_options()?)),
+            _ => Ok(dnspkt::RData::Other(rdata)),
+        }
     }
 
     fn get_rr(&mut self) -> Result<dnspkt::RR, String> {
+        let domain = self.get_domain()?;
+        let rrtype = self.get_type()?;
+        let class = self.get_class()?;
+        let ttl = self.get_u32()?;
+        let rdata = self.get_rdata(&rrtype)?;
+
         return Ok(dnspkt::RR {
-            domain: self.get_domain()?,
-            rrtype: self.get_type()?,
-            class: self.get_class()?,
-            ttl: self.get_u32()?,
-            rdata: self.get_rdata()?,
+            domain: domain,
+            rrtype: rrtype,
+            class: class,
+            ttl: ttl,
+            rdata: rdata,
         });
     }
 
@@ -209,9 +219,10 @@ impl<'l> PktParser<'l> {
             (o.ttl & 0b00000000_00000000_100000000_00000000) != 0
         });
 
-        let edns = opt
-            .map(|o| EdnsParser::new(&o.rdata).get_options())
-            .map_or(Ok(None), |r| r.map(Some))?;
+        let edns = opt.map(|x| match &x.rdata {
+            dnspkt::RData::OPT(o) => o.clone(),
+            _ => panic!("opt record does not contain opt data"),
+        });
 
         additional.retain(|rr| rr.rrtype != dnspkt::RR_OPT);
 
