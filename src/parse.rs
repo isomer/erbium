@@ -101,7 +101,7 @@ impl<'l> PktParser<'l> {
     }
 
     fn get_domain(&mut self) -> Result<dnspkt::Domain, String> {
-        let mut domain: dnspkt::Domain = Vec::new();
+        let mut domainv = Vec::new();
         loop {
             let prefix = self.peek_u8()?;
             match prefix & 0b1100_0000 {
@@ -110,7 +110,7 @@ impl<'l> PktParser<'l> {
                     let saved_offset = self.offset as u16;
                     if self.peek_u8()? == 0 {
                         self.get_u8()?; // Consume the \0
-                        return Ok(domain);
+                        return Ok(dnspkt::Domain::from(domainv));
                     }
                     let label = self.get_label()?;
                     let next = if self.peek_u8()? == 0 {
@@ -125,7 +125,7 @@ impl<'l> PktParser<'l> {
                             next: next,
                         },
                     );
-                    domain.push(label.clone());
+                    domainv.push(label.clone());
                 }
                 0b1100_0000 => {
                     // Compressed label.
@@ -134,13 +134,13 @@ impl<'l> PktParser<'l> {
                         match self.labels.get(&offset) {
                             None => return Err(String::from("Bad compression offset")),
                             Some(l) => {
-                                domain.push(l.label.clone());
+                                domainv.push(l.label.clone());
                                 match l.next {
                                     Some(o) => {
                                         offset = o;
                                     }
                                     None => {
-                                        return Ok(domain);
+                                        return Ok(dnspkt::Domain::from(domainv));
                                     }
                                 }
                             }

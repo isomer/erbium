@@ -127,14 +127,39 @@ impl ToString for Label {
     }
 }
 
-pub type Domain = Vec<Label>;
+#[derive(Clone, PartialEq, Eq, PartialOrd, Hash)]
+pub struct Domain(Vec<Label>);
 
-fn domain_to_string(domain: &Domain) -> String {
-    domain
-        .into_iter()
-        .map(|x| x.to_string())
-        .collect::<Vec<String>>()
-        .join(".")
+impl From<Vec<Label>> for Domain {
+    fn from(v: Vec<Label>) -> Self {
+        return Domain(v);
+    }
+}
+
+impl Ord for Domain {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl fmt::Display for Domain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            (&self.0)
+                .into_iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join(".")
+        )
+    }
+}
+
+impl fmt::Debug for Domain {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Domain({})", self.to_string())
+    }
 }
 
 #[derive(Clone)]
@@ -146,12 +171,7 @@ pub struct Question {
 
 impl ToString for Question {
     fn to_string(&self) -> String {
-        format!(
-            "{} {:?} {:?}",
-            domain_to_string(&self.qdomain),
-            self.qclass,
-            self.qtype
-        )
+        format!("{} {:?} {:?}", self.qdomain, self.qclass, self.qtype)
     }
 }
 
@@ -240,11 +260,7 @@ impl ToString for RR {
     fn to_string(&self) -> String {
         format!(
             "{} {} {:?} {:?} {:?}",
-            domain_to_string(&self.domain),
-            self.ttl,
-            self.class,
-            self.rrtype,
-            self.rdata
+            self.domain, self.ttl, self.class, self.rrtype, self.rdata
         )
     }
 }
@@ -333,7 +349,7 @@ fn push_label(v: &mut Vec<u8>, l: &Label) {
 }
 
 fn push_domain(v: &mut Vec<u8>, d: &Domain) {
-    d.iter().for_each(|l| push_label(v, l));
+    d.0.iter().for_each(|l| push_label(v, l));
     v.push(0)
 }
 
@@ -392,7 +408,7 @@ impl DNSPkt {
             let edns = self.edns.clone().unwrap_or(EdnsData { other: vec![] });
 
             additional.push(RR {
-                domain: vec![],
+                domain: Domain::from(vec![]),
                 class: Class(self.bufsize),
                 rrtype: RR_OPT,
                 ttl: ((self.edns_ver.unwrap_or(0) as u32) << 16)
