@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::io;
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
@@ -22,7 +23,12 @@ struct CacheKey {
     qtype: dnspkt::Type,
 }
 
-type Cache = HashMap<CacheKey, dnspkt::DNSPkt>;
+struct CacheValue {
+    reply: dnspkt::DNSPkt,
+    expire: std::time::Instant,
+}
+
+type Cache = HashMap<CacheKey, CacheValue>;
 
 #[derive(Clone)]
 struct DnsServer {
@@ -95,10 +101,16 @@ impl DnsServer {
             qtype: q.qtype.clone(),
         };
         if q.qclass == dnspkt::CLASS_IN {
-            /* TODO: Expiry! */
             match self.cache.read().await.get(&ck) {
-                Some(entry) => return Ok(entry.clone()),
-                None => (),
+                Some(entry) => {
+                    let now = Instant::now();
+                    if entry.expire > now {
+                        // TODO: Fixup TTLs.
+                        return Ok(entry.reply.clone());
+                    }
+                    println!("Cache expired: {:?} >= {:?}", entry.expire, now)
+                }
+                _ => (),
             }
         }
         let oq = self.create_outquery(q).await;
@@ -120,7 +132,13 @@ impl DnsServer {
             .expect("Failed to parse OutReply"); // TODO: Better error handling than panic!
 
         if q.qclass == dnspkt::CLASS_IN {
-            self.cache.write().await.insert(ck, outreply.clone());
+            self.cache.write().await.insert(
+                ck,
+                CacheValue {
+                    reply: outreply.clone(),
+                    expire: Instant::now() + outreply.get_expiry(),
+                },
+            );
         }
 
         println!("OutReply: {:?}", outreply);
