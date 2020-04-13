@@ -22,24 +22,7 @@ struct CacheKey {
     qtype: dnspkt::Type,
 }
 
-struct Cache {
-    cache: HashMap<CacheKey, ()>,
-}
-
-impl Cache {
-    fn new() -> Self {
-        return Cache {
-            cache: HashMap::new(),
-        };
-    }
-
-    fn lookup(&self, key: &CacheKey) -> Option<()> {
-        match self.cache.get(key) {
-            Some(_) => Some(()),
-            None => None,
-        }
-    }
-}
+type Cache = HashMap<CacheKey, dnspkt::DNSPkt>;
 
 #[derive(Clone)]
 struct DnsServer {
@@ -107,6 +90,17 @@ impl DnsServer {
     }
 
     async fn send_outquery(&self, q: &dnspkt::Question) -> Result<dnspkt::DNSPkt, std::io::Error> {
+        let ck = CacheKey {
+            qname: q.qdomain.clone(),
+            qtype: q.qtype.clone(),
+        };
+        if q.qclass == dnspkt::CLASS_IN {
+            /* TODO: Expiry! */
+            match self.cache.read().await.get(&ck) {
+                Some(entry) => return Ok(entry.clone()),
+                None => (),
+            }
+        }
         let oq = self.create_outquery(q).await;
 
         let mut outsock = UdpSocket::bind("0.0.0.0:0").await?;
@@ -123,7 +117,11 @@ impl DnsServer {
         let l = outsock.recv(&mut buf).await?;
         let outreply = parse::PktParser::new(&buf[0..l])
             .get_dns()
-            .expect("Failed to parse OutReply"); // TODO
+            .expect("Failed to parse OutReply"); // TODO: Better error handling than panic!
+
+        if q.qclass == dnspkt::CLASS_IN {
+            self.cache.write().await.insert(ck, outreply.clone());
+        }
 
         println!("OutReply: {:?}", outreply);
 
@@ -141,11 +139,6 @@ impl DnsServer {
             .get_dns()
             .expect("Failed to parse InQuery"); // TODO
         println!("InQuery {:?} {:?}", from, inquery);
-        let key = CacheKey {
-            qname: inquery.question.qdomain.clone(),
-            qtype: inquery.question.qtype.clone(),
-        };
-        self.cache.read().await.lookup(&key);
 
         match self.send_outquery(&inquery.question).await {
             Ok(outreply) => {
