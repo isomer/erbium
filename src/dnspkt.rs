@@ -4,7 +4,7 @@ use std::iter::FromIterator;
 use std::string::ToString;
 
 //#[derive(Debug)]
-#[derive(Eq, PartialOrd, PartialEq, Clone)]
+#[derive(Eq, PartialOrd, PartialEq, Clone, Copy)]
 pub struct Class(pub u16);
 
 pub const CLASS_IN: Class = Class(1); /* Internet */
@@ -33,7 +33,7 @@ impl fmt::Debug for Class {
 }
 
 //#[derive(Debug)]
-#[derive(PartialOrd, PartialEq, Eq, Clone, Hash)]
+#[derive(PartialOrd, PartialEq, Eq, Clone, Hash, Copy)]
 pub struct Type(pub u16);
 
 pub const RR_A: Type = Type(1);
@@ -71,7 +71,7 @@ impl fmt::Debug for Type {
     }
 }
 
-#[derive(PartialOrd, PartialEq, Eq, Clone)]
+#[derive(PartialOrd, PartialEq, Eq, Clone, Copy)]
 pub struct RCode(pub u16);
 pub const NOERROR: RCode = RCode(0);
 pub const FORMERR: RCode = RCode(1);
@@ -271,7 +271,7 @@ impl fmt::Debug for RR {
     }
 }
 
-#[derive(Eq, PartialOrd, PartialEq, Clone)]
+#[derive(Eq, PartialOrd, PartialEq, Clone, Copy)]
 pub struct Opcode(pub u8);
 
 pub const OPCODE_QUERY: Opcode = Opcode(0);
@@ -446,5 +446,37 @@ impl DNSPkt {
             .map(|rr| std::time::Duration::from_secs(rr.ttl as u64))
             .min()
             .unwrap_or(std::time::Duration::from_secs(0))
+    }
+
+    pub fn clone_with_ttl_decrement(&self, decrement: u32) -> DNSPkt {
+        DNSPkt {
+            question: self.question.clone(),
+            additional: self
+                .additional
+                .iter()
+                .map(|x| RR {
+                    ttl: x.ttl - decrement,
+                    ..x.clone()
+                })
+                .collect(),
+            nameserver: self
+                .nameserver
+                .iter()
+                .map(|x| RR {
+                    ttl: x.ttl - decrement,
+                    ..x.clone()
+                })
+                .collect(),
+            answer: self
+                .answer
+                .iter()
+                .map(|x| RR {
+                    ttl: x.ttl - decrement,
+                    ..x.clone()
+                })
+                .collect(),
+            edns: self.edns.clone(),
+            ..*self
+        }
     }
 }

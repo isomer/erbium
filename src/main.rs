@@ -25,7 +25,8 @@ struct CacheKey {
 
 struct CacheValue {
     reply: dnspkt::DNSPkt,
-    expire: std::time::Instant,
+    birth: Instant,
+    lifetime: Duration,
 }
 
 type Cache = HashMap<CacheKey, CacheValue>;
@@ -104,11 +105,11 @@ impl DnsServer {
             match self.cache.read().await.get(&ck) {
                 Some(entry) => {
                     let now = Instant::now();
-                    if entry.expire > now {
-                        // TODO: Fixup TTLs.
-                        return Ok(entry.reply.clone());
+                    if entry.birth + entry.lifetime > now {
+                        return Ok(entry
+                            .reply
+                            .clone_with_ttl_decrement((now - entry.birth).as_secs() as u32));
                     }
-                    println!("Cache expired: {:?} >= {:?}", entry.expire, now)
                 }
                 _ => (),
             }
@@ -136,7 +137,8 @@ impl DnsServer {
                 ck,
                 CacheValue {
                     reply: outreply.clone(),
-                    expire: Instant::now() + outreply.get_expiry(),
+                    birth: Instant::now(),
+                    lifetime: outreply.get_expiry(),
                 },
             );
         }
