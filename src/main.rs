@@ -2,19 +2,19 @@ use crate::rand::RngCore;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
+use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 use tokio::io;
 use tokio::net::UdpSocket;
-use tokio::sync::RwLock;
 use tokio::sync::Mutex;
-use std::os::unix::io::AsRawFd;
+use tokio::sync::RwLock;
 
-extern crate rand;
 extern crate nix;
+extern crate rand;
 
 mod dnspkt;
-mod parse;
 mod net;
+mod parse;
 
 #[derive(Eq, PartialEq, Hash)]
 struct CacheKey {
@@ -41,14 +41,11 @@ impl Cache {
     }
 }
 
-
 #[derive(Clone)]
 struct DnsServer {
-    listener: Arc<Mutex<UdpSocket>>,
     cache: Arc<RwLock<Cache>>,
     rng: Arc<Mutex<Cell<rand::rngs::OsRng>>>,
 }
-
 
 impl DnsServer {
     async fn get_random_id(&self) -> u16 {
@@ -116,7 +113,10 @@ impl DnsServer {
         outsock.connect("8.8.8.8:53").await?;
 
         println!("OutQuery: {:?}", oq);
-        println!("OutQuery (parsed): {:?}", parse::PktParser::new(&oq.serialise()).get_dns());
+        println!(
+            "OutQuery (parsed): {:?}",
+            parse::PktParser::new(&oq.serialise()).get_dns()
+        );
         outsock.send(oq.serialise().as_slice()).await?;
 
         let mut buf = [0; 65536];
@@ -130,7 +130,12 @@ impl DnsServer {
         Ok(outreply)
     }
 
-    async fn recvinquery(&mut self, pkt: &[u8], from : std::net::SocketAddr) {
+    async fn recvinquery(
+        &mut self,
+        responder: Arc<Mutex<tokio::net::udp::SendHalf>>,
+        pkt: &[u8],
+        from: std::net::SocketAddr,
+    ) {
         println!("Received {}", pkt.len());
         let inquery = parse::PktParser::new(pkt)
             .get_dns()
@@ -146,10 +151,10 @@ impl DnsServer {
             Ok(outreply) => {
                 let inreply = self.create_inreply(&inquery, &outreply);
                 println!("InReply: {:?} <- {:?}", from, inreply);
-                self.listener
+                responder
                     .lock()
                     .await
-                    .send_to(inreply.serialise().as_slice(), from)
+                    .send_to(inreply.serialise().as_slice(), &from)
                     .await
                     .expect("Failed to send reply"); // TODO
                 println!("Reply sent");
@@ -158,14 +163,22 @@ impl DnsServer {
         };
     }
 
-    async fn run(mut self) -> Result<(), io::Error> {
+    async fn run(self, sock: tokio::net::UdpSocket) -> Result<(), io::Error> {
+        let (mut listener, responder) = sock.split();
+        let shared_responder = Arc::new(Mutex::new(responder));
         loop {
             let mut buf = [0; 65536];
-            match self.listener.lock().await.recv_from(&mut buf).await {
-                Ok((n, sa)) => { let mut q = self.clone();
-                                 tokio::spawn(async move { q.recvinquery(&buf[0..n], sa).await });
-                },
-                Err(e) => { println!("Error {}", e); },
+            match listener.recv_from(&mut buf).await {
+                Ok((n, sa)) => {
+                    let mut q = self.clone();
+                    let shared_responder = shared_responder.clone();
+                    tokio::spawn(
+                        async move { q.recvinquery(shared_responder, &buf[0..n], sa).await },
+                    );
+                }
+                Err(e) => {
+                    println!("Error {}", e);
+                }
             }
         }
     }
@@ -178,7 +191,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     nix::sys::socket::setsockopt(
         listener.as_raw_fd(),
         nix::sys::socket::sockopt::Ipv4PacketInfo,
-        &true)?;
+        &true,
+    )?;
 
     println!("Listening on {}", listener.local_addr()?);
     let cache = Arc::new(RwLock::new(Cache::new()));
@@ -186,12 +200,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rng = rand::rngs::OsRng::default();
 
     let server = DnsServer {
-        listener: Arc::new(Mutex::new(listener)),
         cache: cache,
         rng: Arc::new(Mutex::new(Cell::new(rng))),
     };
 
-    server.run().await?;
+    server.run(listener).await?;
 
     Ok(())
 }
