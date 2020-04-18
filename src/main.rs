@@ -17,6 +17,8 @@ mod dnspkt;
 mod net;
 mod parse;
 
+mod dhcp;
+
 #[derive(Eq, PartialEq, Hash)]
 struct CacheKey {
     qname: dnspkt::Domain,
@@ -207,7 +209,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &true,
     )?;
 
-    println!("Listening on {}", listener.local_addr()?);
+    println!("Listening for DNS on {}", listener.local_addr()?);
     let cache = Arc::new(RwLock::new(Cache::new()));
 
     let rng = rand::rngs::OsRng::default();
@@ -216,6 +218,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         cache: cache,
         rng: Arc::new(Mutex::new(Cell::new(rng))),
     };
+
+    tokio::spawn(dhcp::run());
 
     server.run(listener).await?;
 
