@@ -1,13 +1,12 @@
 use futures::ready;
+use libc;
 use mio::Ready;
+use std::convert::TryFrom;
 use std::future::Future;
 use std::os::unix::io::AsRawFd;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::PollEvented;
-use libc;
-use std::convert::TryFrom;
-
 
 struct UdpMsg {
     poll_evented: PollEvented<mio::net::UdpSocket>,
@@ -15,7 +14,7 @@ struct UdpMsg {
 
 struct RecvMsgFuture<'l> {
     poll_evented: &'l PollEvented<mio::net::UdpSocket>,
-    iov: &'l[nix::sys::uio::IoVec<&'l mut [u8]>],
+    iov: &'l [nix::sys::uio::IoVec<&'l mut [u8]>],
     cmsg_buffer: std::cell::Cell<&'l mut Vec<u8>>,
     flags: nix::sys::socket::MsgFlags,
 }
@@ -36,20 +35,19 @@ impl<'l> RecvMsgFuture<'l> {
     }
 }
 
-
 #[derive(Debug)]
 struct RecvMsg {
     pub bytes: usize,
     pub address: Option<nix::sys::socket::SockAddr>,
     /* TODO: These should probably return std types */
     /* Or possibly have accessors that convert them for you */
-    pub timestamp : Option<nix::sys::time::TimeVal>,
-    pub ipv4pktinfo : Option<libc::in_pktinfo>,
-    pub ipv6pktinfo : Option<libc::in6_pktinfo>,
+    pub timestamp: Option<nix::sys::time::TimeVal>,
+    pub ipv4pktinfo: Option<libc::in_pktinfo>,
+    pub ipv6pktinfo: Option<libc::in6_pktinfo>,
 }
 
 impl RecvMsg {
-    fn new(m : nix::sys::socket::RecvMsg) -> RecvMsg {
+    fn new(m: nix::sys::socket::RecvMsg) -> RecvMsg {
         let mut r = RecvMsg {
             bytes: m.bytes,
             address: m.address,
@@ -61,9 +59,15 @@ impl RecvMsg {
         for cmsg in m.cmsgs() {
             use nix::sys::socket::ControlMessageOwned;
             match cmsg {
-                ControlMessageOwned::ScmTimestamp(rtime) => { r.timestamp = Some(rtime); },
-                ControlMessageOwned::Ipv4PacketInfo(pi) => { r.ipv4pktinfo = Some(pi); },
-                ControlMessageOwned::Ipv6PacketInfo(pi) => { r.ipv6pktinfo = Some(pi); },
+                ControlMessageOwned::ScmTimestamp(rtime) => {
+                    r.timestamp = Some(rtime);
+                }
+                ControlMessageOwned::Ipv4PacketInfo(pi) => {
+                    r.ipv4pktinfo = Some(pi);
+                }
+                ControlMessageOwned::Ipv6PacketInfo(pi) => {
+                    r.ipv6pktinfo = Some(pi);
+                }
                 _ => (),
             }
         }
@@ -72,13 +76,9 @@ impl RecvMsg {
     }
 }
 
-
 impl<'l> Future for RecvMsgFuture<'l> {
     type Output = Result<RecvMsg, Box<dyn std::error::Error>>;
-    fn poll(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let ready = Ready::readable();
 
         ready!(self.poll_evented.poll_read_ready(cx, ready))?;
@@ -95,12 +95,12 @@ impl<'l> Future for RecvMsgFuture<'l> {
 
         match received {
             Ok(msg) => Poll::Ready(Ok(RecvMsg::new(msg))),
-            Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => return Poll::Pending,
+            Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => Poll::Pending,
             Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
                 self.poll_evented.clear_read_ready(cx, ready)?;
-                return Poll::Pending
+                Poll::Pending
             }
-            Err(e) => return Poll::Ready(Err(Box::new(e))),
+            Err(e) => Poll::Ready(Err(Box::new(e))),
         }
     }
 }
@@ -126,14 +126,15 @@ impl TryFrom<std::net::UdpSocket> for UdpMsg {
 }
 
 #[cfg(test)]
-async fn example(m : &mut UdpMsg) {
+async fn example(m: &mut UdpMsg) {
     let mut buffer = [0; 4096];
-    let iov = [ nix::sys::uio::IoVec::from_mut_slice(&mut buffer[..]) ];
-    let mut cmsg_buffer = nix::cmsg_space!([ std::os::unix::io::RawFd; 2]);
-    m.recvmsg(&iov, &mut cmsg_buffer, nix::sys::socket::MsgFlags::empty()).await.expect("recvmsg");
+    let iov = [nix::sys::uio::IoVec::from_mut_slice(&mut buffer[..])];
+    let mut cmsg_buffer = nix::cmsg_space!([std::os::unix::io::RawFd; 2]);
+    m.recvmsg(&iov, &mut cmsg_buffer, nix::sys::socket::MsgFlags::empty())
+        .await
+        .expect("recvmsg");
     println!("buffer: {:?}", cmsg_buffer);
 }
-
 
 #[tokio::test]
 async fn recvmsgtest() {
@@ -142,7 +143,9 @@ async fn recvmsgtest() {
     nix::sys::socket::setsockopt(
         listener.as_raw_fd(),
         nix::sys::socket::sockopt::Ipv4PacketInfo,
-        &true).expect("setsockopt(ipv4packetinfo, true)");
+        &true,
+    )
+    .expect("setsockopt(ipv4packetinfo, true)");
 
     example(&mut listener.try_into().expect("try_into UdpMsg")).await;
 }

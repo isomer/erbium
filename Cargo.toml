@@ -14,3 +14,4 @@ nix = { version = "0.17" }
 futures = ""
 mio = ""
 libc = ""
+rusqlite = ""
