@@ -1,9 +1,11 @@
+use std::collections;
 use std::fmt;
 use tokio::net::UdpSocket;
 
 #[derive(Debug)]
 enum ParseError {
     UnexpectedEndOfInput,
+    WrongMagic,
 }
 
 impl std::error::Error for ParseError {
@@ -14,7 +16,10 @@ impl std::error::Error for ParseError {
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Unexpected End Of Input")
+        match self {
+            ParseError::UnexpectedEndOfInput => write!(f, "Unexpected End Of Input"),
+            ParseError::WrongMagic => write!(f, "Wrong Magic"),
+        }
     }
 }
 
@@ -88,6 +93,25 @@ impl fmt::Debug for HwType {
 }
 
 #[derive(PartialEq, Eq)]
+pub struct MessageType(u8);
+pub const DHCPDISCOVER: MessageType = MessageType(1);
+
+impl ToString for MessageType {
+    fn to_string(&self) -> String {
+        match self {
+            &DHCPDISCOVER => String::from("DHCPDISCOVER"),
+            MessageType(x) => format!("#{}", x),
+        }
+    }
+}
+
+impl fmt::Debug for MessageType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        return write!(f, "{}", self.to_string());
+    }
+}
+
+#[derive(PartialEq, Eq, Hash)]
 pub struct DhcpOption(u8);
 pub const OPTION_SUBNETMASK: DhcpOption = DhcpOption(1);
 pub const OPTION_TIMEOFFSET: DhcpOption = DhcpOption(2);
@@ -134,48 +158,12 @@ impl fmt::Debug for DhcpOption {
     }
 }
 
-struct DhcpOptVal {
-    op: DhcpOption,
-    data: Vec<u8>,
-}
-
-impl fmt::Debug for DhcpOptVal {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.op {
-            OPTION_MSGTYPE => match self.data[0] {
-                1 => write!(f, "DHCPDISCOVER"),
-                2 => write!(f, "DHCPOFFER"),
-                3 => write!(f, "DHCPREQUEST"),
-                4 => write!(f, "DHCPDECLINE"),
-                5 => write!(f, "DHCPACK"),
-                6 => write!(f, "DHCPNAK"),
-                7 => write!(f, "DHCPRELEASE"),
-                8 => write!(f, "DHCPINFORM"),
-                9 => write!(f, "DHCPFORCERENEW"),
-                x => write!(f, "#{:?}", x),
-            },
-            OPTION_PARAMLIST => write!(
-                f,
-                "Parameter List: {:?}",
-                self.data
-                    .iter()
-                    .map(|&x| DhcpOption(x))
-                    .collect::<Vec<DhcpOption>>()
-            ),
-            OPTION_HOSTNAME => write!(
-                f,
-                "Hostname: {:?}",
-                String::from_utf8(self.data.clone())
-                    .or_else::<Result<String, String>, _>(|_| Ok(format!("{:?}", self.data)))
-                    .unwrap()
-            ),
-            _ => f
-                .debug_struct("DhcpOption")
-                .field("op", &self.op)
-                .field("data", &self.data)
-                .finish(),
-        }
-    }
+#[derive(Debug)]
+struct DhcpOptions {
+    messagetype: MessageType,
+    hostname: Option<String>,
+    parameterlist: Option<Vec<DhcpOption>>,
+    other: collections::HashMap<DhcpOption, Vec<u8>>,
 }
 
 struct DHCP {
@@ -193,7 +181,7 @@ struct DHCP {
     chaddr: Vec<u8>,
     sname: Vec<u8>,
     file: Vec<u8>,
-    options: Vec<DhcpOptVal>,
+    options: DhcpOptions,
 }
 
 impl std::fmt::Debug for DHCP {
@@ -230,12 +218,9 @@ impl std::fmt::Debug for DHCP {
             )
             .field(
                 "file",
-                &self
-                    .file
-                    .iter()
-                    .map(|&x| format!("{:x?}", x))
-                    .collect::<Vec<String>>()
-                    .join(""),
+                &String::from_utf8(self.file.clone())
+                    .or_else::<Result<String, String>, _>(|_| Ok(format!("{:?}", self.file)))
+                    .unwrap(),
             )
             .field("options", &self.options)
             .finish()
@@ -258,30 +243,43 @@ fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
     let chaddr = get_bytes(&mut it, 16)?;
     let sname = get_bytes(&mut it, 64)?;
     let file = get_bytes(&mut it, 128)?;
-    let mut options = vec![];
+    let mut raw_options: collections::HashMap<DhcpOption, Vec<u8>> = collections::HashMap::new();
     match get_be32(&mut it) {
         Ok(0x63825363) => {
             loop {
                 match get_u8(&mut it) {
                     Ok(0) => (),      /* Pad byte */
                     Ok(255) => break, /* End Field */
-                    Ok(x) => match get_u8(&mut it) {
-                        Err(e) => {
-                            println!("Truncated before option length: {}", e);
-                            break;
-                        }
-                        Ok(l) => options.push(DhcpOptVal {
-                            op: DhcpOption(x),
-                            data: get_bytes(&mut it, l as usize)?,
-                        }),
-                    },
-                    Err(_) => break,
+                    Ok(x) => {
+                        let l = get_u8(&mut it)?;
+                        raw_options
+                            .entry(DhcpOption(x))
+                            .or_insert_with(|| Vec::new())
+                            .extend(get_bytes(&mut it, l as usize)?);
+                    }
+                    Err(e) => return Err(Box::new(e)),
                 }
             }
         }
-        Ok(x) => println!("Wrong DHCP Magic found: {}", x),
-        _ => println!("No DHCP magic found"),
+        Ok(_) => return Err(Box::new(ParseError::WrongMagic)),
+        _ => return Err(Box::new(ParseError::WrongMagic)),
     }
+    println!("Raw options: {:?}", raw_options);
+    let options = DhcpOptions {
+        messagetype: MessageType(raw_options.remove(&OPTION_MSGTYPE).unwrap()[0]), // TODO: better error handling if msgtype is missing
+        hostname: raw_options
+            .remove(&OPTION_HOSTNAME)
+            .and_then(|host| String::from_utf8(host.to_vec()).ok()),
+        parameterlist: raw_options.remove(&OPTION_PARAMLIST).and_then(|l| {
+            Some(
+                l.iter()
+                    .map(|&x| DhcpOption(x))
+                    .collect::<Vec<DhcpOption>>(),
+            )
+        }),
+        other: raw_options,
+    };
+
     Ok(DHCP {
         op: DhcpOp(op),
         htype: HwType(htype),
@@ -303,7 +301,7 @@ fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
 
 async fn recvdhcp(pkt: &[u8], from: std::net::SocketAddr) {
     match parse(pkt) {
-        Ok(d) => println!("Got DHCP Packet: {:?}", d),
+        Ok(d) => println!("Got DHCP Packet from {:?}: {:?}", from, d),
         Err(e) => println!("Failed to parse DHCP Packet: {:?}", e),
     }
 }
