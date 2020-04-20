@@ -1,4 +1,4 @@
-use crate::dnspkt;
+use crate::dns::dnspkt;
 use std::collections::BTreeMap;
 
 pub struct EdnsParser<'l> {
