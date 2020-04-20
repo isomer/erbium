@@ -30,43 +30,69 @@ struct CacheValue {
 
 type Cache = HashMap<CacheKey, CacheValue>;
 
+fn create_outquery(id: u16, q: &dnspkt::Question) -> dnspkt::DNSPkt {
+    return dnspkt::DNSPkt {
+        qid: id,
+        rd: true,
+        tc: false,
+        aa: false,
+        qr: false,
+        opcode: dnspkt::OPCODE_QUERY,
+
+        cd: false,
+        ad: false,
+        ra: false,
+        rcode: dnspkt::NOERROR,
+
+        bufsize: 4096,
+
+        edns_ver: Some(0),
+        edns_do: false,
+
+        question: q.clone(),
+        answer: vec![],
+        nameserver: vec![],
+        additional: vec![],
+        edns: Some(dnspkt::EdnsData { other: vec![] }),
+    };
+}
+
 #[derive(Clone)]
-struct DnsServer {
-    cache: Arc<RwLock<Cache>>,
+struct OutQuery {
     rng: Arc<Mutex<Cell<rand::rngs::OsRng>>>,
 }
 
+impl OutQuery {
+    async fn handle_query(&self, q: &dnspkt::Question) -> Result<dnspkt::DNSPkt, std::io::Error> {
+        let oq = create_outquery(self.rng.lock().await.get().next_u32() as u16, q);
+
+        let mut outsock = UdpSocket::bind("0.0.0.0:0").await?;
+        outsock.connect("8.8.8.8:53").await?;
+
+        println!("OutQuery: {:?}", oq);
+        println!(
+            "OutQuery (parsed): {:?}",
+            parse::PktParser::new(&oq.serialise()).get_dns()
+        );
+        outsock.send(oq.serialise().as_slice()).await?;
+
+        let mut buf = [0; 65536];
+        let l = outsock.recv(&mut buf).await?;
+        let outreply = parse::PktParser::new(&buf[0..l])
+            .get_dns()
+            .expect("Failed to parse OutReply"); // TODO: Better error handling than panic!
+
+        Ok(outreply)
+    }
+}
+
+#[derive(Clone)]
+struct DnsServer {
+    next: OutQuery,
+    cache: Arc<RwLock<Cache>>,
+}
+
 impl DnsServer {
-    async fn get_random_id(&self) -> u16 {
-        self.rng.lock().await.get().next_u32() as u16
-    }
-    async fn create_outquery(&self, q: &dnspkt::Question) -> dnspkt::DNSPkt {
-        return dnspkt::DNSPkt {
-            qid: self.get_random_id().await,
-            rd: true,
-            tc: false,
-            aa: false,
-            qr: false,
-            opcode: dnspkt::OPCODE_QUERY,
-
-            cd: false,
-            ad: false,
-            ra: false,
-            rcode: dnspkt::NOERROR,
-
-            bufsize: 4096,
-
-            edns_ver: Some(0),
-            edns_do: false,
-
-            question: q.clone(),
-            answer: vec![],
-            nameserver: vec![],
-            additional: vec![],
-            edns: Some(dnspkt::EdnsData { other: vec![] }),
-        };
-    }
-
     fn create_inreply(&self, inq: &dnspkt::DNSPkt, outr: &dnspkt::DNSPkt) -> dnspkt::DNSPkt {
         return dnspkt::DNSPkt {
             qid: inq.qid,
@@ -113,23 +139,8 @@ impl DnsServer {
                 _ => (),
             }
         }
-        let oq = self.create_outquery(q).await;
 
-        let mut outsock = UdpSocket::bind("0.0.0.0:0").await?;
-        outsock.connect("8.8.8.8:53").await?;
-
-        println!("OutQuery: {:?}", oq);
-        println!(
-            "OutQuery (parsed): {:?}",
-            parse::PktParser::new(&oq.serialise()).get_dns()
-        );
-        outsock.send(oq.serialise().as_slice()).await?;
-
-        let mut buf = [0; 65536];
-        let l = outsock.recv(&mut buf).await?;
-        let outreply = parse::PktParser::new(&buf[0..l])
-            .get_dns()
-            .expect("Failed to parse OutReply"); // TODO: Better error handling than panic!
+        let outreply = self.next.handle_query(q).await?;
 
         if q.qclass == dnspkt::CLASS_IN {
             self.cache.write().await.insert(
@@ -212,7 +223,9 @@ async fn run_internal() -> Result<(), Box<dyn Error>> {
 
     let server = DnsServer {
         cache: cache,
-        rng: Arc::new(Mutex::new(Cell::new(rng))),
+        next: OutQuery {
+            rng: Arc::new(Mutex::new(Cell::new(rng))),
+        },
     };
 
     server.run(listener).await?;
