@@ -14,7 +14,7 @@ extern crate nix;
 extern crate rand;
 
 mod dnspkt;
-mod net;
+//mod net;
 mod parse;
 
 mod dhcp;

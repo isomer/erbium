@@ -3,7 +3,6 @@ use libc;
 use mio::Ready;
 use std::convert::TryFrom;
 use std::future::Future;
-use std::os::unix::io::AsRawFd;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::PollEvented;
