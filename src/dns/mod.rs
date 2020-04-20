@@ -1,5 +1,3 @@
-use crate::dns::rand::RngCore;
-use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::os::unix::io::AsRawFd;
@@ -14,6 +12,7 @@ extern crate nix;
 extern crate rand;
 
 mod dnspkt;
+mod outquery;
 mod parse;
 
 #[derive(Eq, PartialEq, Hash)]
@@ -30,65 +29,9 @@ struct CacheValue {
 
 type Cache = HashMap<CacheKey, CacheValue>;
 
-fn create_outquery(id: u16, q: &dnspkt::Question) -> dnspkt::DNSPkt {
-    return dnspkt::DNSPkt {
-        qid: id,
-        rd: true,
-        tc: false,
-        aa: false,
-        qr: false,
-        opcode: dnspkt::OPCODE_QUERY,
-
-        cd: false,
-        ad: false,
-        ra: false,
-        rcode: dnspkt::NOERROR,
-
-        bufsize: 4096,
-
-        edns_ver: Some(0),
-        edns_do: false,
-
-        question: q.clone(),
-        answer: vec![],
-        nameserver: vec![],
-        additional: vec![],
-        edns: Some(dnspkt::EdnsData { other: vec![] }),
-    };
-}
-
-#[derive(Clone)]
-struct OutQuery {
-    rng: Arc<Mutex<Cell<rand::rngs::OsRng>>>,
-}
-
-impl OutQuery {
-    async fn handle_query(&self, q: &dnspkt::Question) -> Result<dnspkt::DNSPkt, std::io::Error> {
-        let oq = create_outquery(self.rng.lock().await.get().next_u32() as u16, q);
-
-        let mut outsock = UdpSocket::bind("0.0.0.0:0").await?;
-        outsock.connect("8.8.8.8:53").await?;
-
-        println!("OutQuery: {:?}", oq);
-        println!(
-            "OutQuery (parsed): {:?}",
-            parse::PktParser::new(&oq.serialise()).get_dns()
-        );
-        outsock.send(oq.serialise().as_slice()).await?;
-
-        let mut buf = [0; 65536];
-        let l = outsock.recv(&mut buf).await?;
-        let outreply = parse::PktParser::new(&buf[0..l])
-            .get_dns()
-            .expect("Failed to parse OutReply"); // TODO: Better error handling than panic!
-
-        Ok(outreply)
-    }
-}
-
 #[derive(Clone)]
 struct DnsServer {
-    next: OutQuery,
+    next: outquery::OutQuery,
     cache: Arc<RwLock<Cache>>,
 }
 
@@ -219,13 +162,9 @@ async fn run_internal() -> Result<(), Box<dyn Error>> {
     println!("Listening for DNS on {}", listener.local_addr()?);
     let cache = Arc::new(RwLock::new(Cache::new()));
 
-    let rng = rand::rngs::OsRng::default();
-
     let server = DnsServer {
         cache: cache,
-        next: OutQuery {
-            rng: Arc::new(Mutex::new(Cell::new(rng))),
-        },
+        next: outquery::OutQuery::new(),
     };
 
     server.run(listener).await?;
