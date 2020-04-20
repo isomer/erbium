@@ -1,38 +1,21 @@
-use std::collections::HashMap;
 use std::error::Error;
 use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 use tokio::io;
 use tokio::net::UdpSocket;
 use tokio::sync::Mutex;
-use tokio::sync::RwLock;
 
 extern crate nix;
 extern crate rand;
 
+mod cache;
 mod dnspkt;
 mod outquery;
 mod parse;
 
-#[derive(Eq, PartialEq, Hash)]
-struct CacheKey {
-    qname: dnspkt::Domain,
-    qtype: dnspkt::Type,
-}
-
-struct CacheValue {
-    reply: dnspkt::DNSPkt,
-    birth: Instant,
-    lifetime: Duration,
-}
-
-type Cache = HashMap<CacheKey, CacheValue>;
-
 #[derive(Clone)]
 struct DnsServer {
-    next: outquery::OutQuery,
-    cache: Arc<RwLock<Cache>>,
+    next: cache::CacheHandler,
 }
 
 impl DnsServer {
@@ -64,43 +47,6 @@ impl DnsServer {
         };
     }
 
-    async fn send_outquery(&self, q: &dnspkt::Question) -> Result<dnspkt::DNSPkt, std::io::Error> {
-        let ck = CacheKey {
-            qname: q.qdomain.clone(),
-            qtype: q.qtype.clone(),
-        };
-        if q.qclass == dnspkt::CLASS_IN {
-            match self.cache.read().await.get(&ck) {
-                Some(entry) => {
-                    let now = Instant::now();
-                    if entry.birth + entry.lifetime > now {
-                        return Ok(entry
-                            .reply
-                            .clone_with_ttl_decrement((now - entry.birth).as_secs() as u32));
-                    }
-                }
-                _ => (),
-            }
-        }
-
-        let outreply = self.next.handle_query(q).await?;
-
-        if q.qclass == dnspkt::CLASS_IN {
-            self.cache.write().await.insert(
-                ck,
-                CacheValue {
-                    reply: outreply.clone(),
-                    birth: Instant::now(),
-                    lifetime: outreply.get_expiry(),
-                },
-            );
-        }
-
-        println!("OutReply: {:?}", outreply);
-
-        Ok(outreply)
-    }
-
     async fn recvinquery(
         &mut self,
         responder: Arc<Mutex<tokio::net::udp::SendHalf>>,
@@ -113,7 +59,7 @@ impl DnsServer {
             .expect("Failed to parse InQuery"); // TODO
         println!("InQuery {:?} {:?}", from, inquery);
 
-        match self.send_outquery(&inquery.question).await {
+        match self.next.handle_query(&inquery.question).await {
             Ok(outreply) => {
                 let inreply = self.create_inreply(&inquery, &outreply);
                 println!("InReply: {:?} <- {:?}", from, inreply);
@@ -160,11 +106,9 @@ async fn run_internal() -> Result<(), Box<dyn Error>> {
     )?;
 
     println!("Listening for DNS on {}", listener.local_addr()?);
-    let cache = Arc::new(RwLock::new(Cache::new()));
 
     let server = DnsServer {
-        cache: cache,
-        next: outquery::OutQuery::new(),
+        next: cache::CacheHandler::new(),
     };
 
     server.run(listener).await?;
