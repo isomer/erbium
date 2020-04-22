@@ -1,5 +1,6 @@
 use std::collections;
 use std::fmt;
+use std::net;
 
 #[derive(Debug)]
 enum ParseError {
@@ -49,6 +50,14 @@ fn get_bytes(
         v.push(get_u8(it)?);
     }
     Ok(v)
+}
+
+fn get_ipv4(it: &mut dyn std::iter::Iterator<Item = &u8>) -> Result<net::Ipv4Addr, ParseError> {
+    let a = get_u8(it)?;
+    let b = get_u8(it)?;
+    let c = get_u8(it)?;
+    let d = get_u8(it)?;
+    Ok(net::Ipv4Addr::new(a, b, c, d))
 }
 
 #[derive(PartialEq, Eq)]
@@ -173,10 +182,10 @@ pub struct DHCP {
     pub xid: u32,
     pub secs: u16,
     pub flags: u16,
-    pub ciaddr: u32,
-    pub yiaddr: u32,
-    pub siaddr: u32,
-    pub giaddr: u32,
+    pub ciaddr: net::Ipv4Addr,
+    pub yiaddr: net::Ipv4Addr,
+    pub siaddr: net::Ipv4Addr,
+    pub giaddr: net::Ipv4Addr,
     pub chaddr: Vec<u8>,
     pub sname: Vec<u8>,
     pub file: Vec<u8>,
@@ -235,10 +244,10 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
     let xid = get_be32(&mut it)?;
     let secs = get_be16(&mut it)?;
     let flags = get_be16(&mut it)?;
-    let ciaddr = get_be32(&mut it)?;
-    let yiaddr = get_be32(&mut it)?;
-    let siaddr = get_be32(&mut it)?;
-    let giaddr = get_be32(&mut it)?;
+    let ciaddr = get_ipv4(&mut it)?;
+    let yiaddr = get_ipv4(&mut it)?;
+    let siaddr = get_ipv4(&mut it)?;
+    let giaddr = get_ipv4(&mut it)?;
     let chaddr = get_bytes(&mut it, 16)?;
     let sname = get_bytes(&mut it, 64)?;
     let file = get_bytes(&mut it, 128)?;
@@ -263,7 +272,6 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
         Ok(_) => return Err(Box::new(ParseError::WrongMagic)),
         _ => return Err(Box::new(ParseError::WrongMagic)),
     }
-    println!("Raw options: {:?}", raw_options);
     let options = DhcpOptions {
         messagetype: MessageType(raw_options.remove(&OPTION_MSGTYPE).unwrap()[0]), // TODO: better error handling if msgtype is missing
         hostname: raw_options

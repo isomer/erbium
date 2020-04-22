@@ -45,6 +45,7 @@ impl OutQuery {
             rng: Arc::new(Mutex::new(Cell::new(rand::rngs::OsRng::default()))),
         }
     }
+
     pub async fn handle_query(
         &self,
         q: &dnspkt::Question,

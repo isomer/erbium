@@ -1,3 +1,5 @@
+use std::collections;
+use std::net;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tokio::sync;
@@ -11,6 +13,7 @@ type LockedPools<'a> = sync::MutexGuard<'a, pool::Pools>;
 #[derive(Debug)]
 enum DhcpError {
     UnknownMessageType(dhcppkt::MessageType),
+    NoAddressesAvailable,
 }
 
 impl std::error::Error for DhcpError {
@@ -23,13 +26,37 @@ impl std::fmt::Display for DhcpError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DhcpError::UnknownMessageType(m) => write!(f, "Unknown Message Type: {:?}", m),
+            DhcpError::NoAddressesAvailable => write!(f, "No Addresses Available"),
         }
     }
 }
 
-fn handle_discover(pools: LockedPools, _req: &dhcppkt::DHCP) -> Result<dhcppkt::DHCP, DhcpError> {
-    let addr = pools.allocate_address("default");
-    return Err(DhcpError::UnknownMessageType(dhcppkt::DHCPDISCOVER));
+fn handle_discover(pools: LockedPools, req: &dhcppkt::DHCP) -> Result<dhcppkt::DHCP, DhcpError> {
+    match pools.allocate_address("default") {
+        net::IpAddr::V4(addr) => Ok(dhcppkt::DHCP {
+            op: dhcppkt::OP_BOOTREPLY,
+            htype: dhcppkt::HWTYPE_ETHERNET,
+            hlen: 6,
+            hops: 0,
+            xid: req.xid,
+            secs: 0,
+            flags: req.flags,
+            ciaddr: net::Ipv4Addr::UNSPECIFIED,
+            yiaddr: addr,
+            siaddr: net::Ipv4Addr::UNSPECIFIED,
+            giaddr: req.giaddr,
+            chaddr: req.chaddr.clone(),
+            sname: vec![],
+            file: vec![],
+            options: dhcppkt::DhcpOptions {
+                messagetype: dhcppkt::DHCPDISCOVER,
+                hostname: req.options.hostname.clone(),
+                parameterlist: None,
+                other: collections::HashMap::new(),
+            },
+        }),
+        _ => Err(DhcpError::NoAddressesAvailable),
+    }
 }
 
 fn handle_pkt(pools: LockedPools, req: dhcppkt::DHCP) -> Result<dhcppkt::DHCP, DhcpError> {
@@ -41,10 +68,12 @@ fn handle_pkt(pools: LockedPools, req: dhcppkt::DHCP) -> Result<dhcppkt::DHCP, D
 
 async fn recvdhcp(pools: Pools, pkt: &[u8], from: std::net::SocketAddr) {
     let pool = pools.lock().await;
-    match dhcppkt::parse(pkt) {
+    let dhcp = dhcppkt::parse(pkt);
+    println!("Parse: {:?}", dhcp);
+    match dhcp {
         Ok(d) => match handle_pkt(pool, d) {
             Err(e) => println!("Error processing DHCP Packet from {:?}: {:?}", from, e),
-            _ => (),
+            Ok(r) => println!("Reply: {:?}", r),
         },
         Err(e) => println!("Failed to parse DHCP Packet: {:?}", e),
     }
