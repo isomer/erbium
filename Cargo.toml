@@ -12,6 +12,7 @@ async-std = { version = "", features = ["unstable"] }
 rand = ""
 nix = { version = "0.17" }
 futures = ""
-#mio = { version = "0.7", features = ["udp"] }
+mio = ""
+#{ version = "", features = ["udp"] }
 libc = ""
 rusqlite = ""

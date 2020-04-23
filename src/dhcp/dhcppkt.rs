@@ -253,7 +253,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
     let file = get_bytes(&mut it, 128)?;
     let mut raw_options: collections::HashMap<DhcpOption, Vec<u8>> = collections::HashMap::new();
     match get_be32(&mut it) {
-        Ok(0x63825363) => {
+        Ok(0x6382_5363) => {
             loop {
                 match get_u8(&mut it) {
                     Ok(0) => (),      /* Pad byte */
@@ -262,7 +262,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
                         let l = get_u8(&mut it)?;
                         raw_options
                             .entry(DhcpOption(x))
-                            .or_insert_with(|| Vec::new())
+                            .or_insert_with(Vec::new)
                             .extend(get_bytes(&mut it, l as usize)?);
                     }
                     Err(e) => return Err(Box::new(e)),
@@ -277,32 +277,31 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
         hostname: raw_options
             .remove(&OPTION_HOSTNAME)
             .and_then(|host| String::from_utf8(host.to_vec()).ok()),
-        parameterlist: raw_options.remove(&OPTION_PARAMLIST).and_then(|l| {
-            Some(
-                l.iter()
-                    .map(|&x| DhcpOption(x))
-                    .collect::<Vec<DhcpOption>>(),
-            )
+        parameterlist: raw_options.remove(&OPTION_PARAMLIST).map(|l| {
+            l.iter()
+                .map(|&x| DhcpOption(x))
+                .collect::<Vec<DhcpOption>>()
         }),
+
         other: raw_options,
     };
 
     Ok(DHCP {
         op: DhcpOp(op),
         htype: HwType(htype),
-        hlen: hlen,
-        hops: hops,
-        xid: xid,
-        secs: secs,
-        flags: flags,
-        ciaddr: ciaddr,
-        yiaddr: yiaddr,
-        siaddr: siaddr,
-        giaddr: giaddr,
-        chaddr: chaddr,
-        sname: sname,
-        file: file,
-        options: options,
+        hlen,
+        hops,
+        xid,
+        secs,
+        flags,
+        ciaddr,
+        yiaddr,
+        siaddr,
+        giaddr,
+        chaddr,
+        sname,
+        file,
+        options,
     })
 }
 

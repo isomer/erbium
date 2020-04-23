@@ -60,9 +60,9 @@ fn handle_discover(pools: LockedPools, req: &dhcppkt::DHCP) -> Result<dhcppkt::D
 }
 
 fn handle_pkt(pools: LockedPools, req: dhcppkt::DHCP) -> Result<dhcppkt::DHCP, DhcpError> {
-    match &req.options.messagetype {
-        &dhcppkt::DHCPDISCOVER => handle_discover(pools, &req),
-        &x => Err(DhcpError::UnknownMessageType(x)),
+    match req.options.messagetype {
+        dhcppkt::DHCPDISCOVER => handle_discover(pools, &req),
+        x => Err(DhcpError::UnknownMessageType(x)),
     }
 }
 
@@ -97,7 +97,7 @@ async fn run_internal() -> Result<(), Box<dyn std::error::Error>> {
 
 pub async fn run() -> Result<(), String> {
     match run_internal().await {
-        Ok(o) => Ok(o),
+        Ok(_) => Ok(()),
         Err(e) => Err(e.to_string()),
     }
 }

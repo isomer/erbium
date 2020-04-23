@@ -28,7 +28,7 @@ impl ToString for Class {
 
 impl fmt::Debug for Class {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "Class({})", self.to_string());
+        write!(f, "Class({})", self.to_string())
     }
 }
 
@@ -112,7 +112,7 @@ pub struct Label(Vec<u8>);
 
 impl From<Vec<u8>> for Label {
     fn from(v: Vec<u8>) -> Self {
-        return Label(v);
+        Label(v)
     }
 }
 impl Ord for Label {
@@ -123,7 +123,7 @@ impl Ord for Label {
 
 impl ToString for Label {
     fn to_string(&self) -> String {
-        String::from_iter((&self.0).into_iter().map(|&b| display_byte(b)))
+        String::from_iter((&self.0).iter().map(|&b| display_byte(b)))
     }
 }
 
@@ -132,7 +132,7 @@ pub struct Domain(Vec<Label>);
 
 impl From<Vec<Label>> for Domain {
     fn from(v: Vec<Label>) -> Self {
-        return Domain(v);
+        Domain(v)
     }
 }
 
@@ -148,7 +148,7 @@ impl fmt::Display for Domain {
             f,
             "{}",
             (&self.0)
-                .into_iter()
+                .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>()
                 .join(".")
@@ -236,13 +236,13 @@ pub enum RData {
 
 impl ToString for RData {
     fn to_string(&self) -> String {
-        match &self {
-            &RData::SOA(v) => format!(
+        match self {
+            RData::SOA(v) => format!(
                 "{:?} {:?} {} {} {} {} {}",
                 v.mname, v.rname, v.serial, v.refresh, v.retry, v.expire, v.minimum
             ),
-            &RData::OPT(v) => format!("{:?}", v),
-            &RData::Other(v) => format!("\\#{} {:?}", v.len(), v),
+            RData::OPT(v) => format!("{:?}", v),
+            RData::Other(v) => format!("\\#{} {:?}", v.len(), v),
         }
     }
 }
@@ -301,7 +301,7 @@ impl ToString for Opcode {
 
 impl fmt::Debug for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "Opcode({})", self.to_string());
+        write!(f, "Opcode({})", self.to_string())
     }
 }
 
@@ -413,7 +413,7 @@ impl DNSPkt {
                 rrtype: RR_OPT,
                 ttl: ((self.edns_ver.unwrap_or(0) as u32) << 16)
                     | (if self.edns_do {
-                        0b00000000_00000000_100000000_00000000
+                        0b00000000_00000000_10000000_00000000
                     } else {
                         0b0
                     }),
@@ -435,7 +435,7 @@ impl DNSPkt {
         self.nameserver.iter().for_each(|rr| push_rr(&mut ret, rr));
         additional.iter().for_each(|rr| push_rr(&mut ret, rr));
 
-        return ret;
+        ret
     }
 
     pub fn get_expiry(&self) -> std::time::Duration {

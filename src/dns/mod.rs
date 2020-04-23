@@ -20,7 +20,7 @@ struct DnsServer {
 
 impl DnsServer {
     fn create_inreply(&self, inq: &dnspkt::DNSPkt, outr: &dnspkt::DNSPkt) -> dnspkt::DNSPkt {
-        return dnspkt::DNSPkt {
+        dnspkt::DNSPkt {
             qid: inq.qid,
             rd: false,
             tc: outr.tc,
@@ -32,7 +32,7 @@ impl DnsServer {
             ad: outr.ad,
             ra: outr.ra,
 
-            rcode: outr.rcode.clone(),
+            rcode: outr.rcode,
 
             bufsize: 4096,
 
@@ -44,7 +44,7 @@ impl DnsServer {
             nameserver: outr.answer.clone(),
             additional: outr.additional.clone(),
             edns: Some(dnspkt::EdnsData { other: vec![] }), // We should do more here.
-        };
+        }
     }
 
     async fn recvinquery(
@@ -118,7 +118,7 @@ async fn run_internal() -> Result<(), Box<dyn Error>> {
 
 pub async fn run() -> Result<(), String> {
     match run_internal().await {
-        Ok(o) => Ok(o),
+        Ok(_) => Ok(()),
         Err(e) => Err(e.to_string()),
     }
 }

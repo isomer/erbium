@@ -7,22 +7,22 @@ pub struct EdnsParser<'l> {
 
 impl<'l> EdnsParser<'l> {
     fn new(buffer: &'l [u8]) -> EdnsParser {
-        return EdnsParser { buffer: buffer };
+        EdnsParser { buffer }
     }
 
     fn get_u8(&mut self) -> Result<u8, String> {
         if let Some((first, rest)) = self.buffer.split_first() {
             self.buffer = rest;
-            return Ok(*first);
+            Ok(*first)
         } else {
-            return Err("Truncated EDNS Option".to_string());
+            Err("Truncated EDNS Option".to_string())
         }
     }
 
     fn get_u16(&mut self) -> Result<u16, String> {
         let upper = self.get_u8()?;
         let lower = self.get_u8()?;
-        return Ok((upper as u16) * 256 + (lower as u16));
+        Ok((upper as u16) * 256 + (lower as u16))
     }
 
     fn get_option(&mut self) -> Result<dnspkt::EdnsOption, String> {
@@ -33,10 +33,10 @@ impl<'l> EdnsParser<'l> {
         if data.len() < len {
             return Err("Truncated EDNS Option".to_string());
         }
-        return Ok(dnspkt::EdnsOption {
+        Ok(dnspkt::EdnsOption {
             code: dnspkt::EdnsCode(code),
             data,
-        });
+        })
     }
 
     fn get_options(&mut self) -> Result<dnspkt::EdnsData, String> {
@@ -48,7 +48,7 @@ impl<'l> EdnsParser<'l> {
             data.other.push(ednsopt);
         }
 
-        return Ok(data);
+        Ok(data)
     }
 }
 
@@ -65,39 +65,39 @@ pub struct PktParser<'l> {
 
 impl<'l> PktParser<'l> {
     pub fn new(buffer: &'l [u8]) -> PktParser {
-        return PktParser {
-            buffer: buffer,
+        PktParser {
+            buffer,
             offset: 0,
             labels: BTreeMap::new(),
-        };
+        }
     }
     fn peek_u8(&mut self) -> Result<u8, String> {
-        return Ok(self.buffer[self.offset]);
+        Ok(self.buffer[self.offset])
     }
     fn get_u8(&mut self) -> Result<u8, String> {
         let ret = self.peek_u8()?;
         self.offset += 1;
-        return Ok(ret);
+        Ok(ret)
     }
     fn get_u16(&mut self) -> Result<u16, String> {
-        return Ok((self.get_u8()? as u16) * 256 + (self.get_u8()? as u16));
+        Ok((self.get_u8()? as u16) * 256 + (self.get_u8()? as u16))
     }
     fn get_u32(&mut self) -> Result<u32, String> {
-        return Ok((self.get_u8()? as u32) * (256 * 256 * 256)
+        Ok((self.get_u8()? as u32) * (256 * 256 * 256)
             + (self.get_u8()? as u32) * (256 * 256)
             + (self.get_u8()? as u32) * (256)
-            + (self.get_u8()? as u32));
+            + (self.get_u8()? as u32))
     }
 
     fn get_bytes(&mut self, count: usize) -> Result<Vec<u8>, String> {
         let ret = self.buffer[self.offset..self.offset + count].to_vec();
         self.offset += count;
-        return Ok(ret);
+        Ok(ret)
     }
     fn get_label(&mut self) -> Result<dnspkt::Label, String> {
         let size = self.get_u8()? as usize;
         assert!(size & 0b1100_0000 == 0b0000_0000);
-        return Ok(dnspkt::Label::from(self.get_bytes(size)?));
+        Ok(dnspkt::Label::from(self.get_bytes(size)?))
     }
 
     fn get_domain(&mut self) -> Result<dnspkt::Domain, String> {
@@ -122,7 +122,7 @@ impl<'l> PktParser<'l> {
                         saved_offset,
                         Label {
                             label: label.clone(),
-                            next: next,
+                            next,
                         },
                     );
                     domainv.push(label.clone());
@@ -153,11 +153,11 @@ impl<'l> PktParser<'l> {
     }
 
     fn get_class(&mut self) -> Result<dnspkt::Class, String> {
-        return Ok(dnspkt::Class(self.get_u16()?));
+        Ok(dnspkt::Class(self.get_u16()?))
     }
 
     fn get_type(&mut self) -> Result<dnspkt::Type, String> {
-        return Ok(dnspkt::Type(self.get_u16()?));
+        Ok(dnspkt::Type(self.get_u16()?))
     }
 
     fn get_soa(&mut self) -> Result<dnspkt::SoaData, String> {
@@ -173,14 +173,14 @@ impl<'l> PktParser<'l> {
         })
     }
 
-    fn get_rdata(&mut self, rtype: &dnspkt::Type) -> Result<dnspkt::RData, String> {
+    fn get_rdata(&mut self, rtype: dnspkt::Type) -> Result<dnspkt::RData, String> {
         match rtype {
-            &dnspkt::RR_OPT => {
+            dnspkt::RR_OPT => {
                 let rdlen = self.get_u16()? as usize;
                 let rdata = self.get_bytes(rdlen)?;
                 Ok(dnspkt::RData::OPT(EdnsParser::new(&rdata).get_options()?))
             }
-            &dnspkt::RR_SOA => Ok(dnspkt::RData::SOA(self.get_soa()?)),
+            dnspkt::RR_SOA => Ok(dnspkt::RData::SOA(self.get_soa()?)),
             _ => {
                 let rdlen = self.get_u16()? as usize;
                 let rdata = self.get_bytes(rdlen)?;
@@ -194,15 +194,15 @@ impl<'l> PktParser<'l> {
         let rrtype = self.get_type()?;
         let class = self.get_class()?;
         let ttl = self.get_u32()?;
-        let rdata = self.get_rdata(&rrtype)?;
+        let rdata = self.get_rdata(rrtype)?;
 
-        return Ok(dnspkt::RR {
-            domain: domain,
-            rrtype: rrtype,
-            class: class,
-            ttl: ttl,
-            rdata: rdata,
-        });
+        Ok(dnspkt::RR {
+            domain,
+            rrtype,
+            class,
+            ttl,
+            rdata,
+        })
     }
 
     pub fn get_dns(&mut self) -> Result<dnspkt::DNSPkt, String> {
@@ -243,7 +243,7 @@ impl<'l> PktParser<'l> {
         let ercode = opt.map_or(0, |o| o.ttl >> 24);
         let ever = opt.map(|o| ((o.ttl >> 16) & 0xFF) as u8);
         let edo = opt.map_or(false, |o| {
-            (o.ttl & 0b00000000_00000000_100000000_00000000) != 0
+            (o.ttl & 0b00000000_00000000_10000000_00000000) != 0
         });
 
         let edns = opt.map(|x| match &x.rdata {
@@ -253,31 +253,31 @@ impl<'l> PktParser<'l> {
 
         additional.retain(|rr| rr.rrtype != dnspkt::RR_OPT);
 
-        return Ok(dnspkt::DNSPkt {
-            qid: qid,
+        Ok(dnspkt::DNSPkt {
+            qid,
             rd: (flag1 & 0b0000_0001) != 0,
             tc: (flag1 & 0b0000_0010) != 0,
             aa: (flag1 & 0b0000_0100) != 0,
             qr: (flag1 & 0b1000_0000) != 0,
-            opcode: opcode,
+            opcode,
 
             cd: (flag2 & 0b0010_0000) != 0,
             ad: (flag2 & 0b0100_0000) != 0,
             ra: (flag2 & 0b1000_0000) != 0,
             //           0b0001_0000
             rcode: dnspkt::RCode(((flag2 & 0b0000_1111) as u16) | ((ercode as u16) << 8)),
-            bufsize: bufsize,
+            bufsize,
             edns_ver: ever,
             edns_do: edo,
             question: dnspkt::Question {
-                qdomain: qdomain,
-                qtype: qtype,
-                qclass: qclass,
+                qdomain,
+                qtype,
+                qclass,
             },
-            answer: answer,
-            nameserver: nameserver,
-            additional: additional,
-            edns: edns,
-        });
+            answer,
+            nameserver,
+            additional,
+            edns,
+        })
     }
 }

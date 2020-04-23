@@ -40,19 +40,16 @@ impl CacheHandler {
     ) -> Result<dnspkt::DNSPkt, std::io::Error> {
         let ck = CacheKey {
             qname: q.qdomain.clone(),
-            qtype: q.qtype.clone(),
+            qtype: q.qtype,
         };
         if q.qclass == dnspkt::CLASS_IN {
-            match self.cache.read().await.get(&ck) {
-                Some(entry) => {
-                    let now = Instant::now();
-                    if entry.birth + entry.lifetime > now {
-                        return Ok(entry
-                            .reply
-                            .clone_with_ttl_decrement((now - entry.birth).as_secs() as u32));
-                    }
+            if let Some(entry) = self.cache.read().await.get(&ck) {
+                let now = Instant::now();
+                if entry.birth + entry.lifetime > now {
+                    return Ok(entry
+                        .reply
+                        .clone_with_ttl_decrement((now - entry.birth).as_secs() as u32));
                 }
-                _ => (),
             }
         }
 

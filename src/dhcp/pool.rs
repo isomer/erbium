@@ -6,9 +6,9 @@ pub struct Pools {
 
 impl Pools {
     pub fn new() -> Result<Pools, Box<dyn std::error::Error>> {
-        return Ok(Pools {
+        Ok(Pools {
             conn: rusqlite::Connection::open("inmemory:")?,
-        });
+        })
     }
 
     pub fn allocate_address(&self, _name: &str) -> std::net::IpAddr {

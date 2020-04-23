@@ -8,7 +8,7 @@ use crate::dns::dnspkt;
 use crate::dns::parse;
 
 fn create_outquery(id: u16, q: &dnspkt::Question) -> dnspkt::DNSPkt {
-    return dnspkt::DNSPkt {
+    dnspkt::DNSPkt {
         qid: id,
         rd: true,
         tc: false,
@@ -31,7 +31,7 @@ fn create_outquery(id: u16, q: &dnspkt::Question) -> dnspkt::DNSPkt {
         nameserver: vec![],
         additional: vec![],
         edns: Some(dnspkt::EdnsData { other: vec![] }),
-    };
+    }
 }
 
 #[derive(Clone)]
