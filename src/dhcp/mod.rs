@@ -72,8 +72,11 @@ async fn recvdhcp(pools: Pools, pkt: &[u8], from: std::net::SocketAddr) {
     println!("Parse: {:?}", dhcp);
     match dhcp {
         Ok(d) => match handle_pkt(pool, d) {
+            Ok(mut r) => {
+                println!("Reply: {:?}", r);
+                println!("SReply: {:?}", r.serialise());
+            }
             Err(e) => println!("Error processing DHCP Packet from {:?}: {:?}", from, e),
-            Ok(r) => println!("Reply: {:?}", r),
         },
         Err(e) => println!("Failed to parse DHCP Packet: {:?}", e),
     }

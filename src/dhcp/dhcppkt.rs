@@ -305,3 +305,115 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
         options: options,
     })
 }
+
+trait Serialise {
+    fn serialise(&self, v: &mut Vec<u8>);
+}
+
+impl Serialise for u8 {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        v.push(*self);
+    }
+}
+
+impl Serialise for u16 {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        for b in self.to_be_bytes().iter() {
+            b.serialise(v);
+        }
+    }
+}
+
+impl Serialise for u32 {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        for b in self.to_be_bytes().iter() {
+            b.serialise(v);
+        }
+    }
+}
+
+impl Serialise for net::Ipv4Addr {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        for b in self.octets().iter() {
+            b.serialise(v);
+        }
+    }
+}
+
+impl Serialise for DhcpOption {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        self.0.serialise(v);
+    }
+}
+
+impl Serialise for DhcpOptions {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        /* Serialise DHCP Message Type */
+        OPTION_MSGTYPE.serialise(v);
+        (1 as u8).serialise(v);
+        self.messagetype.0.serialise(v);
+
+        if let Some(h) = &self.hostname {
+            OPTION_HOSTNAME.serialise(v);
+            (h.len() as u8).serialise(v);
+            for c in h.as_bytes() {
+                c.serialise(v);
+            }
+        }
+
+        if let Some(p) = &self.parameterlist {
+            OPTION_PARAMLIST.serialise(v);
+            (p.len() as u8).serialise(v);
+            for b in p {
+                b.serialise(v);
+            }
+        }
+
+        for (o, p) in self.other.iter() {
+            o.serialise(v);
+            (p.len() as u8).serialise(v);
+            for b in p {
+                b.serialise(v);
+            }
+        }
+
+        /* Add end of options marker */
+        (255 as u8).serialise(v);
+    }
+}
+
+impl DHCP {
+    pub fn serialise(&mut self) -> Vec<u8> {
+        let mut v: Vec<u8> = Vec::new();
+        self.op.0.serialise(&mut v);
+        self.htype.0.serialise(&mut v);
+        self.hlen.serialise(&mut v);
+        self.hops.serialise(&mut v);
+        self.xid.serialise(&mut v);
+        self.secs.serialise(&mut v);
+        self.flags.serialise(&mut v);
+        self.ciaddr.serialise(&mut v);
+        self.yiaddr.serialise(&mut v);
+        self.siaddr.serialise(&mut v);
+        self.giaddr.serialise(&mut v);
+
+        self.chaddr.resize_with(16, Default::default);
+        for b in &self.chaddr {
+            b.serialise(&mut v);
+        }
+
+        self.sname.resize_with(64, Default::default);
+        for b in &self.sname {
+            b.serialise(&mut v);
+        }
+
+        self.file.resize_with(128, Default::default);
+        for b in &self.file {
+            b.serialise(&mut v);
+        }
+
+        self.options.serialise(&mut v);
+
+        v
+    }
+}
