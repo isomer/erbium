@@ -68,8 +68,8 @@ impl DnsServer {
         responder: Arc<UdpSocket>,
         pkt: &[u8],
         from: std::net::SocketAddr,
+        to: std::net::SocketAddr,
     ) {
-        println!("Received {}", pkt.len());
         let inquery = parse::PktParser::new(pkt)
             .get_dns()
             .expect("Failed to parse InQuery"); // TODO
@@ -97,17 +97,24 @@ impl DnsServer {
     async fn run(self, sock: UdpSocket) -> Result<(), io::Error> {
         let shared_sock = Arc::new(sock);
         loop {
-            let mut cmsg = Vec::new(); /* TODO: Calculate better size */
-            match shared_sock
-                .recv_msg(4096, &mut cmsg, udp::MsgFlags::empty())
-                .await
-            {
+            match shared_sock.recv_msg(4096, udp::MsgFlags::empty()).await {
                 Ok(rm) => {
                     let mut q = self.clone();
                     let shared_responder2 = shared_sock.clone();
+                    println!(
+                        "Received {:?} => {:?} ({})",
+                        rm.address,
+                        rm.local_addr(),
+                        rm.buffer.len()
+                    );
                     tokio::spawn(async move {
-                        q.recvinquery(shared_responder2, &rm.buffer, rm.address.unwrap())
-                            .await
+                        q.recvinquery(
+                            shared_responder2,
+                            &rm.buffer,
+                            rm.address.unwrap(),
+                            rm.local_addr(),
+                        )
+                        .await
                     });
                 }
                 Err(e) => {
@@ -122,6 +129,7 @@ async fn run_internal() -> Result<(), Box<dyn Error>> {
     let listener = UdpSocket::bind("[::]:1053").await?;
 
     listener.set_opt_ipv4_packet_info(true)?;
+    listener.set_opt_ipv6_packet_info(true)?;
 
     println!("Listening for DNS on {}", listener.local_addr()?);
 

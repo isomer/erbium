@@ -4,6 +4,7 @@
 use futures::ready;
 use std::convert::TryFrom;
 use std::io;
+use std::net;
 use std::net::SocketAddr;
 use std::os::unix::io::AsRawFd;
 use std::task::{Context, Poll};
@@ -55,11 +56,43 @@ impl RecvMsg {
                 ControlMessageOwned::Ipv6PacketInfo(pi) => {
                     r.ipv6pktinfo = Some(pi);
                 }
-                _ => (),
+                x => println!("Unknown control message {:?}", x),
             }
         }
 
         r
+    }
+
+    /// Returns the local address of the packet.
+    ///
+    /// This is primarily used by UDP sockets to tell you which address a packet arrived on when
+    /// the UDP socket is bound to INADDR_ANY or IN6ADDR_ANY.
+    pub fn local_addr(&self) -> Option<net::IpAddr> {
+        // This function can be overridden to provide different implementations for different
+        // platforms.
+
+        // Lets see if we have a v4 version.
+        if let Some(pi) = self.ipv4pktinfo {
+            let ip = pi.ipi_addr.s_addr.to_ne_bytes(); // This is already in big endian form, don't try and perform a conversion.
+                                                       // It is a pity there isn't a nicer way to do this conversion.
+            Some(net::IpAddr::V4(net::Ipv4Addr::new(
+                ip[0], ip[1], ip[2], ip[3],
+            )))
+        } else if let Some(pi) = self.ipv6pktinfo {
+            // Oh come on, this conversion is even more ridiculous than the last one!
+            Some(net::IpAddr::V6(net::Ipv6Addr::new(
+                (pi.ipi6_addr.s6_addr[0] as u16) << 8 | (pi.ipi6_addr.s6_addr[1] as u16),
+                (pi.ipi6_addr.s6_addr[2] as u16) << 8 | (pi.ipi6_addr.s6_addr[3] as u16),
+                (pi.ipi6_addr.s6_addr[4] as u16) << 8 | (pi.ipi6_addr.s6_addr[5] as u16),
+                (pi.ipi6_addr.s6_addr[6] as u16) << 8 | (pi.ipi6_addr.s6_addr[7] as u16),
+                (pi.ipi6_addr.s6_addr[8] as u16) << 8 | (pi.ipi6_addr.s6_addr[9] as u16),
+                (pi.ipi6_addr.s6_addr[10] as u16) << 8 | (pi.ipi6_addr.s6_addr[11] as u16),
+                (pi.ipi6_addr.s6_addr[12] as u16) << 8 | (pi.ipi6_addr.s6_addr[13] as u16),
+                (pi.ipi6_addr.s6_addr[14] as u16) << 8 | (pi.ipi6_addr.s6_addr[15] as u16),
+            )))
+        } else {
+            None
+        }
     }
 }
 
@@ -109,20 +142,14 @@ impl UdpSocket {
         }))
     }
 
-    pub async fn recv_msg(
-        &self,
-        bufsize: usize,
-        cmsg: &mut Vec<u8>,
-        flags: MsgFlags,
-    ) -> io::Result<RecvMsg> {
-        poll_fn(|cx| self.poll_recv_msg(cx, bufsize, cmsg, flags)).await
+    pub async fn recv_msg(&self, bufsize: usize, flags: MsgFlags) -> io::Result<RecvMsg> {
+        poll_fn(|cx| self.poll_recv_msg(cx, bufsize, flags)).await
     }
 
     fn poll_recv_msg(
         &self,
         cx: &mut Context<'_>,
         bufsize: usize,
-        cmsg: &mut Vec<u8>,
         flags: MsgFlags,
     ) -> Poll<Result<RecvMsg, io::Error>> {
         ready!(self.io.poll_read_ready(cx, mio::Ready::readable()))?;
@@ -131,10 +158,14 @@ impl UdpSocket {
         buf.resize_with(bufsize, Default::default);
         let iov = &[IoVec::from_mut_slice(buf.as_mut_slice())];
 
+        let mut cmsg = Vec::new();
+        cmsg.resize_with(65536, Default::default); /* TODO: Calculate a more reasonable size */
+
         let mut flags = flags;
         flags.set(MsgFlags::MSG_DONTWAIT, true);
 
-        match nix::sys::socket::recvmsg(self.io.get_ref().as_raw_fd(), iov, Some(cmsg), flags) {
+        match nix::sys::socket::recvmsg(self.io.get_ref().as_raw_fd(), iov, Some(&mut cmsg), flags)
+        {
             Ok(rm) => {
                 buf.truncate(rm.bytes);
                 Poll::Ready(Ok(RecvMsg::new(rm, buf)))
@@ -198,6 +229,15 @@ impl UdpSocket {
         nix::sys::socket::setsockopt(
             self.io.get_ref().as_raw_fd(),
             nix::sys::socket::sockopt::Ipv4PacketInfo,
+            &b,
+        )
+        .map_err(nix_to_io_error)
+    }
+
+    pub fn set_opt_ipv6_packet_info(&self, b: bool) -> Result<(), io::Error> {
+        nix::sys::socket::setsockopt(
+            self.io.get_ref().as_raw_fd(),
+            nix::sys::socket::sockopt::Ipv6RecvPacketInfo,
             &b,
         )
         .map_err(nix_to_io_error)
