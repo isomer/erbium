@@ -1,9 +1,9 @@
+use crate::net::udp;
 use std::error::Error;
-use std::os::unix::io::AsRawFd;
 use std::sync::Arc;
 use tokio::io;
-use tokio::net::UdpSocket;
-use tokio::sync::Mutex;
+
+type UdpSocket = udp::UdpSocket;
 
 extern crate nix;
 extern crate rand;
@@ -12,6 +12,22 @@ mod cache;
 mod dnspkt;
 mod outquery;
 mod parse;
+
+use bytes::BytesMut;
+use tokio_util::codec::Decoder;
+struct DnsCodec {}
+
+impl Decoder for DnsCodec {
+    type Item = dnspkt::DNSPkt;
+    type Error = std::io::Error;
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let inquery = parse::PktParser::new(&src[..]).get_dns();
+        match inquery {
+            Ok(p) => Ok(Some(p)),
+            Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+        }
+    }
+}
 
 #[derive(Clone)]
 struct DnsServer {
@@ -49,7 +65,7 @@ impl DnsServer {
 
     async fn recvinquery(
         &mut self,
-        responder: Arc<Mutex<tokio::net::udp::SendHalf>>,
+        responder: Arc<UdpSocket>,
         pkt: &[u8],
         from: std::net::SocketAddr,
     ) {
@@ -64,29 +80,35 @@ impl DnsServer {
                 let inreply = self.create_inreply(&inquery, &outreply);
                 println!("InReply: {:?} <- {:?}", from, inreply);
                 responder
-                    .lock()
+                    .send_msg(
+                        inreply.serialise().as_slice(),
+                        &udp::ControlMessage {},
+                        udp::MsgFlags::empty(),
+                        Some(&from),
+                    )
                     .await
-                    .send_to(inreply.serialise().as_slice(), &from)
-                    .await
-                    .expect("Failed to send reply"); // TODO
+                    .expect("Failed to send reply"); // TODO: Better error handling
                 println!("Reply sent");
             }
             Err(e) => println!("Error: {:?}", e),
         };
     }
 
-    async fn run(self, sock: tokio::net::UdpSocket) -> Result<(), io::Error> {
-        let (mut listener, responder) = sock.split();
-        let shared_responder = Arc::new(Mutex::new(responder));
+    async fn run(self, sock: UdpSocket) -> Result<(), io::Error> {
+        let shared_sock = Arc::new(sock);
         loop {
-            let mut buf = [0; 65536];
-            match listener.recv_from(&mut buf).await {
-                Ok((n, sa)) => {
+            let mut cmsg = Vec::new(); /* TODO: Calculate better size */
+            match shared_sock
+                .recv_msg(4096, &mut cmsg, udp::MsgFlags::empty())
+                .await
+            {
+                Ok(rm) => {
                     let mut q = self.clone();
-                    let shared_responder = shared_responder.clone();
-                    tokio::spawn(
-                        async move { q.recvinquery(shared_responder, &buf[0..n], sa).await },
-                    );
+                    let shared_responder2 = shared_sock.clone();
+                    tokio::spawn(async move {
+                        q.recvinquery(shared_responder2, &rm.buffer, rm.address.unwrap())
+                            .await
+                    });
                 }
                 Err(e) => {
                     println!("Error {}", e);
@@ -99,11 +121,7 @@ impl DnsServer {
 async fn run_internal() -> Result<(), Box<dyn Error>> {
     let listener = UdpSocket::bind("[::]:1053").await?;
 
-    nix::sys::socket::setsockopt(
-        listener.as_raw_fd(),
-        nix::sys::socket::sockopt::Ipv4PacketInfo,
-        &true,
-    )?;
+    listener.set_opt_ipv4_packet_info(true)?;
 
     println!("Listening for DNS on {}", listener.local_addr()?);
 
