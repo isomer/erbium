@@ -68,7 +68,7 @@ impl DnsServer {
         responder: Arc<UdpSocket>,
         pkt: &[u8],
         from: std::net::SocketAddr,
-        to: std::net::SocketAddr,
+        to: Option<std::net::IpAddr>,
     ) {
         let inquery = parse::PktParser::new(pkt)
             .get_dns()
@@ -82,7 +82,7 @@ impl DnsServer {
                 responder
                     .send_msg(
                         inreply.serialise().as_slice(),
-                        &udp::ControlMessage {},
+                        &udp::ControlMessage { send_from: to },
                         udp::MsgFlags::empty(),
                         Some(&from),
                     )

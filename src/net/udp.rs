@@ -1,5 +1,8 @@
 // We desperately need recvmsg / sendmsg support, and rust doesn't support it, so we need *yet
 // another* udp socket type.
+//
+// This should not export libc::, nix:: or tokio:: types, only std:: and it's own types to insulate
+// the rest of the program of the horrors of portability.
 
 use futures::ready;
 use std::convert::TryFrom;
@@ -20,7 +23,9 @@ pub type MsgFlags = nix::sys::socket::MsgFlags;
 pub type IoVec<A> = nix::sys::uio::IoVec<A>;
 
 #[derive(Debug)]
-pub struct ControlMessage {}
+pub struct ControlMessage {
+    pub send_from: Option<net::IpAddr>,
+}
 
 #[derive(Debug)]
 pub struct RecvMsg {
@@ -70,15 +75,8 @@ impl RecvMsg {
     pub fn local_addr(&self) -> Option<net::IpAddr> {
         // This function can be overridden to provide different implementations for different
         // platforms.
-
-        // Lets see if we have a v4 version.
-        if let Some(pi) = self.ipv4pktinfo {
-            let ip = pi.ipi_addr.s_addr.to_ne_bytes(); // This is already in big endian form, don't try and perform a conversion.
-                                                       // It is a pity there isn't a nicer way to do this conversion.
-            Some(net::IpAddr::V4(net::Ipv4Addr::new(
-                ip[0], ip[1], ip[2], ip[3],
-            )))
-        } else if let Some(pi) = self.ipv6pktinfo {
+        //
+        if let Some(pi) = self.ipv6pktinfo {
             // Oh come on, this conversion is even more ridiculous than the last one!
             Some(net::IpAddr::V6(net::Ipv6Addr::new(
                 (pi.ipi6_addr.s6_addr[0] as u16) << 8 | (pi.ipi6_addr.s6_addr[1] as u16),
@@ -89,6 +87,12 @@ impl RecvMsg {
                 (pi.ipi6_addr.s6_addr[10] as u16) << 8 | (pi.ipi6_addr.s6_addr[11] as u16),
                 (pi.ipi6_addr.s6_addr[12] as u16) << 8 | (pi.ipi6_addr.s6_addr[13] as u16),
                 (pi.ipi6_addr.s6_addr[14] as u16) << 8 | (pi.ipi6_addr.s6_addr[15] as u16),
+            )))
+        } else if let Some(pi) = self.ipv4pktinfo {
+            let ip = pi.ipi_addr.s_addr.to_ne_bytes(); // This is already in big endian form, don't try and perform a conversion.
+                                                       // It is a pity I haven't found a nicer way to do this conversion.
+            Some(net::IpAddr::V4(net::Ipv4Addr::new(
+                ip[0], ip[1], ip[2], ip[3],
             )))
         } else {
             None
@@ -109,6 +113,21 @@ fn nix_to_std_sockaddr(n: nix::sys::socket::SockAddr) -> SocketAddr {
     match n {
         nix::sys::socket::SockAddr::Inet(ia) => ia.to_std(),
         _ => unimplemented!(),
+    }
+}
+
+/* const */ fn std_to_libc_in_addr(addr: net::Ipv4Addr) -> libc::in_addr {
+    libc::in_addr {
+        s_addr: addr
+            .octets()
+            .iter()
+            .fold(0, |acc, x| ((acc << 8) | (*x as u32))),
+    }
+}
+
+const fn std_to_libc_in6_addr(addr: net::Ipv6Addr) -> libc::in6_addr {
+    libc::in6_addr {
+        s6_addr: addr.octets(),
     }
 }
 
@@ -200,9 +219,33 @@ impl UdpSocket {
         ready!(self.io.poll_write_ready(cx))?;
 
         let iov = &[IoVec::from_slice(buffer)];
-        let cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
+        let mut cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
         let from =
             addr.map(|x| nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::from_std(x)));
+        let mut in_pktinfo = libc::in_pktinfo {
+                        ipi_ifindex: 0, /* Unspecified interface */
+                        ipi_addr: std_to_libc_in_addr(net::Ipv4Addr::UNSPECIFIED),
+                        ipi_spec_dst: std_to_libc_in_addr(net::Ipv4Addr::UNSPECIFIED),
+                    };
+        let mut in6_pktinfo = libc::in6_pktinfo {
+                    ipi6_ifindex: 0, /* Unspecified interface */
+                    ipi6_addr: std_to_libc_in6_addr(net::Ipv6Addr::UNSPECIFIED),
+        };
+
+        if let Some(addr) = cmsg.send_from {
+            match addr {
+                net::IpAddr::V4(ip) => {
+                    in_pktinfo.ipi_spec_dst = std_to_libc_in_addr(ip);
+                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv4PacketInfo(&in_pktinfo))
+                }
+                net::IpAddr::V6(ip) => {
+                    in6_pktinfo.ipi6_addr = std_to_libc_in6_addr(ip);
+                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv6PacketInfo(&in6_pktinfo))
+                },
+            }
+        }
+
+        println!("Send cmsg: {:?}", cmsgs);
 
         match nix::sys::socket::sendmsg(
             self.io.get_ref().as_raw_fd(),
