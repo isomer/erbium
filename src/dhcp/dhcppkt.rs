@@ -256,6 +256,16 @@ impl std::fmt::Debug for DHCP {
     }
 }
 
+fn null_terminated(mut v : Vec<u8>) -> Vec<u8> {
+    for i in 0..v.len() {
+        if v[i] == 0 {
+            v.truncate(i);
+            break;
+        }
+    }
+    v
+}
+
 pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
     let mut it = pkt.iter();
     let op = get_u8(&mut it)?;
@@ -270,8 +280,8 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
     let siaddr = get_ipv4(&mut it)?;
     let giaddr = get_ipv4(&mut it)?;
     let chaddr = get_bytes(&mut it, 16)?;
-    let sname = get_bytes(&mut it, 64)?;
-    let file = get_bytes(&mut it, 128)?;
+    let sname = null_terminated(get_bytes(&mut it, 64)?);
+    let file = null_terminated(get_bytes(&mut it, 128)?);
     let mut raw_options: collections::HashMap<DhcpOption, Vec<u8>> = collections::HashMap::new();
     match get_be32(&mut it) {
         Ok(0x6382_5363) => {
@@ -293,11 +303,12 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
         Ok(_) => return Err(ParseError::WrongMagic),
         _ => return Err(ParseError::WrongMagic),
     }
+
     let options = DhcpOptions {
         messagetype: MessageType(raw_options.remove(&OPTION_MSGTYPE).unwrap()[0]), // TODO: better error handling if msgtype is missing
         hostname: raw_options
             .remove(&OPTION_HOSTNAME)
-            .and_then(|host| String::from_utf8(host.to_vec()).ok()),
+            .and_then(|host| String::from_utf8(null_terminated(host).to_vec()).ok()),
         leasetime: raw_options
             .remove(&OPTION_ADDRESSLEASETIME)
             .and_then(|dur| {
