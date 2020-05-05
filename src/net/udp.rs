@@ -15,6 +15,8 @@ use tokio::future::poll_fn;
 use tokio::io::PollEvented;
 use tokio::net::ToSocketAddrs;
 
+use nix::libc as libc;
+
 pub struct UdpSocket {
     io: PollEvented<mio::net::UdpSocket>,
 }
@@ -25,6 +27,52 @@ pub type IoVec<A> = nix::sys::uio::IoVec<A>;
 #[derive(Debug)]
 pub struct ControlMessage {
     pub send_from: Option<net::IpAddr>,
+    /* private, used to hold memory after conversions */
+    pktinfo4: libc::in_pktinfo,
+    pktinfo6: libc::in6_pktinfo,
+}
+
+impl ControlMessage {
+    pub fn new() -> Self {
+        Self {
+            send_from: None,
+            pktinfo4: libc::in_pktinfo {
+                ipi_ifindex: 0, /* Unspecified interface */
+                ipi_addr: std_to_libc_in_addr(net::Ipv4Addr::UNSPECIFIED),
+                ipi_spec_dst: std_to_libc_in_addr(net::Ipv4Addr::UNSPECIFIED),
+            },
+            pktinfo6: libc::in6_pktinfo {
+                ipi6_ifindex: 0, /* Unspecified interface */
+                ipi6_addr: std_to_libc_in6_addr(net::Ipv6Addr::UNSPECIFIED),
+            },
+        }
+    }
+    pub fn set_send_from(mut self, send_from: Option<net::IpAddr>) -> Self {
+        self.send_from = send_from;
+        self
+    }
+    pub fn convert_to_cmsg(&mut self) -> Vec<nix::sys::socket::ControlMessage> {
+        let mut cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
+
+        if let Some(addr) = self.send_from {
+            match addr {
+                net::IpAddr::V4(ip) => {
+                    self.pktinfo4.ipi_spec_dst = std_to_libc_in_addr(ip);
+                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv4PacketInfo(
+                        &self.pktinfo4,
+                    ))
+                }
+                net::IpAddr::V6(ip) => {
+                    self.pktinfo6.ipi6_addr = std_to_libc_in6_addr(ip);
+                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv6PacketInfo(
+                        &self.pktinfo6,
+                    ))
+                }
+            }
+        }
+
+        cmsgs
+    }
 }
 
 #[derive(Debug)]
@@ -98,9 +146,19 @@ impl RecvMsg {
             None
         }
     }
+
+    pub fn local_intf(&self) -> Option<i32> {
+        if let Some(pi) = self.ipv6pktinfo {
+            Some(pi.ipi6_ifindex as i32)
+        } else if let Some(pi) = self.ipv4pktinfo {
+            Some(pi.ipi_ifindex as i32)
+        } else {
+            None
+        }
+    }
 }
 
-fn nix_to_io_error(n: nix::Error) -> io::Error {
+pub fn nix_to_io_error(n: nix::Error) -> io::Error {
     match n {
         nix::Error::Sys(_) => io::Error::new(io::ErrorKind::Other, n),
         nix::Error::InvalidPath => io::Error::new(io::ErrorKind::InvalidData, n),
@@ -109,14 +167,14 @@ fn nix_to_io_error(n: nix::Error) -> io::Error {
     }
 }
 
-fn nix_to_std_sockaddr(n: nix::sys::socket::SockAddr) -> SocketAddr {
+pub fn nix_to_std_sockaddr(n: nix::sys::socket::SockAddr) -> SocketAddr {
     match n {
         nix::sys::socket::SockAddr::Inet(ia) => ia.to_std(),
         _ => unimplemented!(),
     }
 }
 
-/* const */ fn std_to_libc_in_addr(addr: net::Ipv4Addr) -> libc::in_addr {
+pub fn std_to_libc_in_addr(addr: net::Ipv4Addr) -> libc::in_addr {
     libc::in_addr {
         s_addr: addr
             .octets()
@@ -125,7 +183,7 @@ fn nix_to_std_sockaddr(n: nix::sys::socket::SockAddr) -> SocketAddr {
     }
 }
 
-const fn std_to_libc_in6_addr(addr: net::Ipv6Addr) -> libc::in6_addr {
+pub const fn std_to_libc_in6_addr(addr: net::Ipv6Addr) -> libc::in6_addr {
     libc::in6_addr {
         s6_addr: addr.octets(),
     }
@@ -223,25 +281,29 @@ impl UdpSocket {
         let from =
             addr.map(|x| nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::from_std(x)));
         let mut in_pktinfo = libc::in_pktinfo {
-                        ipi_ifindex: 0, /* Unspecified interface */
-                        ipi_addr: std_to_libc_in_addr(net::Ipv4Addr::UNSPECIFIED),
-                        ipi_spec_dst: std_to_libc_in_addr(net::Ipv4Addr::UNSPECIFIED),
-                    };
+            ipi_ifindex: 0, /* Unspecified interface */
+            ipi_addr: std_to_libc_in_addr(net::Ipv4Addr::UNSPECIFIED),
+            ipi_spec_dst: std_to_libc_in_addr(net::Ipv4Addr::UNSPECIFIED),
+        };
         let mut in6_pktinfo = libc::in6_pktinfo {
-                    ipi6_ifindex: 0, /* Unspecified interface */
-                    ipi6_addr: std_to_libc_in6_addr(net::Ipv6Addr::UNSPECIFIED),
+            ipi6_ifindex: 0, /* Unspecified interface */
+            ipi6_addr: std_to_libc_in6_addr(net::Ipv6Addr::UNSPECIFIED),
         };
 
         if let Some(addr) = cmsg.send_from {
             match addr {
                 net::IpAddr::V4(ip) => {
                     in_pktinfo.ipi_spec_dst = std_to_libc_in_addr(ip);
-                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv4PacketInfo(&in_pktinfo))
+                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv4PacketInfo(
+                        &in_pktinfo,
+                    ))
                 }
                 net::IpAddr::V6(ip) => {
                     in6_pktinfo.ipi6_addr = std_to_libc_in6_addr(ip);
-                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv6PacketInfo(&in6_pktinfo))
-                },
+                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv6PacketInfo(
+                        &in6_pktinfo,
+                    ))
+                }
             }
         }
 

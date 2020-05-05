@@ -3,7 +3,7 @@ use std::fmt;
 use std::net;
 
 #[derive(Debug)]
-enum ParseError {
+pub enum ParseError {
     UnexpectedEndOfInput,
     WrongMagic,
 }
@@ -103,11 +103,27 @@ impl fmt::Debug for HwType {
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct MessageType(u8);
 pub const DHCPDISCOVER: MessageType = MessageType(1);
+pub const DHCPOFFER: MessageType = MessageType(2);
+pub const DHCPREQUEST: MessageType = MessageType(3);
+pub const DHCPDECLINE: MessageType = MessageType(4);
+pub const DHCPACK: MessageType = MessageType(5);
+pub const DHCPNAK: MessageType = MessageType(6);
+pub const DHCPRELEASE: MessageType = MessageType(7);
+pub const DHCPINFORM: MessageType = MessageType(8);
+pub const DHCPFORCERENEW: MessageType = MessageType(9);
 
 impl ToString for MessageType {
     fn to_string(&self) -> String {
         match self {
             &DHCPDISCOVER => String::from("DHCPDISCOVER"),
+            &DHCPOFFER => String::from("DHCPOFFER"),
+            &DHCPREQUEST => String::from("DHCPREQUEST"),
+            &DHCPDECLINE => String::from("DHCPDECLINE"),
+            &DHCPACK => String::from("DHCPACK"),
+            &DHCPNAK => String::from("DHCPNAK"),
+            &DHCPRELEASE => String::from("DHCPRELEASE"),
+            &DHCPINFORM => String::from("DHCPINFORM"),
+            &DHCPFORCERENEW => String::from("DHCPFORCERENEW"),
             MessageType(x) => format!("#{}", x),
         }
     }
@@ -132,6 +148,8 @@ pub const OPTION_BROADCASTADDR: DhcpOption = DhcpOption(28);
 pub const OPTION_NTPSERVERS: DhcpOption = DhcpOption(42);
 pub const OPTION_NETBIOSNAMESRV: DhcpOption = DhcpOption(44);
 pub const OPTION_NETBIOSSCOPE: DhcpOption = DhcpOption(47);
+pub const OPTION_ADDRESSREQUEST: DhcpOption = DhcpOption(50);
+pub const OPTION_ADDRESSLEASETIME: DhcpOption = DhcpOption(51);
 pub const OPTION_MSGTYPE: DhcpOption = DhcpOption(53);
 pub const OPTION_PARAMLIST: DhcpOption = DhcpOption(55);
 pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
@@ -151,6 +169,8 @@ impl ToString for DhcpOption {
             &OPTION_NTPSERVERS => String::from("NTPSERVERS"),
             &OPTION_NETBIOSNAMESRV => String::from("NETBIOSNAMESRV"),
             &OPTION_NETBIOSSCOPE => String::from("NETBIOSSCOPE"),
+            &OPTION_ADDRESSREQUEST => String::from("ADDRESSREQUEST"),
+            &OPTION_ADDRESSLEASETIME => String::from("ADDRESSLEASETIME"),
             &OPTION_MSGTYPE => String::from("DHCP Message Type"),
             &OPTION_PARAMLIST => String::from("Parameter List"),
             &OPTION_DOMAINSEARCH => String::from("DOMAINSEARCH"),
@@ -170,6 +190,7 @@ impl fmt::Debug for DhcpOption {
 pub struct DhcpOptions {
     pub messagetype: MessageType,
     pub hostname: Option<String>,
+    pub leasetime: Option<std::time::Duration>,
     pub parameterlist: Option<Vec<DhcpOption>>,
     pub other: collections::HashMap<DhcpOption, Vec<u8>>,
 }
@@ -235,7 +256,7 @@ impl std::fmt::Debug for DHCP {
     }
 }
 
-pub fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
+pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
     let mut it = pkt.iter();
     let op = get_u8(&mut it)?;
     let htype = get_u8(&mut it)?;
@@ -265,18 +286,25 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, Box<dyn std::error::Error>> {
                             .or_insert_with(Vec::new)
                             .extend(get_bytes(&mut it, l as usize)?);
                     }
-                    Err(e) => return Err(Box::new(e)),
+                    Err(e) => return Err(e),
                 }
             }
         }
-        Ok(_) => return Err(Box::new(ParseError::WrongMagic)),
-        _ => return Err(Box::new(ParseError::WrongMagic)),
+        Ok(_) => return Err(ParseError::WrongMagic),
+        _ => return Err(ParseError::WrongMagic),
     }
     let options = DhcpOptions {
         messagetype: MessageType(raw_options.remove(&OPTION_MSGTYPE).unwrap()[0]), // TODO: better error handling if msgtype is missing
         hostname: raw_options
             .remove(&OPTION_HOSTNAME)
             .and_then(|host| String::from_utf8(host.to_vec()).ok()),
+        leasetime: raw_options
+            .remove(&OPTION_ADDRESSLEASETIME)
+            .and_then(|dur| {
+                Some(std::time::Duration::from_secs(
+                    dur.iter().fold(0u64, |acc, &v| acc << 8 + (v as u64)),
+                ))
+            }),
         parameterlist: raw_options.remove(&OPTION_PARAMLIST).map(|l| {
             l.iter()
                 .map(|&x| DhcpOption(x))
@@ -360,6 +388,15 @@ impl Serialise for DhcpOptions {
             }
         }
 
+        if let Some(l) = &self.leasetime {
+            OPTION_ADDRESSLEASETIME.serialise(v);
+            let lt = (l.as_secs() as u32).to_be_bytes();
+            (lt.len() as u8).serialise(v);
+            for c in lt.iter() {
+                c.serialise(v);
+            }
+        }
+
         if let Some(p) = &self.parameterlist {
             OPTION_PARAMLIST.serialise(v);
             (p.len() as u8).serialise(v);
@@ -410,6 +447,9 @@ impl DHCP {
         for b in &self.file {
             b.serialise(&mut v);
         }
+
+        /* DHCP Magic */
+        0x6382_5363u32.serialise(&mut v);
 
         self.options.serialise(&mut v);
 

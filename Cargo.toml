@@ -10,9 +10,12 @@ edition = "2018"
 tokio = { version = "0.2", features = ["full"] }
 async-std = { version = "", features = ["unstable"] }
 rand = ""
-nix = { version = "0.17" }
+nix = { version = "0.17", path="/home/perry/build/nix" }
 futures = ""
-mio = ""
-#{ version = "", features = ["udp"] }
-libc = ""
+mio = { version = "0.6.20" } #, features = ["udp"] }
+#libc = ""
 rusqlite = ""
+tokio-util = { version="", features= ["codec"] }
+bytes = ""
+futures-core = ""
+futures-sink = ""

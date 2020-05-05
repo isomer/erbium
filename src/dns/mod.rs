@@ -79,10 +79,11 @@ impl DnsServer {
             Ok(outreply) => {
                 let inreply = self.create_inreply(&inquery, &outreply);
                 println!("InReply: {:?} <- {:?}", from, inreply);
+                let cmsg = udp::ControlMessage::new().set_send_from(to);
                 responder
                     .send_msg(
                         inreply.serialise().as_slice(),
-                        &udp::ControlMessage { send_from: to },
+                        &cmsg,
                         udp::MsgFlags::empty(),
                         Some(&from),
                     )
