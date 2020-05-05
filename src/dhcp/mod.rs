@@ -42,7 +42,7 @@ impl std::fmt::Display for DhcpError {
 
 fn handle_discover(pools: LockedPools, req: &dhcppkt::DHCP) -> Result<dhcppkt::DHCP, DhcpError> {
     match pools.allocate_address("default") {
-        net::IpAddr::V4(addr) => Ok(dhcppkt::DHCP {
+        Some(lease) => Ok(dhcppkt::DHCP {
             op: dhcppkt::OP_BOOTREPLY,
             htype: dhcppkt::HWTYPE_ETHERNET,
             hlen: 6,
@@ -51,7 +51,7 @@ fn handle_discover(pools: LockedPools, req: &dhcppkt::DHCP) -> Result<dhcppkt::D
             secs: 0,
             flags: req.flags,
             ciaddr: net::Ipv4Addr::UNSPECIFIED,
-            yiaddr: addr,
+            yiaddr: lease.ip,
             siaddr: net::Ipv4Addr::UNSPECIFIED,
             giaddr: req.giaddr,
             chaddr: req.chaddr.clone(),
@@ -71,7 +71,7 @@ fn handle_discover(pools: LockedPools, req: &dhcppkt::DHCP) -> Result<dhcppkt::D
 
 fn handle_request(pools: LockedPools, req: &dhcppkt::DHCP) -> Result<dhcppkt::DHCP, DhcpError> {
     match pools.allocate_address("default") {
-        net::IpAddr::V4(addr) => Ok(dhcppkt::DHCP {
+        Some(lease) => Ok(dhcppkt::DHCP {
             op: dhcppkt::OP_BOOTREPLY,
             htype: dhcppkt::HWTYPE_ETHERNET,
             hlen: 6,
@@ -80,7 +80,7 @@ fn handle_request(pools: LockedPools, req: &dhcppkt::DHCP) -> Result<dhcppkt::DH
             secs: 0,
             flags: req.flags,
             ciaddr: req.ciaddr,
-            yiaddr: addr,
+            yiaddr: lease.ip,
             siaddr: net::Ipv4Addr::UNSPECIFIED,
             giaddr: req.giaddr,
             chaddr: req.chaddr.clone(),
@@ -90,7 +90,7 @@ fn handle_request(pools: LockedPools, req: &dhcppkt::DHCP) -> Result<dhcppkt::DH
                 messagetype: dhcppkt::DHCPACK,
                 hostname: req.options.hostname.clone(),
                 parameterlist: None,
-                leasetime: Some(std::time::Duration::from_secs(600)),
+                leasetime: Some(lease.lease),
                 other: collections::HashMap::new(),
             },
         }),

@@ -1,5 +1,10 @@
 use rusqlite;
 
+pub struct Lease {
+    pub ip : std::net::Ipv4Addr,
+    pub lease : std::time::Duration,
+}
+
 pub struct Pools {
     conn: rusqlite::Connection,
 }
@@ -23,7 +28,10 @@ impl Pools {
         })
     }
 
-    pub fn allocate_address(&self, _name: &str) -> std::net::IpAddr {
-        "192.168.0.100".parse().unwrap()
+    pub fn allocate_address(&self, _name: &str) -> Option<Lease> {
+        Some(Lease {
+            ip: "192.168.0.100".parse().unwrap(),
+            lease: std::time::Duration::from_secs(600),
+        })
     }
 }
