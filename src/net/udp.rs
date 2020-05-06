@@ -15,7 +15,7 @@ use tokio::future::poll_fn;
 use tokio::io::PollEvented;
 use tokio::net::ToSocketAddrs;
 
-use nix::libc as libc;
+use nix::libc;
 
 pub struct UdpSocket {
     io: PollEvented<mio::net::UdpSocket>,

@@ -8,7 +8,7 @@ use crate::net::raw;
 use crate::net::udp;
 
 /* We don't want a conflict between nix libc and whatever we use, so use nix's libc */
-use nix::libc as libc;
+use nix::libc;
 
 mod dhcppkt;
 mod pool;

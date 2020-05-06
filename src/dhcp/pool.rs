@@ -1,8 +1,8 @@
 use rusqlite;
 
 pub struct Lease {
-    pub ip : std::net::Ipv4Addr,
-    pub lease : std::time::Duration,
+    pub ip: std::net::Ipv4Addr,
+    pub lease: std::time::Duration,
 }
 
 pub struct Pools {

@@ -89,7 +89,7 @@ impl<'a> Fragment<'a> {
     fn from_tail<'l>(tail: Tail<'l>) -> Fragment<'l> {
         Fragment {
             buffer: vec![],
-            tail: tail,
+            tail,
         }
     }
     fn push_u8(&mut self, b: u8) {

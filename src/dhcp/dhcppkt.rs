@@ -256,7 +256,7 @@ impl std::fmt::Debug for DHCP {
     }
 }
 
-fn null_terminated(mut v : Vec<u8>) -> Vec<u8> {
+fn null_terminated(mut v: Vec<u8>) -> Vec<u8> {
     for i in 0..v.len() {
         if v[i] == 0 {
             v.truncate(i);
@@ -313,7 +313,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
             .remove(&OPTION_ADDRESSLEASETIME)
             .and_then(|dur| {
                 Some(std::time::Duration::from_secs(
-                    dur.iter().fold(0u64, |acc, &v| acc << 8 + (v as u64)),
+                    dur.iter().fold(0u64, |acc, &v| (acc << 8) + (v as u64)),
                 ))
             }),
         parameterlist: raw_options.remove(&OPTION_PARAMLIST).map(|l| {

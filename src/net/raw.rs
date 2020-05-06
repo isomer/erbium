@@ -11,7 +11,7 @@ use tokio::future::poll_fn;
 use tokio::io::PollEvented;
 
 use crate::net::udp;
-use nix::libc as libc;
+use nix::libc;
 
 pub type Error = std::io::Error;
 pub type Result<T> = std::result::Result<T, Error>;

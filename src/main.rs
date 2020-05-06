@@ -12,11 +12,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     services.push(tokio::spawn(dhcp::run()));
     services.push(tokio::spawn(dns::run()));
 
-    loop {
-        match services.next().await {
-            Some(x) => println!("Service complete: {:?}", x),
-            None => break,
-        }
+    while let Some(x) = services.next().await {
+        println!("Service complete: {:?}", x)
     }
 
     Ok(())
