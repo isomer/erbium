@@ -1,3 +1,22 @@
+/*   Copyright 2020 Perry Lorier
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ *  SPDX-License-Identifier: Apache-2.0
+ *
+ *  Parsing/Serialisation for a DHCP Packet.
+ */
+
 use std::collections;
 use std::fmt;
 use std::net;
@@ -309,13 +328,9 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
         hostname: raw_options
             .remove(&OPTION_HOSTNAME)
             .and_then(|host| String::from_utf8(null_terminated(host).to_vec()).ok()),
-        leasetime: raw_options
-            .remove(&OPTION_ADDRESSLEASETIME)
-            .and_then(|dur| {
-                Some(std::time::Duration::from_secs(
-                    dur.iter().fold(0u64, |acc, &v| (acc << 8) + (v as u64)),
-                ))
-            }),
+        leasetime: raw_options.remove(&OPTION_ADDRESSLEASETIME).map(|dur| {
+            std::time::Duration::from_secs(dur.iter().fold(0u64, |acc, &v| (acc << 8) + (v as u64)))
+        }),
         parameterlist: raw_options.remove(&OPTION_PARAMLIST).map(|l| {
             l.iter()
                 .map(|&x| DhcpOption(x))

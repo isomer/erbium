@@ -1,3 +1,21 @@
+/*   Copyright 2020 Perry Lorier
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ *  SPDX-License-Identifier: Apache-2.0
+ *
+ *  Main DHCP Code.
+ */
 use std::collections;
 use std::net;
 use std::sync::Arc;
@@ -163,9 +181,8 @@ async fn recvdhcp(
             )
             .flatten();
 
-            match send_raw(raw, &etherbuf, intf).await {
-                Err(e) => println!("Failed to send reply to {:?}: {:?}", from, e),
-                Ok(_) => (),
+            if let Err(e) = send_raw(raw, &etherbuf, intf).await {
+                println!("Failed to send reply to {:?}: {:?}", from, e);
             }
         }
         Err(e) => println!("Error processing DHCP Packet from {:?}: {:?}", from, e),
