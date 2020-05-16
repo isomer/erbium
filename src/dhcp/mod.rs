@@ -191,7 +191,6 @@ async fn recvdhcp(
 
 enum RunError {
     Io(std::io::Error),
-    Nix(nix::Error),
     PoolError(pool::Error),
 }
 
@@ -199,7 +198,6 @@ impl ToString for RunError {
     fn to_string(&self) -> String {
         match self {
             RunError::Io(e) => e.to_string(),
-            RunError::Nix(e) => e.to_string(),
             RunError::PoolError(e) => e.to_string(),
         }
     }
