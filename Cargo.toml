@@ -1,5 +1,5 @@
 [package]
-name = "networksrv-async"
+name = "erbium"
 version = "0.1.0"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2018"
@@ -19,3 +19,7 @@ tokio-util = { version="", features= ["codec"] }
 bytes = ""
 futures-core = ""
 futures-sink = ""
+
+[lib]
+name = "erbium"
+path = "src/lib.rs"
