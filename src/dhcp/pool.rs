@@ -27,6 +27,7 @@ pub struct Pools {
     conn: rusqlite::Connection,
 }
 
+#[derive(Debug)]
 pub enum Error {
     DbError(rusqlite::Error),
 }

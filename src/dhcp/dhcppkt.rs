@@ -21,7 +21,7 @@ use std::collections;
 use std::fmt;
 use std::net;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
     UnexpectedEndOfInput,
     WrongMagic,
@@ -170,7 +170,10 @@ pub const OPTION_NETBIOSSCOPE: DhcpOption = DhcpOption(47);
 pub const OPTION_ADDRESSREQUEST: DhcpOption = DhcpOption(50);
 pub const OPTION_ADDRESSLEASETIME: DhcpOption = DhcpOption(51);
 pub const OPTION_MSGTYPE: DhcpOption = DhcpOption(53);
+pub const OPTION_SERVERID: DhcpOption = DhcpOption(54);
 pub const OPTION_PARAMLIST: DhcpOption = DhcpOption(55);
+pub const OPTION_CLIENTID: DhcpOption = DhcpOption(61);
+pub const OPTION_FQDN: DhcpOption = DhcpOption(81); /* RFC4702 */
 pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
 pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
 
@@ -191,7 +194,10 @@ impl ToString for DhcpOption {
             &OPTION_ADDRESSREQUEST => String::from("ADDRESSREQUEST"),
             &OPTION_ADDRESSLEASETIME => String::from("ADDRESSLEASETIME"),
             &OPTION_MSGTYPE => String::from("DHCP Message Type"),
+            &OPTION_SERVERID => String::from("Server Id"),
             &OPTION_PARAMLIST => String::from("Parameter List"),
+            &OPTION_CLIENTID => String::from("Client Id"),
+            &OPTION_FQDN => String::from("FQDN"),
             &OPTION_DOMAINSEARCH => String::from("DOMAINSEARCH"),
             &OPTION_CIDRROUTE => String::from("CIDRROUTE"),
             DhcpOption(x) => format!("#{}", x),
@@ -211,6 +217,8 @@ pub struct DhcpOptions {
     pub hostname: Option<String>,
     pub leasetime: Option<std::time::Duration>,
     pub parameterlist: Option<Vec<DhcpOption>>,
+    pub serveridentifier: Option<net::Ipv4Addr>,
+    pub clientidentifier: Option<Vec<u8>>,
     pub other: collections::HashMap<DhcpOption, Vec<u8>>,
 }
 
@@ -336,7 +344,10 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
                 .map(|&x| DhcpOption(x))
                 .collect::<Vec<DhcpOption>>()
         }),
-
+        serveridentifier: raw_options
+            .remove(&OPTION_SERVERID)
+            .map(|sid| net::Ipv4Addr::new(sid[0], sid[1], sid[2], sid[3])),
+        clientidentifier: raw_options.remove(&OPTION_CLIENTID),
         other: raw_options,
     };
 
@@ -480,5 +491,12 @@ impl DHCP {
         self.options.serialise(&mut v);
 
         v
+    }
+
+    pub fn get_client_id(&self) -> Vec<u8> {
+        self.options
+            .clientidentifier
+            .clone()
+            .unwrap_or_else(|| self.chaddr.clone())
     }
 }
