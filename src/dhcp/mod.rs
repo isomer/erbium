@@ -196,6 +196,10 @@ async fn send_raw(raw: Arc<raw::RawSocket>, buf: &[u8], intf: i32) -> Result<(),
     .map(|_| ())
 }
 
+async fn get_serverids(s: &SharedServerIds) -> ServerIds {
+    s.lock().await.clone()
+}
+
 async fn recvdhcp(
     raw: Arc<raw::RawSocket>,
     pools: Pools,
@@ -211,7 +215,7 @@ async fn recvdhcp(
         println!("from={:?}", from);
         unimplemented!()
     };
-    match handle_pkt(pool, pkt, from, serverids.lock().await.clone()) {
+    match handle_pkt(pool, pkt, from, get_serverids(&serverids).await) {
         Ok(mut r) => {
             if let Some(si) = r.options.serveridentifier {
                 serverids.lock().await.insert(si);
