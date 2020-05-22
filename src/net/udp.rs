@@ -94,6 +94,12 @@ impl ControlMessage {
     }
 }
 
+impl Default for ControlMessage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug)]
 pub struct RecvMsg {
     pub buffer: Vec<u8>,
