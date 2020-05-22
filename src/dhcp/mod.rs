@@ -148,7 +148,7 @@ fn handle_request(
                 messagetype: dhcppkt::DHCPACK,
                 hostname: req.options.hostname.clone(),
                 parameterlist: None,
-                leasetime: Some(lease.lease),
+                leasetime: Some(lease.expire),
                 serveridentifier: req.options.serveridentifier,
                 clientidentifier: req.options.clientidentifier.clone(),
                 other: collections::HashMap::new(),

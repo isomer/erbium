@@ -20,7 +20,7 @@
 #[derive(Debug)]
 pub struct Lease {
     pub ip: std::net::Ipv4Addr,
-    pub lease: std::time::Duration,
+    pub expire: std::time::Duration,
 }
 
 pub struct Pools {
@@ -162,7 +162,7 @@ impl<'a> Pool<'a> {
                             .get::<usize, String>(0)?
                             .parse::<std::net::Ipv4Addr>()
                             .expect("Parse"), /* TODO: error handling */
-                        lease: std::time::Duration::from_secs(
+                        expire: std::time::Duration::from_secs(
                             (row.get::<usize, u32>(1)? - (ts as u32)).into(),
                         ),
                     }))
@@ -202,7 +202,7 @@ impl<'a> Pool<'a> {
                          * the lease time.  This means transient devices get short leases, and
                          * devices that are more permanent get longer leases.
                          */
-                        lease: std::time::Duration::from_secs(
+                        expire: std::time::Duration::from_secs(
                             2 * (row.get::<usize, u32>(2)? - row.get::<usize, u32>(1)?) as u64,
                         ),
                     }))
@@ -238,7 +238,7 @@ impl<'a> Pool<'a> {
             println!("Using requested {:?}", requested);
             return Ok(Lease {
                 ip: requested,
-                lease: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
+                expire: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
             });
         }
 
@@ -250,7 +250,7 @@ impl<'a> Pool<'a> {
         println!("Assigning new lease");
         Ok(Lease {
             ip: "192.168.0.100".parse().unwrap(),
-            lease: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
+            expire: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
         })
     }
 
@@ -262,11 +262,14 @@ impl<'a> Pool<'a> {
             .select_address(clientid, "192.168.0.100".parse().unwrap())
             .unwrap(); /* TODO: Better Err handling */
 
-        let min_lease_time = std::time::Duration::from_secs(300);
-        let max_lease_time = std::time::Duration::from_secs(86400);
+        let min_expire_time = std::time::Duration::from_secs(300);
+        let max_expire_time = std::time::Duration::from_secs(86400);
 
         let lease = Lease {
-            lease: std::cmp::min(std::cmp::max(lease.lease, min_lease_time), max_lease_time),
+            expire: std::cmp::min(
+                std::cmp::max(lease.expire, min_expire_time),
+                max_expire_time,
+            ),
             ..lease
         };
 
@@ -287,7 +290,7 @@ impl<'a> Pool<'a> {
                     lease.ip.to_string(),
                     clientid,
                     ts as u32,
-                    (ts + lease.lease.as_secs()) as u32
+                    (ts + lease.expire.as_secs()) as u32
                 ],
             )
             .expect("Updating lease database failed"); /* Better error handling */
