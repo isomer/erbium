@@ -71,10 +71,14 @@ fn handle_discover(
     pools: LockedPools,
     req: &dhcppkt::DHCP,
     from: net::SocketAddr,
-    serverids: ServerIds,
+    _serverids: ServerIds,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     if let net::SocketAddr::V4(addr) = from {
-        match pools.allocate_address("default") {
+        match pools
+            .get_pool_by_name("default")
+            .unwrap()
+            .allocate_address(&req.get_client_id())
+        {
             Some(lease) => Ok(dhcppkt::DHCP {
                 op: dhcppkt::OP_BOOTREPLY,
                 htype: dhcppkt::HWTYPE_ETHERNET,
@@ -112,7 +116,7 @@ fn handle_discover(
 fn handle_request(
     pools: LockedPools,
     req: &dhcppkt::DHCP,
-    from: net::SocketAddr,
+    _from: net::SocketAddr,
     serverids: ServerIds,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     if let Some(si) = req.options.serveridentifier {
@@ -120,37 +124,37 @@ fn handle_request(
             return Err(DhcpError::OtherServer);
         }
     }
-    if let net::SocketAddr::V4(addr) = from {
-        match pools.allocate_address("default") {
-            Some(lease) => Ok(dhcppkt::DHCP {
-                op: dhcppkt::OP_BOOTREPLY,
-                htype: dhcppkt::HWTYPE_ETHERNET,
-                hlen: 6,
-                hops: 0,
-                xid: req.xid,
-                secs: 0,
-                flags: req.flags,
-                ciaddr: req.ciaddr,
-                yiaddr: lease.ip,
-                siaddr: net::Ipv4Addr::UNSPECIFIED,
-                giaddr: req.giaddr,
-                chaddr: req.chaddr.clone(),
-                sname: vec![],
-                file: vec![],
-                options: dhcppkt::DhcpOptions {
-                    messagetype: dhcppkt::DHCPACK,
-                    hostname: req.options.hostname.clone(),
-                    parameterlist: None,
-                    leasetime: Some(lease.lease),
-                    serveridentifier: req.options.serveridentifier,
-                    clientidentifier: req.options.clientidentifier.clone(),
-                    other: collections::HashMap::new(),
-                },
-            }),
-            _ => Err(DhcpError::NoLeasesAvailable),
-        }
-    } else {
-        Err(DhcpError::OtherServer)
+    match pools
+        .get_pool_by_name("default")
+        .unwrap()
+        .allocate_address(&req.get_client_id())
+    {
+        Some(lease) => Ok(dhcppkt::DHCP {
+            op: dhcppkt::OP_BOOTREPLY,
+            htype: dhcppkt::HWTYPE_ETHERNET,
+            hlen: 6,
+            hops: 0,
+            xid: req.xid,
+            secs: 0,
+            flags: req.flags,
+            ciaddr: req.ciaddr,
+            yiaddr: lease.ip,
+            siaddr: net::Ipv4Addr::UNSPECIFIED,
+            giaddr: req.giaddr,
+            chaddr: req.chaddr.clone(),
+            sname: vec![],
+            file: vec![],
+            options: dhcppkt::DhcpOptions {
+                messagetype: dhcppkt::DHCPACK,
+                hostname: req.options.hostname.clone(),
+                parameterlist: None,
+                leasetime: Some(lease.lease),
+                serveridentifier: req.options.serveridentifier,
+                clientidentifier: req.options.clientidentifier.clone(),
+                other: collections::HashMap::new(),
+            },
+        }),
+        _ => Err(DhcpError::NoLeasesAvailable),
     }
 }
 
@@ -242,6 +246,7 @@ async fn recvdhcp(
 enum RunError {
     Io(std::io::Error),
     PoolError(pool::Error),
+    InternalError(String),
 }
 
 impl ToString for RunError {
@@ -249,6 +254,7 @@ impl ToString for RunError {
         match self {
             RunError::Io(e) => e.to_string(),
             RunError::PoolError(e) => e.to_string(),
+            RunError::InternalError(e) => e.to_string(),
         }
     }
 }
@@ -259,6 +265,17 @@ async fn run_internal() -> Result<(), RunError> {
     let pools = Arc::new(sync::Mutex::new(
         pool::Pools::new().map_err(RunError::PoolError)?,
     ));
+    {
+        pools
+            .lock()
+            .await
+            .get_pool_by_name("default")
+            .ok_or_else(|| RunError::InternalError("No Default pool found".into()))?
+            .add_subnet(pool::Netblock {
+                addr: "192.168.0.0".parse().expect("Failed to parse IPv4 Addr"),
+                prefixlen: 24,
+            });
+    }
     let serverids: SharedServerIds = Arc::new(sync::Mutex::new(std::collections::HashSet::new()));
     let listener = UdpSocket::bind("0.0.0.0:1067")
         .await

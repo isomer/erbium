@@ -94,7 +94,7 @@ fn mk_dhcp_request() -> dhcppkt::DHCP {
 #[tokio::test]
 async fn ignore_unused_flag_bits() {
     let pools = std::sync::Arc::new(sync::Mutex::new(
-        pool::Pools::new().expect("Failed to create pool"),
+        pool::Pools::new_in_memory().expect("Failed to create pool"),
     ));
     let p = pools.lock().await;
     let pkt = dhcppkt::DHCP {
@@ -126,7 +126,7 @@ async fn ignore_unused_flag_bits() {
 #[tokio::test]
 async fn confirm_yiaddr_set() {
     let pools = std::sync::Arc::new(sync::Mutex::new(
-        pool::Pools::new().expect("Failed to create pool"),
+        pool::Pools::new_in_memory().expect("Failed to create pool"),
     ));
     let p = pools.lock().await;
     let pkt = mk_dhcp_request();
@@ -204,7 +204,7 @@ fn dhcpinform_dont_check_existing_lease() {
 #[tokio::test]
 async fn server_address_set() {
     let pools = std::sync::Arc::new(sync::Mutex::new(
-        pool::Pools::new().expect("Failed to create pool"),
+        pool::Pools::new_in_memory().expect("Failed to create pool"),
     ));
     let p = pools.lock().await;
     let pkt = mk_dhcp_request();
@@ -229,7 +229,7 @@ async fn server_address_set() {
 #[tokio::test]
 async fn ignore_other_request() {
     let pools = std::sync::Arc::new(sync::Mutex::new(
-        pool::Pools::new().expect("Failed to create pool"),
+        pool::Pools::new_in_memory().expect("Failed to create pool"),
     ));
     let p = pools.lock().await;
     let mut pkt = mk_dhcp_request();
