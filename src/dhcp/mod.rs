@@ -258,9 +258,11 @@ async fn run_internal() -> Result<(), RunError> {
         pool::Pools::new().map_err(RunError::PoolError)?,
     ));
     {
-        pools
-            .lock()
-            .await
+        let mut lockedpools = pools.lock().await;
+        lockedpools
+            .add_pool("default")
+            .map_err(RunError::PoolError)?;
+        lockedpools
             .add_subnet(
                 "default",
                 pool::Netblock {

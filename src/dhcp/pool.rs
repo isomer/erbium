@@ -36,6 +36,7 @@ pub struct Pools {
 pub enum Error {
     DbError(String, rusqlite::Error),
     NoSuchPool(String),
+    DuplicatePool(String),
 }
 
 impl ToString for Error {
@@ -43,6 +44,7 @@ impl ToString for Error {
         match self {
             Error::DbError(reason, e) => format!("{}: {}", reason, e.to_string()),
             Error::NoSuchPool(s) => format!("No Such Pool: {}", s),
+            Error::DuplicatePool(s) => format!("Duplicate Pool: {}", s),
         }
     }
 }
@@ -113,6 +115,16 @@ impl Pools {
             self.add_addr(name, (base + i).into())?;
         }
         Ok(())
+    }
+
+    pub fn add_pool(&mut self, name: &str) -> Result<(), Error> {
+        if self.poolinfo.contains_key(name) {
+            Err(Error::DuplicatePool(name.into()))
+        } else {
+            self.poolinfo
+                .insert(name.into(), PoolInfo { addresses: vec![] });
+            Ok(())
+        }
     }
 
     fn select_address(
