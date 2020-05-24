@@ -105,6 +105,7 @@ impl RawSocket {
         })
     }
 
+    #[allow(dead_code)]
     pub fn send(&self, buf: &[u8], flags: MsgFlags) -> Result<usize> {
         socket::send(self.as_raw_fd(), buf, flags).map_err(udp::nix_to_io_error)
     }
