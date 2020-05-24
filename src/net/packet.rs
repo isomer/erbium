@@ -47,6 +47,7 @@ fn finish_netsum(sum: u32) -> u16 {
 pub enum Tail<'a> {
     Payload(&'a [u8]),
     Fragment(Box<Fragment<'a>>),
+    #[allow(dead_code)]
     None,
 }
 
