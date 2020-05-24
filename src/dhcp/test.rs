@@ -50,7 +50,7 @@ fn mk_dhcp_request() -> dhcppkt::DHCP {
         giaddr: net::Ipv4Addr::UNSPECIFIED,
         chaddr: vec![
             0x00, 0x00, 0x5E, 0x00, 0x53, 0x00, /* Reserved for documentation, per RFC7042 */
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ],
         sname: vec![],
         file: vec![],
@@ -64,6 +64,33 @@ fn mk_dhcp_request() -> dhcppkt::DHCP {
             other: collections::HashMap::new(),
         },
     }
+}
+
+fn mk_default_pools() -> pool::Pools {
+    let mut pool = pool::Pools::new_in_memory().expect("Failed to create pool");
+    pool.add_pool("default")
+        .expect("Failed to create default pool");
+    pool
+}
+
+#[test]
+fn test_parsing_inverse_serialising() {
+    let mut orig_pkt = mk_dhcp_request();
+    let bytes = orig_pkt.serialise();
+    let new_pkt = dhcppkt::parse(bytes.as_slice()).expect("Failed to parse DHCP packet");
+    assert!(
+        orig_pkt.sname.len() <= 64,
+        "sname={:?} ({} <= 64 is false",
+        orig_pkt.sname,
+        orig_pkt.sname.len()
+    );
+    assert!(
+        orig_pkt.chaddr.len() <= 16,
+        "chaddr={:?} ({} <= 16 is false",
+        orig_pkt.chaddr,
+        orig_pkt.chaddr.len()
+    );
+    assert_eq!(orig_pkt, new_pkt);
 }
 
 /* rfc2131 Section 2: The 'client identifier' chosen by a DHCP client MUST be unique to that client
@@ -93,17 +120,14 @@ fn mk_dhcp_request() -> dhcppkt::DHCP {
  */
 #[tokio::test]
 async fn ignore_unused_flag_bits() {
-    let pools = std::sync::Arc::new(sync::Mutex::new(
-        pool::Pools::new_in_memory().expect("Failed to create pool"),
-    ));
-    let p = pools.lock().await;
+    let mut p = mk_default_pools();
     let pkt = dhcppkt::DHCP {
         flags: 0x7FFF,
         ..mk_dhcp_request()
     };
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     dhcp::handle_discover(
-        p,
+        &mut p,
         &pkt,
         net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
         serverids,
@@ -125,14 +149,11 @@ async fn ignore_unused_flag_bits() {
  */
 #[tokio::test]
 async fn confirm_yiaddr_set() {
-    let pools = std::sync::Arc::new(sync::Mutex::new(
-        pool::Pools::new_in_memory().expect("Failed to create pool"),
-    ));
-    let p = pools.lock().await;
+    let mut p = mk_default_pools();
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let reply = dhcp::handle_discover(
-        p,
+        &mut p,
         &pkt,
         net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
         serverids,
@@ -203,14 +224,11 @@ fn dhcpinform_dont_check_existing_lease() {
  */
 #[tokio::test]
 async fn server_address_set() {
-    let pools = std::sync::Arc::new(sync::Mutex::new(
-        pool::Pools::new_in_memory().expect("Failed to create pool"),
-    ));
-    let p = pools.lock().await;
+    let mut p = mk_default_pools();
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let reply = dhcp::handle_discover(
-        p,
+        &mut p,
         &pkt,
         net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
         serverids,
@@ -231,14 +249,14 @@ async fn ignore_other_request() {
     let pools = std::sync::Arc::new(sync::Mutex::new(
         pool::Pools::new_in_memory().expect("Failed to create pool"),
     ));
-    let p = pools.lock().await;
+    let mut p = pools.lock().await;
     let mut pkt = mk_dhcp_request();
     pkt.options.serveridentifier = Some(NOT_SERVER_IP);
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     serverids.insert(SERVER_IP2);
     let reply = dhcp::handle_request(
-        p,
+        &mut p,
         &pkt,
         net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
         serverids,
@@ -333,7 +351,7 @@ fn client_identifier_or_chaddr() {
         ch.get_client_id(),
         vec![
             0x00, 0x00, 0x5E, 0x00, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00
+            0x00, 0x00,
         ],
         "Did not use chaddr"
     );

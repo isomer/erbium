@@ -68,7 +68,7 @@ impl std::fmt::Display for DhcpError {
 }
 
 fn handle_discover(
-    pools: &mut LockedPools,
+    pools: &mut pool::Pools,
     req: &dhcppkt::DHCP,
     from: net::SocketAddr,
     _serverids: ServerIds,
@@ -110,7 +110,7 @@ fn handle_discover(
 }
 
 fn handle_request(
-    pools: &mut LockedPools,
+    pools: &mut pool::Pools,
     req: &dhcppkt::DHCP,
     _from: net::SocketAddr,
     serverids: ServerIds,
@@ -151,7 +151,7 @@ fn handle_request(
 }
 
 fn handle_pkt(
-    mut pools: &mut LockedPools,
+    mut pools: &mut pool::Pools,
     buf: &[u8],
     from: net::SocketAddr,
     serverids: ServerIds,
@@ -212,7 +212,7 @@ async fn recvdhcp(
         unimplemented!()
     };
     match handle_pkt(&mut pool, pkt, from, get_serverids(&serverids).await) {
-        Ok(mut r) => {
+        Ok(r) => {
             if let Some(si) = r.options.serveridentifier {
                 serverids.lock().await.insert(si);
             }

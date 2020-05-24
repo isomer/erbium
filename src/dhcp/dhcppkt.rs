@@ -211,7 +211,7 @@ impl fmt::Debug for DhcpOption {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DhcpOptions {
     pub messagetype: MessageType,
     pub hostname: Option<String>,
@@ -222,6 +222,7 @@ pub struct DhcpOptions {
     pub other: collections::HashMap<DhcpOption, Vec<u8>>,
 }
 
+#[derive(PartialEq)]
 pub struct DHCP {
     pub op: DhcpOp,
     pub htype: HwType,
@@ -410,61 +411,48 @@ impl Serialise for DhcpOption {
     }
 }
 
+fn serialise_bytes<T>(option: DhcpOption, bytes: &[T], v: &mut Vec<u8>)
+where
+    T: Serialise,
+{
+    option.serialise(v);
+    (bytes.len() as u8).serialise(v);
+    for i in bytes.iter() {
+        i.serialise(v);
+    }
+}
+
 impl Serialise for DhcpOptions {
     fn serialise(&self, v: &mut Vec<u8>) {
         /* Serialise DHCP Message Type */
-        OPTION_MSGTYPE.serialise(v);
-        (1 as u8).serialise(v);
-        self.messagetype.0.serialise(v);
+        serialise_bytes(OPTION_MSGTYPE, &[self.messagetype.0], v);
 
         if let Some(h) = &self.hostname {
-            OPTION_HOSTNAME.serialise(v);
-            (h.len() as u8).serialise(v);
-            for c in h.as_bytes() {
-                c.serialise(v);
-            }
+            serialise_bytes(OPTION_HOSTNAME, h.as_bytes(), v);
         }
 
         if let Some(l) = &self.leasetime {
-            OPTION_ADDRESSLEASETIME.serialise(v);
-            let lt = (l.as_secs() as u32).to_be_bytes();
-            (lt.len() as u8).serialise(v);
-            for c in lt.iter() {
-                c.serialise(v);
-            }
+            serialise_bytes(
+                OPTION_ADDRESSLEASETIME,
+                &(l.as_secs() as u32).to_be_bytes(),
+                v,
+            );
         }
 
         if let Some(si) = &self.serveridentifier {
-            OPTION_SERVERID.serialise(v);
-            let id = si.octets();
-            (id.len() as u8).serialise(v);
-            for c in id.iter() {
-                c.serialise(v);
-            }
+            serialise_bytes(OPTION_SERVERID, &si.octets(), v);
         }
 
         if let Some(ci) = &self.clientidentifier {
-            OPTION_CLIENTID.serialise(v);
-            (ci.len() as u8).serialise(v);
-            for c in ci.iter() {
-                c.serialise(v);
-            }
+            serialise_bytes(OPTION_CLIENTID, &ci, v);
         }
 
         if let Some(p) = &self.parameterlist {
-            OPTION_PARAMLIST.serialise(v);
-            (p.len() as u8).serialise(v);
-            for b in p {
-                b.serialise(v);
-            }
+            serialise_bytes(OPTION_PARAMLIST, p.as_slice(), v);
         }
 
         for (o, p) in self.other.iter() {
-            o.serialise(v);
-            (p.len() as u8).serialise(v);
-            for b in p {
-                b.serialise(v);
-            }
+            serialise_bytes(*o, p, v);
         }
 
         /* Add end of options marker */
@@ -472,8 +460,17 @@ impl Serialise for DhcpOptions {
     }
 }
 
+fn serialise_fixed(out: &[u8], l: usize, v: &mut Vec<u8>) {
+    let mut bytes = Vec::with_capacity(l);
+    bytes.extend_from_slice(out);
+    bytes.resize_with(l, Default::default);
+    for b in &bytes {
+        b.serialise(v);
+    }
+}
+
 impl DHCP {
-    pub fn serialise(&mut self) -> Vec<u8> {
+    pub fn serialise(&self) -> Vec<u8> {
         let mut v: Vec<u8> = Vec::new();
         self.op.0.serialise(&mut v);
         self.htype.0.serialise(&mut v);
@@ -487,20 +484,9 @@ impl DHCP {
         self.siaddr.serialise(&mut v);
         self.giaddr.serialise(&mut v);
 
-        self.chaddr.resize_with(16, Default::default);
-        for b in &self.chaddr {
-            b.serialise(&mut v);
-        }
-
-        self.sname.resize_with(64, Default::default);
-        for b in &self.sname {
-            b.serialise(&mut v);
-        }
-
-        self.file.resize_with(128, Default::default);
-        for b in &self.file {
-            b.serialise(&mut v);
-        }
+        serialise_fixed(&self.chaddr, 16, &mut v);
+        serialise_fixed(&self.sname, 64, &mut v);
+        serialise_fixed(&self.file, 128, &mut v);
 
         /* DHCP Magic */
         0x6382_5363u32.serialise(&mut v);

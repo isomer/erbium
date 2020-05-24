@@ -84,7 +84,8 @@ impl Pools {
 
     #[cfg(test)]
     pub fn new_in_memory() -> Result<Pools, Error> {
-        let conn = rusqlite::Connection::open_in_memory().map_err(Error::DbError)?;
+        let conn = rusqlite::Connection::open_in_memory()
+            .map_err(|e| Error::emit("Creating database in memory database".into(), e))?;
 
         Self::new_with_conn(conn)
     }
