@@ -76,6 +76,10 @@ fn mk_default_pools() -> pool::Pools {
 #[test]
 fn test_parsing_inverse_serialising() {
     let mut orig_pkt = mk_dhcp_request();
+    orig_pkt.options.hostname = Some("host.example.org".into());
+    orig_pkt.options.leasetime = Some(std::time::Duration::from_secs(321));
+    orig_pkt.options.serveridentifier = Some(SERVER_IP);
+    orig_pkt.options.clientidentifier = Some(String::from("Client Identifier").as_bytes().to_vec());
     let bytes = orig_pkt.serialise();
     let new_pkt = dhcppkt::parse(bytes.as_slice()).expect("Failed to parse DHCP packet");
     assert!(
