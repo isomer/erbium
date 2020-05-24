@@ -31,9 +31,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     services.push(tokio::spawn(dhcp::run()));
     services.push(tokio::spawn(dns::run()));
 
-    while let Some(x) = services.next().await {
-        println!("Service complete: {:?}", x)
-    }
+    let x = services.next().await.unwrap();
+    println!("Service complete: {:?}", x);
 
     Ok(())
 }
