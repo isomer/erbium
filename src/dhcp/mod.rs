@@ -68,17 +68,13 @@ impl std::fmt::Display for DhcpError {
 }
 
 fn handle_discover(
-    pools: LockedPools,
+    pools: &mut LockedPools,
     req: &dhcppkt::DHCP,
     from: net::SocketAddr,
     _serverids: ServerIds,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     if let net::SocketAddr::V4(addr) = from {
-        match pools
-            .get_pool_by_name("default")
-            .unwrap()
-            .allocate_address(&req.get_client_id())
-        {
+        match pools.allocate_address("default", &req.get_client_id()) {
             Some(lease) => Ok(dhcppkt::DHCP {
                 op: dhcppkt::OP_BOOTREPLY,
                 htype: dhcppkt::HWTYPE_ETHERNET,
@@ -114,7 +110,7 @@ fn handle_discover(
 }
 
 fn handle_request(
-    pools: LockedPools,
+    pools: &mut LockedPools,
     req: &dhcppkt::DHCP,
     _from: net::SocketAddr,
     serverids: ServerIds,
@@ -124,11 +120,7 @@ fn handle_request(
             return Err(DhcpError::OtherServer);
         }
     }
-    match pools
-        .get_pool_by_name("default")
-        .unwrap()
-        .allocate_address(&req.get_client_id())
-    {
+    match pools.allocate_address("default", &req.get_client_id()) {
         Some(lease) => Ok(dhcppkt::DHCP {
             op: dhcppkt::OP_BOOTREPLY,
             htype: dhcppkt::HWTYPE_ETHERNET,
@@ -159,7 +151,7 @@ fn handle_request(
 }
 
 fn handle_pkt(
-    pools: LockedPools,
+    mut pools: &mut LockedPools,
     buf: &[u8],
     from: net::SocketAddr,
     serverids: ServerIds,
@@ -169,8 +161,8 @@ fn handle_pkt(
         Ok(req) => {
             println!("Parse: {:?}", req);
             match req.options.messagetype {
-                dhcppkt::DHCPDISCOVER => handle_discover(pools, &req, from, serverids),
-                dhcppkt::DHCPREQUEST => handle_request(pools, &req, from, serverids),
+                dhcppkt::DHCPDISCOVER => handle_discover(&mut pools, &req, from, serverids),
+                dhcppkt::DHCPREQUEST => handle_request(&mut pools, &req, from, serverids),
                 x => Err(DhcpError::UnknownMessageType(x)),
             }
         }
@@ -212,14 +204,14 @@ async fn recvdhcp(
     from: std::net::SocketAddr,
     intf: i32,
 ) {
-    let pool = pools.lock().await;
+    let mut pool = pools.lock().await;
     let ip4 = if let net::SocketAddr::V4(f) = from {
         f
     } else {
         println!("from={:?}", from);
         unimplemented!()
     };
-    match handle_pkt(pool, pkt, from, get_serverids(&serverids).await) {
+    match handle_pkt(&mut pool, pkt, from, get_serverids(&serverids).await) {
         Ok(mut r) => {
             if let Some(si) = r.options.serveridentifier {
                 serverids.lock().await.insert(si);
@@ -269,12 +261,14 @@ async fn run_internal() -> Result<(), RunError> {
         pools
             .lock()
             .await
-            .get_pool_by_name("default")
-            .ok_or_else(|| RunError::InternalError("No Default pool found".into()))?
-            .add_subnet(pool::Netblock {
-                addr: "192.168.0.0".parse().expect("Failed to parse IPv4 Addr"),
-                prefixlen: 24,
-            });
+            .add_subnet(
+                "default",
+                pool::Netblock {
+                    addr: "192.168.0.0".parse().expect("Failed to parse IPv4 Addr"),
+                    prefixlen: 24,
+                },
+            )
+            .map_err(RunError::PoolError)?;
     }
     let serverids: SharedServerIds = Arc::new(sync::Mutex::new(std::collections::HashSet::new()));
     let listener = UdpSocket::bind("0.0.0.0:1067")

@@ -23,25 +23,26 @@ pub struct Lease {
     pub expire: std::time::Duration,
 }
 
-pub struct Pools {
-    conn: rusqlite::Connection,
+pub struct PoolInfo {
+    addresses: Vec<std::net::Ipv4Addr>,
 }
 
-pub struct Pool<'a> {
-    name: String,
-    addresses: Vec<std::net::Ipv4Addr>,
-    pools: &'a Pools,
+pub struct Pools {
+    conn: rusqlite::Connection,
+    poolinfo: std::collections::HashMap<String, PoolInfo>,
 }
 
 #[derive(Debug)]
 pub enum Error {
     DbError(String, rusqlite::Error),
+    NoSuchPool(String),
 }
 
 impl ToString for Error {
     fn to_string(&self) -> String {
         match self {
             Error::DbError(reason, e) => format!("{}: {}", reason, e.to_string()),
+            Error::NoSuchPool(s) => format!("No Such Pool: {}", s),
         }
     }
 }
@@ -71,66 +72,52 @@ impl Pools {
         Ok(self)
     }
 
+    fn new_with_conn(conn: rusqlite::Connection) -> Result<Self, Error> {
+        Pools {
+            conn,
+            poolinfo: std::collections::HashMap::new(),
+        }
+        .setup_db()
+    }
+
     #[cfg(test)]
     pub fn new_in_memory() -> Result<Pools, Error> {
         let conn = rusqlite::Connection::open_in_memory().map_err(Error::DbError)?;
 
-        Pools { conn }.setup_db()
+        Self::new_with_conn(conn)
     }
 
     pub fn new() -> Result<Pools, Error> {
         let conn = rusqlite::Connection::open("erbium-leases.sqlite")
             .map_err(|e| Error::emit("Creating database erbium-leases.sqlite".into(), e))?;
 
-        Pools { conn }.setup_db()
+        Self::new_with_conn(conn)
     }
 
-    pub fn get_pool_by_name(&self, name: &str) -> Option<Pool> {
-        if name == "default" {
-            Some(Pool {
-                name: "default".into(),
-                addresses: vec![],
-                pools: self,
-            })
-        } else {
-            None
-        }
+    pub fn add_addr(&mut self, name: &str, addr: std::net::Ipv4Addr) -> Result<(), Error> {
+        self.poolinfo
+            .get_mut(name)
+            .ok_or_else(|| Error::NoSuchPool(name.into()))?
+            .addresses
+            .push(addr);
+        Ok(())
     }
-}
-
-pub struct Netblock {
-    pub addr: std::net::Ipv4Addr,
-    pub prefixlen: u8,
-}
-
-impl Netblock {
-    fn netmask(&self) -> std::net::Ipv4Addr {
-        (u32::from(self.addr) & ((1 << self.prefixlen) - 1)).into()
-    }
-}
-
-fn map_no_row_to_none<T>(e: rusqlite::Error) -> Result<Option<T>, Error> {
-    if e == rusqlite::Error::QueryReturnedNoRows {
-        Ok(None)
-    } else {
-        Err(Error::emit("Database query Error".into(), e))
-    }
-}
-
-impl<'a> Pool<'a> {
-    pub fn add_addr(&mut self, addr: std::net::Ipv4Addr) {
-        self.addresses.push(addr);
-    }
-    pub fn add_subnet(&mut self, netblock: Netblock) {
+    pub fn add_subnet(&mut self, name: &str, netblock: Netblock) -> Result<(), Error> {
+        self.poolinfo
+            .get_mut(name)
+            .ok_or_else(|| Error::NoSuchPool(name.into()))?
+            .addresses
+            .reserve(1 << (32 - netblock.prefixlen));
         let base: u32 = netblock.netmask().into();
-        self.addresses.reserve(1 << (32 - netblock.prefixlen));
         for i in 0..(1 << (32 - netblock.prefixlen)) {
-            self.add_addr((base + i).into());
+            self.add_addr(name, (base + i).into())?;
         }
+        Ok(())
     }
 
     fn select_address(
-        &self,
+        &mut self,
+        name: &str,
         clientid: &[u8],
         requested: std::net::Ipv4Addr,
     ) -> Result<Lease, Error> {
@@ -144,7 +131,6 @@ impl<'a> Pool<'a> {
          * o The client's current address as recorded in the client's current
          *   binding, ELSE */
         if let Some(lease) = self
-            .pools
             .conn
             .query_row(
                 "SELECT
@@ -155,7 +141,7 @@ impl<'a> Pool<'a> {
              WHERE pool = ?1
              AND clientid = ?2
              AND expiry > ?3",
-                rusqlite::params![self.name, clientid, ts as u32],
+                rusqlite::params![name, clientid, ts as u32],
                 |row| {
                     Ok(Some(Lease {
                         ip: row
@@ -179,7 +165,6 @@ impl<'a> Pool<'a> {
          * pool of available addresses and not already allocated, ELSE */
 
         if let Some(lease) = self
-            .pools
             .conn
             .query_row(
                 "SELECT
@@ -191,7 +176,7 @@ impl<'a> Pool<'a> {
              WHERE pool = ?1
              AND clientid = ?2
              GROUP BY 1",
-                rusqlite::params![self.name, clientid],
+                rusqlite::params![name, clientid],
                 |row| {
                     Ok(Some(Lease {
                         ip: row
@@ -217,9 +202,13 @@ impl<'a> Pool<'a> {
         /* o The address requested in the 'Requested IP Address' option, if that
          * address is valid and not already allocated, ELSE
          */
-        if self.addresses.contains(&requested)
+        if self
+            .poolinfo
+            .get(name)
+            .ok_or_else(|| Error::NoSuchPool(name.into()))?
+            .addresses
+            .contains(&requested)
             && self
-                .pools
                 .conn
                 .query_row(
                     "SELECT
@@ -229,7 +218,7 @@ impl<'a> Pool<'a> {
                      WHERE pool = ?1
                      AND expiry >= ?2
                      AND addr = ?3",
-                    rusqlite::params![self.name, clientid, ts as u32, requested.to_string(),],
+                    rusqlite::params![name, clientid, ts as u32, requested.to_string(),],
                     |_row| Ok(Some(true)),
                 )
                 .or_else(map_no_row_to_none)?
@@ -256,10 +245,10 @@ impl<'a> Pool<'a> {
 
     /* TODO: This function should return a Result, not an Option, to handle error cases better
      */
-    pub fn allocate_address(&self, clientid: &[u8]) -> Option<Lease> {
+    pub fn allocate_address(&mut self, name: &str, clientid: &[u8]) -> Option<Lease> {
         println!("Allocating lease for {:?}", clientid);
         let lease = self
-            .select_address(clientid, "192.168.0.100".parse().unwrap())
+            .select_address(name, clientid, "192.168.0.100".parse().unwrap())
             .unwrap(); /* TODO: Better Err handling */
 
         let min_expire_time = std::time::Duration::from_secs(300);
@@ -278,15 +267,14 @@ impl<'a> Pool<'a> {
             .expect("clock failure")
             .as_secs();
 
-        self.pools
-            .conn
+        self.conn
             .execute(
                 "INSERT INTO leases (pool, address, clientid, start, expiry)
              VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT (pool, address) DO
              UPDATE SET clientid=?3, start=?4, expiry=?5",
                 rusqlite::params![
-                    self.name,
+                    name,
                     lease.ip.to_string(),
                     clientid,
                     ts as u32,
@@ -296,5 +284,24 @@ impl<'a> Pool<'a> {
             .expect("Updating lease database failed"); /* Better error handling */
 
         Some(lease)
+    }
+}
+
+fn map_no_row_to_none<T>(e: rusqlite::Error) -> Result<Option<T>, Error> {
+    if e == rusqlite::Error::QueryReturnedNoRows {
+        Ok(None)
+    } else {
+        Err(Error::emit("Database query Error".into(), e))
+    }
+}
+
+pub struct Netblock {
+    pub addr: std::net::Ipv4Addr,
+    pub prefixlen: u8,
+}
+
+impl Netblock {
+    fn netmask(&self) -> std::net::Ipv4Addr {
+        (u32::from(self.addr) & ((1 << self.prefixlen) - 1)).into()
     }
 }
