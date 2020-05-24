@@ -434,6 +434,23 @@ impl Serialise for DhcpOptions {
             }
         }
 
+        if let Some(si) = &self.serveridentifier {
+            OPTION_SERVERID.serialise(v);
+            let id = si.octets();
+            (id.len() as u8).serialise(v);
+            for c in id.iter() {
+                c.serialise(v);
+            }
+        }
+
+        if let Some(ci) = &self.clientidentifier {
+            OPTION_CLIENTID.serialise(v);
+            (ci.len() as u8).serialise(v);
+            for c in ci.iter() {
+                c.serialise(v);
+            }
+        }
+
         if let Some(p) = &self.parameterlist {
             OPTION_PARAMLIST.serialise(v);
             (p.len() as u8).serialise(v);
