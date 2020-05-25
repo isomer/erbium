@@ -97,6 +97,27 @@ fn test_parsing_inverse_serialising() {
     assert_eq!(orig_pkt, new_pkt);
 }
 
+#[test]
+fn test_handle_pkt() {
+    let mut orig_pkt = mk_dhcp_request();
+    orig_pkt.options.hostname = Some("host.example.org".into());
+    orig_pkt.options.leasetime = Some(std::time::Duration::from_secs(321));
+    orig_pkt.options.serveridentifier = Some(SERVER_IP);
+    orig_pkt.options.clientidentifier = Some(String::from("Client Identifier").as_bytes().to_vec());
+    let bytes = orig_pkt.serialise();
+
+    let mut p = mk_default_pools();
+    let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
+    serverids.insert(SERVER_IP);
+    dhcp::handle_pkt(
+        &mut p,
+        &bytes,
+        net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
+        serverids,
+    )
+    .expect("Failed to handle request");
+}
+
 /* rfc2131 Section 2: The 'client identifier' chosen by a DHCP client MUST be unique to that client
  * within the subnet to which the client is attached.
  *
