@@ -70,6 +70,16 @@ fn mk_default_pools() -> pool::Pools {
     let mut pool = pool::Pools::new_in_memory().expect("Failed to create pool");
     pool.add_pool("default")
         .expect("Failed to create default pool");
+    pool.add_subnet(
+        "default",
+        pool::Netblock {
+            addr: "192.168.0.0".parse().expect("Failed to parse IP"),
+            prefixlen: 24,
+        },
+    )
+    .expect("Failed to add netblock to default pool");
+
+    pool.add_pool("empty").expect("Failed to create empty pool");
     pool
 }
 

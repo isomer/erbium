@@ -75,7 +75,7 @@ fn handle_discover(
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     if let net::SocketAddr::V4(addr) = from {
         match pools.allocate_address("default", &req.get_client_id()) {
-            Some(lease) => Ok(dhcppkt::DHCP {
+            Ok(lease) => Ok(dhcppkt::DHCP {
                 op: dhcppkt::OP_BOOTREPLY,
                 htype: dhcppkt::HWTYPE_ETHERNET,
                 hlen: 6,
@@ -100,7 +100,8 @@ fn handle_discover(
                     other: collections::HashMap::new(),
                 },
             }),
-            _ => Err(DhcpError::NoLeasesAvailable),
+            Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
+            Err(e) => Err(DhcpError::InternalError(e.to_string())),
         }
     } else {
         Err(DhcpError::InternalError(
@@ -121,7 +122,7 @@ fn handle_request(
         }
     }
     match pools.allocate_address("default", &req.get_client_id()) {
-        Some(lease) => Ok(dhcppkt::DHCP {
+        Ok(lease) => Ok(dhcppkt::DHCP {
             op: dhcppkt::OP_BOOTREPLY,
             htype: dhcppkt::HWTYPE_ETHERNET,
             hlen: 6,
@@ -146,7 +147,8 @@ fn handle_request(
                 other: collections::HashMap::new(),
             },
         }),
-        _ => Err(DhcpError::NoLeasesAvailable),
+        Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
+        Err(e) => Err(DhcpError::InternalError(e.to_string())),
     }
 }
 

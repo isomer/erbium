@@ -15,7 +15,7 @@ nix = { version = "0.17", path="/home/perry/build/nix" }
 futures = ""
 mio = { version = "0.6.20" } #, features = ["udp"] }
 #libc = ""
-rusqlite = ""
+rusqlite = { version = "0.23.0" }
 tokio-util = { version="", features= ["codec"] }
 bytes = ""
 futures-core = ""
