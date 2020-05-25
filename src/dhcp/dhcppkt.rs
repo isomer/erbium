@@ -329,7 +329,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
             }
         }
         Ok(_) => return Err(ParseError::WrongMagic),
-        _ => return Err(ParseError::WrongMagic),
+        Err(x) => return Err(x),
     }
 
     let options = DhcpOptions {

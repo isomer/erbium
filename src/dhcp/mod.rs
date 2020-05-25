@@ -35,7 +35,6 @@ mod pool;
 mod test;
 
 type Pools = Arc<sync::Mutex<pool::Pools>>;
-type LockedPools<'a> = sync::MutexGuard<'a, pool::Pools>;
 type UdpSocket = udp::UdpSocket;
 type ServerIds = std::collections::HashSet<net::Ipv4Addr>;
 type SharedServerIds = Arc<sync::Mutex<ServerIds>>;

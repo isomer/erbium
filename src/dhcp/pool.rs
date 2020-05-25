@@ -168,10 +168,10 @@ impl Pools {
             == None
         {
             println!("Using requested {:?}", requested);
-            return Ok(Lease {
+            Ok(Lease {
                 ip: requested,
                 expire: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
-            });
+            })
         } else {
             println!("Requested address is already in use in pool");
             Err(Error::NoAssignableAddress)
@@ -339,7 +339,13 @@ impl Pools {
     }
 
     #[cfg(test)]
-    fn reserve_address(&mut self, pool_name: &str, client_id: &[u8], addr: std::net::Ipv4Addr) {
+    fn reserve_address_internal(
+        &mut self,
+        pool_name: &str,
+        client_id: &[u8],
+        addr: std::net::Ipv4Addr,
+        expired: bool,
+    ) {
         self.conn
             .execute(
                 "INSERT INTO leases (pool, address, clientid, start, expiry)
@@ -348,11 +354,30 @@ impl Pools {
                     pool_name,
                     addr.to_string(),
                     client_id,
-                    0,             /* Reserved from the beginning of time */
-                    0xFFFFFFFFu32  /* Until the end of time */
+                    0, /* Reserved from the beginning of time */
+                    if expired {
+                        0
+                    } else {
+                        0xFFFFFFFFu32 /* Until the end of time */
+                    }
                 ],
             )
             .expect("Failed to add existing lease to pool");
+    }
+
+    #[cfg(test)]
+    fn reserve_address(&mut self, pool_name: &str, client_id: &[u8], addr: std::net::Ipv4Addr) {
+        self.reserve_address_internal(pool_name, client_id, addr, false);
+    }
+
+    #[cfg(test)]
+    fn reserve_expired_address(
+        &mut self,
+        pool_name: &str,
+        client_id: &[u8],
+        addr: std::net::Ipv4Addr,
+    ) {
+        self.reserve_address_internal(pool_name, client_id, addr, true);
     }
 }
 
@@ -411,19 +436,7 @@ fn reacquire_lease() {
     let mut p = Pools::new_in_memory().expect("Failed to create in memory pools");
     p.add_pool("default")
         .expect("Failed to create default pool");
-    p.conn
-        .execute(
-            "INSERT INTO leases (pool, address, clientid, start, expiry)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![
-                "default",
-                "192.168.0.100",
-                b"client" as &[u8],
-                0,
-                0xFFFFFFFFu32
-            ],
-        )
-        .expect("Failed to add existing lease to pool");
+    p.reserve_address("default", b"client", "192.168.0.100".parse().unwrap());
     let lease = p
         .allocate_address("default", b"client")
         .expect("Failed to allocate address");
@@ -443,19 +456,7 @@ fn reacquire_expired_lease() {
     let mut p = Pools::new_in_memory().expect("Failed to create in memory pools");
     p.add_pool("default")
         .expect("Failed to create default pool");
-    p.conn
-        .execute(
-            "INSERT INTO leases (pool, address, clientid, start, expiry)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![
-                "default",
-                "192.168.0.100",
-                b"client" as &[u8],
-                0,
-                0, /* Address has already expired. */
-            ],
-        )
-        .expect("Failed to add existing lease to pool");
+    p.reserve_expired_address("default", b"client", "192.168.0.100".parse().unwrap());
     let lease = p
         .allocate_address("default", b"client")
         .expect("Failed to allocate address");
