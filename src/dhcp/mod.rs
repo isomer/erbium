@@ -197,6 +197,11 @@ async fn get_serverids(s: &SharedServerIds) -> ServerIds {
     s.lock().await.clone()
 }
 
+fn to_array(mac: &[u8]) -> Option<[u8; 6]> {
+    use std::convert::TryInto;
+    mac[0..6].try_into().ok()
+}
+
 async fn recvdhcp(
     raw: Arc<raw::RawSocket>,
     pools: Pools,
@@ -220,10 +225,10 @@ async fn recvdhcp(
             println!("Reply: {:?}", r);
             let buf = r.serialise();
             let etherbuf = packet::Fragment::new_udp(
-                "192.0.2.2:2".parse().unwrap(), /* TODO */
-                &[2, 0, 0, 0, 0, 1],            /* TODO */
+                "192.0.2.2:2".parse().unwrap(), /* TODO: Find src IP */
+                &[2, 0, 0, 0, 0, 1],            /* TODO: Find src MAC */
                 ip4,
-                &[2, 0, 0, 0, 0, 2], /* TODO */
+                &to_array(&r.chaddr).unwrap(), /* TODO: Error handling */
                 packet::Tail::Payload(&buf),
             )
             .flatten();
