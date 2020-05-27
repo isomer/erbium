@@ -57,7 +57,7 @@ fn mk_dhcp_request() -> dhcppkt::DHCP {
         options: dhcppkt::DhcpOptions {
             messagetype: dhcppkt::DHCPREQUEST,
             hostname: Some("example.org".to_string()),
-            parameterlist: None,
+            parameterlist: Some(vec![dhcppkt::OPTION_HOSTNAME]),
             leasetime: None,
             serveridentifier: None,
             clientidentifier: None,
@@ -90,6 +90,10 @@ fn test_parsing_inverse_serialising() {
     orig_pkt.options.leasetime = Some(std::time::Duration::from_secs(321));
     orig_pkt.options.serveridentifier = Some(SERVER_IP);
     orig_pkt.options.clientidentifier = Some(String::from("Client Identifier").as_bytes().to_vec());
+    orig_pkt
+        .options
+        .other
+        .insert(dhcppkt::OPTION_NTPSERVERS, vec![192, 0, 2, 1]);
     let bytes = orig_pkt.serialise();
     let new_pkt = dhcppkt::parse(bytes.as_slice()).expect("Failed to parse DHCP packet");
     assert!(
