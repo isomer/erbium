@@ -69,11 +69,16 @@ impl std::fmt::Display for DhcpError {
 fn handle_discover(
     pools: &mut pool::Pools,
     req: &dhcppkt::DHCP,
-    from: net::SocketAddr,
+    src: net::SocketAddr,
+    dst: net::IpAddr,
     _serverids: ServerIds,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
-    if let net::SocketAddr::V4(addr) = from {
-        match pools.allocate_address("default", &req.get_client_id()) {
+    if let net::IpAddr::V4(addr) = dst {
+        match pools.allocate_address(
+            "default",
+            &req.get_client_id(),
+            req.options.get_address_request(),
+        ) {
             Ok(lease) => Ok(dhcppkt::DHCP {
                 op: dhcppkt::OP_BOOTREPLY,
                 htype: dhcppkt::HWTYPE_ETHERNET,
@@ -94,7 +99,7 @@ fn handle_discover(
                     hostname: req.options.hostname.clone(),
                     parameterlist: None,
                     leasetime: None,
-                    serveridentifier: Some(*addr.ip()),
+                    serveridentifier: Some(addr),
                     clientidentifier: req.options.clientidentifier.clone(),
                     other: collections::HashMap::new(),
                 },
@@ -112,7 +117,8 @@ fn handle_discover(
 fn handle_request(
     pools: &mut pool::Pools,
     req: &dhcppkt::DHCP,
-    _from: net::SocketAddr,
+    _src: net::SocketAddr,
+    _dst: net::IpAddr,
     serverids: ServerIds,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     if let Some(si) = req.options.serveridentifier {
@@ -120,7 +126,11 @@ fn handle_request(
             return Err(DhcpError::OtherServer);
         }
     }
-    match pools.allocate_address("default", &req.get_client_id()) {
+    match pools.allocate_address(
+        "default",
+        &req.get_client_id(),
+        req.options.get_address_request(),
+    ) {
         Ok(lease) => Ok(dhcppkt::DHCP {
             op: dhcppkt::OP_BOOTREPLY,
             htype: dhcppkt::HWTYPE_ETHERNET,
@@ -154,7 +164,8 @@ fn handle_request(
 fn handle_pkt(
     mut pools: &mut pool::Pools,
     buf: &[u8],
-    from: net::SocketAddr,
+    src: net::SocketAddr,
+    dst: net::IpAddr,
     serverids: ServerIds,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     let dhcp = dhcppkt::parse(buf);
@@ -162,8 +173,8 @@ fn handle_pkt(
         Ok(req) => {
             println!("Parse: {:?}", req);
             match req.options.messagetype {
-                dhcppkt::DHCPDISCOVER => handle_discover(&mut pools, &req, from, serverids),
-                dhcppkt::DHCPREQUEST => handle_request(&mut pools, &req, from, serverids),
+                dhcppkt::DHCPDISCOVER => handle_discover(&mut pools, &req, src, dst, serverids),
+                dhcppkt::DHCPREQUEST => handle_request(&mut pools, &req, src, dst, serverids),
                 x => Err(DhcpError::UnknownMessageType(x)),
             }
         }
@@ -207,17 +218,18 @@ async fn recvdhcp(
     pools: Pools,
     serverids: SharedServerIds,
     pkt: &[u8],
-    from: std::net::SocketAddr,
+    src: std::net::SocketAddr,
+    dst: std::net::IpAddr,
     intf: i32,
 ) {
     let mut pool = pools.lock().await;
-    let ip4 = if let net::SocketAddr::V4(f) = from {
+    let ip4 = if let net::SocketAddr::V4(f) = src {
         f
     } else {
-        println!("from={:?}", from);
+        println!("from={:?}", src);
         unimplemented!()
     };
-    match handle_pkt(&mut pool, pkt, from, get_serverids(&serverids).await) {
+    match handle_pkt(&mut pool, pkt, src, dst, get_serverids(&serverids).await) {
         Ok(r) => {
             if let Some(si) = r.options.serveridentifier {
                 serverids.lock().await.insert(si);
@@ -234,10 +246,10 @@ async fn recvdhcp(
             .flatten();
 
             if let Err(e) = send_raw(raw, &etherbuf, intf).await {
-                println!("Failed to send reply to {:?}: {:?}", from, e);
+                println!("Failed to send reply to {:?}: {:?}", src, e);
             }
         }
-        Err(e) => println!("Error processing DHCP Packet from {:?}: {:?}", from, e),
+        Err(e) => println!("Error processing DHCP Packet from {:?}: {:?}", src, e),
     }
 }
 
@@ -305,6 +317,7 @@ async fn run_internal() -> Result<(), RunError> {
                 s,
                 &rm.buffer,
                 rm.address.unwrap(),
+                rm.local_addr().unwrap(),
                 rm.local_intf().unwrap(),
             )
             .await

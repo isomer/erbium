@@ -17,6 +17,10 @@
  *  DHCP Pool Management.
  */
 
+extern crate rand;
+use rand::seq::SliceRandom;
+use std::fmt;
+
 #[derive(Debug)]
 pub struct Lease {
     pub ip: std::net::Ipv4Addr,
@@ -178,11 +182,46 @@ impl Pools {
         }
     }
 
+    fn select_new_address(&mut self, name: &str, ts: u32) -> Result<Lease, Error> {
+        println!("Assigning new lease");
+        let mut addresses = self
+            .poolinfo
+            .get(name)
+            .ok_or_else(|| Error::NoSuchPool(name.into()))?
+            .addresses
+            .clone();
+        addresses.shuffle(&mut rand::thread_rng());
+        for i in addresses {
+            if self
+                .conn
+                .query_row(
+                    "SELECT
+                      true
+                     FROM
+                      leases
+                     WHERE pool = ?1
+                     AND expiry >= ?2
+                     AND address = ?3",
+                    rusqlite::params![name, ts, i.to_string()],
+                    |_row| Ok(Some(())),
+                )
+                .or_else(map_no_row_to_none)?
+                == None
+            {
+                return Ok(Lease {
+                    ip: i,
+                    expire: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
+                });
+            }
+        }
+        Err(Error::NoAssignableAddress)
+    }
+
     fn select_address(
         &mut self,
         name: &str,
         clientid: &[u8],
-        requested: std::net::Ipv4Addr,
+        requested: Option<std::net::Ipv4Addr>,
     ) -> Result<Lease, Error> {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::SystemTime::UNIX_EPOCH)
@@ -274,9 +313,11 @@ impl Pools {
         /* o The address requested in the 'Requested IP Address' option, if that
          * address is valid and not already allocated, ELSE
          */
-        match self.select_requested_address(name, requested, ts as u32) {
-            Err(Error::NoAssignableAddress) => (),
-            x => return x,
+        if let Some(addr) = requested {
+            match self.select_requested_address(name, addr, ts as u32) {
+                Err(Error::NoAssignableAddress) => (),
+                x => return x,
+            }
         }
 
         /* o A new address allocated from the server's pool of available
@@ -284,24 +325,24 @@ impl Pools {
          *   the message was received (if 'giaddr' is 0) or on the address of
          *   the relay agent that forwarded the message ('giaddr' when not 0).
          */
-        println!("Assigning new lease");
-        Ok(Lease {
-            ip: *self
-                .poolinfo
-                .get(name)
-                .ok_or_else(|| Error::NoSuchPool(name.into()))?
-                .addresses
-                .first()
-                .ok_or_else(|| Error::NoAssignableAddress)?,
-            expire: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
-        })
+        self.select_new_address(name, ts as u32)
     }
 
-    /* TODO: This function should return a Result, not an Option, to handle error cases better
-     */
-    pub fn allocate_address(&mut self, name: &str, clientid: &[u8]) -> Result<Lease, Error> {
-        println!("Allocating lease for {:?}", clientid);
-        let lease = self.select_address(name, clientid, "192.168.0.100".parse().unwrap())?;
+    pub fn allocate_address(
+        &mut self,
+        name: &str,
+        clientid: &[u8],
+        requested: Option<std::net::Ipv4Addr>,
+    ) -> Result<Lease, Error> {
+        println!(
+            "Allocating lease for {}",
+            clientid
+                .iter()
+                .map(|b| format!("{:X}", b))
+                .collect::<Vec<String>>()
+                .join(":")
+        );
+        let lease = self.select_address(name, clientid, requested)?;
 
         let min_expire_time = std::time::Duration::from_secs(300);
         let max_expire_time = std::time::Duration::from_secs(86400);
@@ -413,7 +454,7 @@ fn smoke_test() {
         },
     )
     .expect("Failed to add netblock");
-    p.allocate_address("default", b"client")
+    p.allocate_address("default", b"client", None)
         .expect("Didn't get allocated an address?!");
 }
 
@@ -424,7 +465,7 @@ fn empty_pool() {
         .expect("Failed to create default pool");
     /* Deliberately don't add any addresses, so we'll fail when we try and allocate something */
     assert_eq!(
-        p.allocate_address("default", b"client")
+        p.allocate_address("default", b"client", None)
             .expect_err("Got allocated an address from an empty pool!"),
         Error::NoAssignableAddress
     );
@@ -433,18 +474,16 @@ fn empty_pool() {
 #[test]
 fn reacquire_lease() {
     /* o The client's current address as recorded in the client's current binding */
+    let requested = "192.168.0.100".parse().unwrap();
     let mut p = Pools::new_in_memory().expect("Failed to create in memory pools");
     p.add_pool("default")
         .expect("Failed to create default pool");
-    p.reserve_address("default", b"client", "192.168.0.100".parse().unwrap());
+    p.reserve_address("default", b"client", requested);
     let lease = p
-        .allocate_address("default", b"client")
+        .allocate_address("default", b"client", Some(requested))
         .expect("Failed to allocate address");
 
-    assert_eq!(
-        lease.ip,
-        "192.168.0.100".parse::<std::net::Ipv4Addr>().unwrap(),
-    );
+    assert_eq!(lease.ip, requested);
     assert!(lease.expire > std::time::Duration::from_secs(0));
 }
 
@@ -454,17 +493,16 @@ fn reacquire_expired_lease() {
      * binding, if that address is in the server's pool of available addresses and not already
      * allocated */
     let mut p = Pools::new_in_memory().expect("Failed to create in memory pools");
+    let requested = "192.168.0.100".parse().unwrap();
+
     p.add_pool("default")
         .expect("Failed to create default pool");
-    p.reserve_expired_address("default", b"client", "192.168.0.100".parse().unwrap());
+    p.reserve_expired_address("default", b"client", requested);
     let lease = p
-        .allocate_address("default", b"client")
+        .allocate_address("default", b"client", Some(requested))
         .expect("Failed to allocate address");
 
-    assert_eq!(
-        lease.ip,
-        "192.168.0.100".parse::<std::net::Ipv4Addr>().unwrap(),
-    );
+    assert_eq!(lease.ip, requested);
     assert!(lease.expire > std::time::Duration::from_secs(0));
 }
 
@@ -474,6 +512,7 @@ fn acquire_requested_address_success() {
      * not already allocated, ELSE
      */
     let mut p = Pools::new_in_memory().expect("Failed to create in memory pools");
+    let requested = "192.168.0.101".parse().unwrap();
     p.add_pool("default")
         .expect("Failed to create default pool");
     p.add_subnet(
@@ -486,13 +525,10 @@ fn acquire_requested_address_success() {
     .expect("Failed to add subnet to default pool");
 
     let lease = p
-        .select_address("default", b"client", "192.168.0.101".parse().unwrap())
+        .allocate_address("default", b"client", Some(requested))
         .expect("Failed to allocate address");
 
-    assert_eq!(
-        lease.ip,
-        "192.168.0.101".parse::<std::net::Ipv4Addr>().unwrap(),
-    );
+    assert_eq!(lease.ip, requested);
 }
 
 #[test]
@@ -501,6 +537,7 @@ fn acquire_requested_address_in_use() {
      * not already allocated, ELSE
      */
     let mut p = Pools::new_in_memory().expect("Failed to create in memory pools");
+    let requested = "192.168.0.101".parse().unwrap();
     p.add_pool("default")
         .expect("Failed to create default pool");
     p.add_subnet(
@@ -511,17 +548,14 @@ fn acquire_requested_address_in_use() {
         },
     )
     .expect("Failed to add subnet to default pool");
-    p.reserve_address("default", b"other-client", "192.168.0.101".parse().unwrap());
+    p.reserve_address("default", b"other-client", requested);
 
     let lease = p
-        .select_address("default", b"client", "192.168.0.101".parse().unwrap())
+        .allocate_address("default", b"client", Some(requested))
         .expect("Failed to allocate address");
 
     /* Do not assigned the reserved address! */
-    assert_ne!(
-        lease.ip,
-        "192.168.0.101".parse::<std::net::Ipv4Addr>().unwrap(),
-    );
+    assert_ne!(lease.ip, requested);
 }
 
 #[test]
@@ -541,10 +575,11 @@ fn acquire_requested_address_invalid() {
     )
     .expect("Failed to add subnet to default pool");
 
+    let requested = "10.0.0.1".parse().unwrap();
     let lease = p
-        .select_address("default", b"client", "10.0.0.1".parse().unwrap())
+        .select_address("default", b"client", Some(requested))
         .expect("Failed to allocate address");
 
     /* Do not assigned the reserved address! */
-    assert_ne!(lease.ip, "10.0.0.1".parse::<std::net::Ipv4Addr>().unwrap(),);
+    assert_ne!(lease.ip, requested);
 }

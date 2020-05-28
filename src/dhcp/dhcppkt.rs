@@ -222,6 +222,14 @@ pub struct DhcpOptions {
     pub other: collections::HashMap<DhcpOption, Vec<u8>>,
 }
 
+impl DhcpOptions {
+    pub fn get_address_request(&self) -> Option<net::Ipv4Addr> {
+        self.other
+            .get(&OPTION_ADDRESSREQUEST)
+            .map(|addr| net::Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]))
+    }
+}
+
 #[derive(PartialEq)]
 pub struct DHCP {
     pub op: DhcpOp,
