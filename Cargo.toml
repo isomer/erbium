@@ -20,6 +20,8 @@ tokio-util = { version="", features= ["codec"] }
 bytes = ""
 futures-core = ""
 futures-sink = ""
+netlink-packet-route = ""
+netlink-sys = { version="", features=["tokio_socket"] }
 
 [lib]
 name = "erbium"
