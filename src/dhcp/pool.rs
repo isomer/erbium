@@ -19,7 +19,6 @@
 
 extern crate rand;
 use rand::seq::SliceRandom;
-use std::fmt;
 
 #[derive(Debug)]
 pub struct Lease {
