@@ -17,6 +17,7 @@
  *  Main DHCP Code.
  */
 use std::collections;
+use std::convert::TryInto;
 use std::net;
 use std::sync::Arc;
 use tokio::sync;
@@ -69,7 +70,6 @@ impl std::fmt::Display for DhcpError {
 fn handle_discover(
     pools: &mut pool::Pools,
     req: &dhcppkt::DHCP,
-    src: net::SocketAddr,
     dst: net::IpAddr,
     _serverids: ServerIds,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
@@ -117,7 +117,6 @@ fn handle_discover(
 fn handle_request(
     pools: &mut pool::Pools,
     req: &dhcppkt::DHCP,
-    _src: net::SocketAddr,
     _dst: net::IpAddr,
     serverids: ServerIds,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
@@ -164,7 +163,6 @@ fn handle_request(
 fn handle_pkt(
     mut pools: &mut pool::Pools,
     buf: &[u8],
-    src: net::SocketAddr,
     dst: net::IpAddr,
     serverids: ServerIds,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
@@ -173,8 +171,8 @@ fn handle_pkt(
         Ok(req) => {
             println!("Parse: {:?}", req);
             match req.options.messagetype {
-                dhcppkt::DHCPDISCOVER => handle_discover(&mut pools, &req, src, dst, serverids),
-                dhcppkt::DHCPREQUEST => handle_request(&mut pools, &req, src, dst, serverids),
+                dhcppkt::DHCPDISCOVER => handle_discover(&mut pools, &req, dst, serverids),
+                dhcppkt::DHCPREQUEST => handle_request(&mut pools, &req, dst, serverids),
                 x => Err(DhcpError::UnknownMessageType(x)),
             }
         }
@@ -209,7 +207,6 @@ async fn get_serverids(s: &SharedServerIds) -> ServerIds {
 }
 
 fn to_array(mac: &[u8]) -> Option<[u8; 6]> {
-    use std::convert::TryInto;
     mac[0..6].try_into().ok()
 }
 
@@ -219,7 +216,7 @@ async fn recvdhcp(
     serverids: SharedServerIds,
     pkt: &[u8],
     src: std::net::SocketAddr,
-    dst: std::net::IpAddr,
+    netinfo: crate::net::netinfo::SharedNetInfo,
     intf: i32,
 ) {
     let mut pool = pools.lock().await;
@@ -229,24 +226,41 @@ async fn recvdhcp(
         println!("from={:?}", src);
         unimplemented!()
     };
-    match handle_pkt(&mut pool, pkt, src, dst, get_serverids(&serverids).await) {
+    let dst = netinfo
+        .get_ipv4_by_ifidx(intf.try_into().unwrap())
+        .await
+        .unwrap(); /* TODO: Error? */
+    match handle_pkt(
+        &mut pool,
+        pkt,
+        std::net::IpAddr::V4(dst),
+        get_serverids(&serverids).await,
+    ) {
         Ok(r) => {
             if let Some(si) = r.options.serveridentifier {
                 serverids.lock().await.insert(si);
             }
             println!("Reply: {:?}", r);
             let buf = r.serialise();
-            let etherbuf = packet::Fragment::new_udp(
-                "192.0.2.2:2".parse().unwrap(), /* TODO: Find src IP */
-                &[2, 0, 0, 0, 0, 1],            /* TODO: Find src MAC */
-                ip4,
-                &to_array(&r.chaddr).unwrap(), /* TODO: Error handling */
-                packet::Tail::Payload(&buf),
-            )
-            .flatten();
+            let srcip = std::net::SocketAddrV4::new(dst, 67);
+            if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) = netinfo
+                .get_linkaddr_by_ifidx(intf.try_into().unwrap())
+                .await
+            {
+                let etherbuf = packet::Fragment::new_udp(
+                    srcip,
+                    &srcll,
+                    ip4,
+                    &to_array(&r.chaddr).unwrap(), /* TODO: Error handling */
+                    packet::Tail::Payload(&buf),
+                )
+                .flatten();
 
-            if let Err(e) = send_raw(raw, &etherbuf, intf).await {
-                println!("Failed to send reply to {:?}: {:?}", src, e);
+                if let Err(e) = send_raw(raw, &etherbuf, intf).await {
+                    println!("Failed to send reply to {:?}: {:?}", src, e);
+                }
+            } else {
+                println!("Not a usable LinkLayer?!");
             }
         }
         Err(e) => println!("Error processing DHCP Packet from {:?}: {:?}", src, e),
@@ -256,7 +270,6 @@ async fn recvdhcp(
 enum RunError {
     Io(std::io::Error),
     PoolError(pool::Error),
-    InternalError(String),
 }
 
 impl ToString for RunError {
@@ -264,14 +277,13 @@ impl ToString for RunError {
         match self {
             RunError::Io(e) => e.to_string(),
             RunError::PoolError(e) => e.to_string(),
-            RunError::InternalError(e) => e.to_string(),
         }
     }
 }
 
-async fn run_internal() -> Result<(), RunError> {
+async fn run_internal(netinfo: crate::net::netinfo::SharedNetInfo) -> Result<(), RunError> {
     println!("Starting DHCP service");
-    let raw = Arc::new(raw::RawSocket::new().map_err(RunError::Io)?);
+    let rawsock = Arc::new(raw::RawSocket::new().map_err(RunError::Io)?);
     let pools = Arc::new(sync::Mutex::new(
         pool::Pools::new().map_err(RunError::PoolError)?,
     ));
@@ -308,16 +320,17 @@ async fn run_internal() -> Result<(), RunError> {
             .await
             .map_err(RunError::Io)?;
         let p = pools.clone();
-        let r = raw.clone();
+        let rs = rawsock.clone();
         let s = serverids.clone();
+        let ni = netinfo.clone();
         tokio::spawn(async move {
             recvdhcp(
-                r,
+                rs,
                 p,
                 s,
                 &rm.buffer,
                 rm.address.unwrap(),
-                rm.local_addr().unwrap(),
+                ni,
                 rm.local_intf().unwrap(),
             )
             .await
@@ -325,8 +338,8 @@ async fn run_internal() -> Result<(), RunError> {
     }
 }
 
-pub async fn run() -> Result<(), String> {
-    match run_internal().await {
+pub async fn run(netinfo: crate::net::netinfo::SharedNetInfo) -> Result<(), String> {
+    match run_internal(netinfo).await {
         Ok(_) => Ok(()),
         Err(e) => Err(e.to_string()),
     }

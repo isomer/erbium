@@ -26,9 +26,10 @@ mod net;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let netinfo = net::netinfo::SharedNetInfo::new().await;
     let mut services = futures::stream::FuturesUnordered::new();
 
-    services.push(tokio::spawn(dhcp::run()));
+    services.push(tokio::spawn(dhcp::run(netinfo)));
     services.push(tokio::spawn(dns::run()));
 
     let x = services.next().await.unwrap();

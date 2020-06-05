@@ -123,13 +123,8 @@ fn test_handle_pkt() {
     let mut p = mk_default_pools();
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
-    dhcp::handle_pkt(
-        &mut p,
-        &bytes,
-        net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
-        serverids,
-    )
-    .expect("Failed to handle request");
+    dhcp::handle_pkt(&mut p, &bytes, net::IpAddr::V4(SERVER_IP), serverids)
+        .expect("Failed to handle request");
 }
 
 #[test]
@@ -182,13 +177,8 @@ async fn ignore_unused_flag_bits() {
         ..mk_dhcp_request()
     };
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
-    dhcp::handle_discover(
-        &mut p,
-        &pkt,
-        net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
-        serverids,
-    )
-    .expect("Failed to handle request");
+    dhcp::handle_discover(&mut p, &pkt, net::IpAddr::V4(SERVER_IP), serverids)
+        .expect("Failed to handle request");
 }
 
 /* rfc2131 Section 3.1 Step 3: The client broadcasts a DHCPREQUEST message that MUST include the
@@ -208,13 +198,8 @@ async fn confirm_yiaddr_set() {
     let mut p = mk_default_pools();
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
-    let reply = dhcp::handle_discover(
-        &mut p,
-        &pkt,
-        net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
-        serverids,
-    )
-    .expect("Failed to handle request");
+    let reply = dhcp::handle_discover(&mut p, &pkt, net::IpAddr::V4(SERVER_IP), serverids)
+        .expect("Failed to handle request");
     assert_ne!(
         reply.yiaddr,
         net::Ipv4Addr::UNSPECIFIED,
@@ -283,13 +268,8 @@ async fn server_address_set() {
     let mut p = mk_default_pools();
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
-    let reply = dhcp::handle_discover(
-        &mut p,
-        &pkt,
-        net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
-        serverids,
-    )
-    .expect("Failed to handle request");
+    let reply = dhcp::handle_discover(&mut p, &pkt, net::IpAddr::V4(SERVER_IP), serverids)
+        .expect("Failed to handle request");
     assert_ne!(
         reply
             .options
@@ -311,13 +291,8 @@ async fn ignore_other_request() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     serverids.insert(SERVER_IP2);
-    let reply = dhcp::handle_request(
-        &mut p,
-        &pkt,
-        net::SocketAddr::new(net::IpAddr::V4(SERVER_IP), 68),
-        serverids,
-    )
-    .expect_err("Handled request not to me");
+    let reply = dhcp::handle_request(&mut p, &pkt, net::IpAddr::V4(SERVER_IP), serverids)
+        .expect_err("Handled request not to me");
     assert_eq!(
         reply,
         dhcp::DhcpError::OtherServer,

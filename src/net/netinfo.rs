@@ -8,7 +8,7 @@ use netlink_packet_route::{
 use netlink_sys::constants::*;
 use netlink_sys::{Protocol, Socket, SocketAddr};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LinkLayer {
     Ethernet([u8; 6]),
     None,
@@ -62,17 +62,14 @@ impl SharedNetInfo {
     fn parse_addr(&self, addr: AddressMessage) -> (std::net::IpAddr, u8) {
         use netlink_packet_route::address::nlas::Nla::*;
         let mut ifaddr = None;
-        //let mut iflocal = None;
         let iffamily = addr.header.family;
         let ifprefixlen = addr.header.prefix_len;
         for i in addr.nlas {
-            match i {
-                Address(a) => ifaddr = Some(convert_address(&a, iffamily.into())),
-                //Local(a) => iflocal = Some(convert_address(&a, iffamily.into())),
-                _ => (),
+            if let Address(a) = i {
+                ifaddr = Some(convert_address(&a, iffamily.into()));
             }
         }
-        return (ifaddr.unwrap(), ifprefixlen);
+        (ifaddr.unwrap(), ifprefixlen)
     }
     async fn process_newaddr(&self, addr: AddressMessage) {
         let ifindex = addr.header.index;
@@ -111,7 +108,7 @@ impl SharedNetInfo {
         for i in &link.nlas {
             match i {
                 IfName(name) => ifname = Some(name.clone()),
-                Mtu(mtu) => ifmtu = Some(mtu.clone()),
+                Mtu(mtu) => ifmtu = Some(*mtu),
                 Address(addr) => ifaddr = Some(addr.clone()),
                 Broadcast(addr) => ifbrd = Some(addr.clone()),
                 _ => (),
@@ -228,7 +225,9 @@ impl SharedNetInfo {
                             self.send_addrdump(&mut socket, &mut seq).await;
                             sent_addrdump = true;
                         } else {
-                            chan.try_send(());
+                            // Try and inform anyone listening that we have completed.
+                            // But if it fails, don't worry, we'll send another one soonish.
+                            let _ = chan.try_send(());
                         }
                     }
                     e => println!("Unknown: {:?}", e),
@@ -244,7 +243,7 @@ impl SharedNetInfo {
     }
 
     pub async fn new() -> Self {
-        let (mut s, mut c) = tokio::sync::mpsc::channel::<()>(1);
+        let (s, mut c) = tokio::sync::mpsc::channel::<()>(1);
         let shared = SharedNetInfo(std::sync::Arc::new(
             tokio::sync::RwLock::new(NetInfo::new()),
         ));
@@ -254,6 +253,7 @@ impl SharedNetInfo {
         shared
     }
 
+    #[allow(dead_code)]
     pub async fn get_interfaces(&self) -> Vec<String> {
         self.0
             .read()
@@ -262,5 +262,36 @@ impl SharedNetInfo {
             .values()
             .map(|x| x.name.clone())
             .collect()
+    }
+
+    pub async fn get_linkaddr_by_ifidx(&self, ifidx: u32) -> Option<LinkLayer> {
+        self.0
+            .read()
+            .await
+            .intf
+            .get(&ifidx)
+            .map(|x| x.lladdr.clone())
+    }
+
+    pub async fn get_ipv4_by_ifidx(&self, ifidx: u32) -> Option<std::net::Ipv4Addr> {
+        self.0
+            .read()
+            .await
+            .intf
+            .get(&ifidx)
+            .map(|x| {
+                x.addresses
+                    .iter()
+                    .filter_map(|(prefix, _prefixlen)| {
+                        if let std::net::IpAddr::V4(addr) = prefix {
+                            Some(addr)
+                        } else {
+                            None
+                        }
+                    })
+                    .cloned()
+                    .next()
+            })
+            .flatten()
     }
 }
