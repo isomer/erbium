@@ -41,7 +41,6 @@ pub enum Error {
     NoSuchPool(String),
     DuplicatePool(String),
     CorruptDatabase(String),
-    InternalError(String),
     NoAssignableAddress,
 }
 
@@ -52,7 +51,6 @@ impl ToString for Error {
             Error::NoSuchPool(s) => format!("No Such Pool: {}", s),
             Error::DuplicatePool(s) => format!("Duplicate Pool: {}", s),
             Error::CorruptDatabase(s) => format!("Corrupt Database: {}", s),
-            Error::InternalError(s) => format!("Internal Error: {}", s),
             Error::NoAssignableAddress => "No Assignable Address".into(),
         }
     }
