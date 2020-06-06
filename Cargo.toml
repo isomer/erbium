@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2018"
 default-run = "erbium"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Network services for small/home networks"
+license = "Apache-2.0"
 
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
@@ -13,8 +13,7 @@ async-std = { version = "", features = ["unstable"] }
 rand = ""
 nix = { version = "0.17", path="/home/perry/build/nix" }
 futures = ""
-mio = { version = "0.6.20" } #, features = ["udp"] }
-#libc = ""
+mio = { version = "0.6.20" }
 rusqlite = { version = "0.23.0" }
 tokio-util = { version="", features= ["codec"] }
 bytes = ""
