@@ -1,3 +1,21 @@
+/*   Copyright 2020 Perry Lorier
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ *  SPDX-License-Identifier: Apache-2.0
+ *
+ *  Erbium Configuration parsing.
+ */
 use std::os::unix::fs::PermissionsExt;
 use tokio::io::AsyncReadExt;
 use yaml_rust::yaml::YamlLoader;
@@ -95,7 +113,7 @@ dhcp:
         apply-subnet: 192.168.0.0/24
 
         Policies:
-           - { match-hostname: myhost, apply-address: [192.168.0.1] }
+           - { match-hostname: myhost, apply-address: 192.168.0.1 }
 
 
       - match-interface: dmz
@@ -108,7 +126,7 @@ dhcp:
 
             # From the reserved pool, assign a static address.
             Policies:
-              - { match-hardware-address: 00:01:02:03:04:05, apply-address: [192.168.0.2] }
+              - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
 
           # Reserve space for VPN endpoints
           - match-user-class: VPN
