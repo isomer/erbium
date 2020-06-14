@@ -62,16 +62,12 @@ fn hexstring(s: &[u8]) -> Result<Vec<u8>, HexError> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct PoolConfig {
-    pub name: String,
-    pub netblock: Vec<super::pool::Netblock>,
-    pub ipaddr: Vec<std::net::Ipv4Addr>,
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct Policy {
     pub match_interface: Option<String>,
+    pub match_hostname: Option<String>,
+    pub match_vendorstr: Option<String>,
+    pub match_userstr: Option<String>,
     pub match_clientid: Option<String>,
     pub match_chaddr: Option<Vec<u8>>,
     pub match_subnet: Option<crate::net::Ipv4Subnet>,
@@ -120,16 +116,13 @@ impl Config {
                     ip.as_str()
                         .ok_or_else(|| {
                             Error::InvalidConfig(format!(
-                                "dns-server is not a string, got '{:?}'",
+                                "iplist member is not a string, got '{:?}'",
                                 ip
                             ))
                         })?
                         .parse()
                         .map_err(|err| {
-                            Error::InvalidConfig(format!(
-                                "dns-server contains an invalid IP: {:?}",
-                                err
-                            ))
+                            Error::InvalidConfig(format!("iplist contains an invalid IP: {:?}", ip))
                         })?,
                 )
             }
@@ -162,7 +155,7 @@ impl Config {
                     .parse()
                     .map_err(|x| Error::InvalidConfig(format!("{}", x)))?,
             )
-            .map_err(|_| Error::InvalidConfig("Prefix length too short".into()))?)
+            .map_err(|_| Error::InvalidConfig(format!("Prefix length too short {:?}", sections)))?)
         }
     }
 
@@ -177,13 +170,37 @@ impl Config {
                                 .map_err(|x| x.annotate("Failed to parse match-interface"))?,
                         );
                     }
+                    Some("match-hostname") => {
+                        policy.match_hostname = Some(
+                            Config::parse_string(v)
+                                .map_err(|x| x.annotate("Failed to parse match-hostname"))?,
+                        );
+                    }
+                    Some("match-vendor-class") => {
+                        policy.match_vendorstr = Some(
+                            Config::parse_string(v)
+                                .map_err(|x| x.annotate("Failed to parse match-vendor-class"))?,
+                        );
+                    }
+                    Some("match-user-class") => {
+                        policy.match_userstr = Some(
+                            Config::parse_string(v)
+                                .map_err(|x| x.annotate("Failed to parse match-user-class"))?,
+                        );
+                    }
+                    Some("match-client-class") => {
+                        policy.match_vendorstr = Some(
+                            Config::parse_string(v)
+                                .map_err(|x| x.annotate("Failed to parse match-client-class"))?,
+                        );
+                    }
                     Some("match-clientid") => {
                         policy.match_clientid = Some(
                             Config::parse_string(v)
                                 .map_err(|x| x.annotate("Failed to parse clientid"))?,
                         );
                     }
-                    Some("match-chaddr") => {
+                    Some("match-hardware-address") => {
                         policy.match_chaddr = Some(
                             Config::parse_mac(v)
                                 .map_err(|x| x.annotate("Failed to parse hardware-address"))?,
@@ -195,17 +212,75 @@ impl Config {
                                 .map_err(|x| x.annotate("Failed to parse subnet"))?,
                         );
                     }
-                    Some("apply-dnsserver") => {
+                    Some("apply-dns-server") => {
                         policy.apply_dnsserver = Some(
                             Config::parse_iplist(v)
-                                .map_err(|x| x.annotate("Failed to parse dnsserver"))?,
+                                .map_err(|x| x.annotate("Failed to parse apply-dns-server"))?,
                         );
                     }
                     Some("apply-address") => {
                         policy.apply_address = Some(
                             Config::parse_iplist(v)
-                                .map_err(|x| x.annotate("Failed to parse address"))?,
+                                .map_err(|x| x.annotate("Failed to parse apply-address"))?,
                         );
+                    }
+                    Some("apply-subnet") => {
+                        let subnet = Config::parse_subnet(v)
+                            .map_err(|x| x.annotate("Failed to parse apply-subnet"))?;
+                        let base: u32 = subnet.network().into();
+                        let addresses = policy.apply_address.get_or_insert_with(|| Vec::new());
+                        for i in 1..((1 << (32 - subnet.prefixlen)) - 1) {
+                            addresses.push((base + i).into())
+                        }
+                    }
+                    Some("apply-range") => {
+                        if let Some(range) = v.as_hash() {
+                            let mut start: Option<std::net::Ipv4Addr> = None;
+                            let mut end: Option<std::net::Ipv4Addr> = None;
+                            for (rangek, rangev) in range {
+                                match rangek.as_str() {
+                                    Some("start") => {
+                                        start = Some(Config::parse_ip(rangev).map_err(|x| {
+                                            x.annotate("Failed to parse range start")
+                                        })?)
+                                    }
+                                    Some("end") => {
+                                        end =
+                                            Some(Config::parse_ip(rangev).map_err(|x| {
+                                                x.annotate("Failed to parse range end")
+                                            })?)
+                                    }
+                                    Some(e) => {
+                                        return Err(Error::InvalidConfig(format!(
+                                            "Unexpected key in range: {}",
+                                            e
+                                        )))
+                                    }
+                                    None => {
+                                        return Err(Error::InvalidConfig(format!(
+                                            "range key is not a string, instead: '{:?}'",
+                                            rangek
+                                        )))
+                                    }
+                                }
+                            }
+                            let start = start
+                                .ok_or(Error::InvalidConfig("Missing start in range".into()))?;
+                            let end =
+                                end.ok_or(Error::InvalidConfig("Missing end in range".into()))?;
+                            let addresses = policy.apply_address.get_or_insert_with(|| Vec::new());
+                            for i in u32::from(start)..=u32::from(end) {
+                                addresses.push(i.into());
+                            }
+                        } else {
+                            return Err(Error::InvalidConfig(format!(
+                                "Range should be a hash, not '{:?}'",
+                                v
+                            )));
+                        }
+                    }
+                    Some("Policies") => {
+                        policy.policies = Config::parse_policies(v)?;
                     }
                     Some(x) => {
                         return Err(Error::InvalidConfig(format!(
@@ -242,8 +317,18 @@ impl Config {
             for (k, v) in h {
                 match k.as_str() {
                     Some("Policies") => policies = Config::parse_policies(v)?,
-                    Some(x) => return Err(Error::InvalidConfig(format!("Unexpected item {}", x))),
-                    None => return Err(Error::InvalidConfig(format!("Unexpected key {:?}", k))),
+                    Some(x) => {
+                        return Err(Error::InvalidConfig(format!(
+                            "Unexpected item {} in dhcp fragment",
+                            x
+                        )))
+                    }
+                    None => {
+                        return Err(Error::InvalidConfig(format!(
+                            "Unexpected key {:?} in dhcp fragment",
+                            k
+                        )))
+                    }
                 }
             }
             Ok(policies)

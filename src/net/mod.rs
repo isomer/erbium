@@ -35,16 +35,74 @@ impl Ipv4Subnet {
     pub fn new(addr: std::net::Ipv4Addr, prefixlen: u8) -> Result<Self, Error> {
         let ret = Self { addr, prefixlen };
         /* If the prefix is too short, then return an error */
+        println!(
+            "{:?} ({:x})  {}/{} ({:x}) = {:?} ({:?})",
+            ret.addr,
+            u32::from(ret.addr),
+            ret.netmask(),
+            ret.prefixlen,
+            u32::from(ret.netmask()),
+            std::net::Ipv4Addr::from(u32::from(ret.addr) & !u32::from(ret.netmask())),
+            u32::from(ret.addr) & !u32::from(ret.netmask())
+        );
         if u32::from(ret.addr) & !u32::from(ret.netmask()) != 0 {
             Err(Error::InvalidSubnet)
         } else {
             Ok(ret)
         }
     }
+    pub fn network(&self) -> std::net::Ipv4Addr {
+        (u32::from(self.addr) & u32::from(self.netmask())).into()
+    }
     pub fn netmask(&self) -> std::net::Ipv4Addr {
-        (u32::from(self.addr) & (((1 << self.prefixlen) - 1) as u32).to_be()).into()
+        (!(0xffff_ffff as u64 >> self.prefixlen) as u32).into()
     }
     pub fn contains(&self, ip: std::net::Ipv4Addr) -> bool {
         u32::from(ip) & u32::from(self.netmask()) == u32::from(self.addr)
     }
+}
+
+#[test]
+fn test_netmask() -> Result<(), Error> {
+    assert_eq!(
+        Ipv4Subnet::new("0.0.0.0".parse().unwrap(), 0)?.netmask(),
+        "0.0.0.0".parse::<std::net::Ipv4Addr>().unwrap()
+    );
+    assert_eq!(
+        Ipv4Subnet::new("0.0.0.0".parse().unwrap(), 8)?.netmask(),
+        "255.0.0.0".parse::<std::net::Ipv4Addr>().unwrap()
+    );
+    assert_eq!(
+        Ipv4Subnet::new("0.0.0.0".parse().unwrap(), 16)?.netmask(),
+        "255.255.0.0".parse::<std::net::Ipv4Addr>().unwrap()
+    );
+    assert_eq!(
+        Ipv4Subnet::new("0.0.0.0".parse().unwrap(), 24)?.netmask(),
+        "255.255.255.0".parse::<std::net::Ipv4Addr>().unwrap()
+    );
+    assert_eq!(
+        Ipv4Subnet::new("0.0.0.0".parse().unwrap(), 25)?.netmask(),
+        "255.255.255.128".parse::<std::net::Ipv4Addr>().unwrap()
+    );
+    assert_eq!(
+        Ipv4Subnet::new("0.0.0.0".parse().unwrap(), 32)?.netmask(),
+        "255.255.255.255".parse::<std::net::Ipv4Addr>().unwrap()
+    );
+    Ok(())
+}
+
+#[test]
+fn test_contains() {
+    assert_eq!(
+        Ipv4Subnet::new("192.168.0.128".parse().unwrap(), 25)
+            .unwrap()
+            .contains("192.168.0.200".parse().unwrap()),
+        true
+    );
+    assert_eq!(
+        Ipv4Subnet::new("192.168.0.128".parse().unwrap(), 25)
+            .unwrap()
+            .contains("192.168.0.100".parse().unwrap()),
+        false
+    );
 }

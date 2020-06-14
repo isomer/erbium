@@ -83,3 +83,37 @@ pub async fn load_config_from_path(path: &std::path::Path) -> Result<SharedConfi
 
     load_config_from_string(&configdata)
 }
+
+#[test]
+fn test_config_parse() -> Result<(), Error> {
+    load_config_from_string(
+        "---
+dhcp:
+    Policies:
+      - match-interface: eth0
+        apply-dns-server: ['8.8.8.8', '8.8.4.4']
+        apply-subnet: 192.168.0.0/24
+
+        Policies:
+           - { match-hostname: myhost, apply-address: [192.168.0.1] }
+
+
+      - match-interface: dmz
+        apply-dns-server: ['8.8.8.8']
+        apply-subnet: 192.0.2.0/24
+
+        # Reserve some space from the pool for servers
+        Policies:
+          - apply-range: {start: 192.0.2.10, end: 192.0.2.20}
+
+            # From the reserved pool, assign a static address.
+            Policies:
+              - { match-hardware-address: 00:01:02:03:04:05, apply-address: [192.168.0.2] }
+
+          # Reserve space for VPN endpoints
+          - match-user-class: VPN
+            apply-subnet: 192.0.2.128/25
+        ",
+    )?;
+    Ok(())
+}

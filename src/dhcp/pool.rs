@@ -119,7 +119,7 @@ impl Pools {
             .ok_or_else(|| Error::NoSuchPool(name.into()))?
             .addresses
             .reserve(1 << (32 - netblock.prefixlen));
-        let base: u32 = netblock.netmask().into();
+        let base: u32 = netblock.network().into();
         for i in 1..((1 << (32 - netblock.prefixlen)) - 1) {
             self.add_addr(name, (base + i).into())?;
         }
@@ -434,7 +434,7 @@ pub struct Netblock {
 }
 
 impl Netblock {
-    fn netmask(&self) -> std::net::Ipv4Addr {
+    fn network(&self) -> std::net::Ipv4Addr {
         (u32::from(self.addr) & (((1 << self.prefixlen) - 1) as u32).to_be()).into()
     }
 }

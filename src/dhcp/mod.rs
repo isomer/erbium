@@ -119,6 +119,30 @@ enum PolicyMatch {
 fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
     let mut outcome = PolicyMatch::NoMatch;
     //if let Some(policy.match_interface ...
+    if let Some(match_hostname) = &policy.match_hostname {
+        outcome = PolicyMatch::MatchSucceeded;
+        if let Some(hostname) = &req.pkt.options.hostname {
+            if hostname != match_hostname {
+                return PolicyMatch::MatchFailed;
+            }
+        }
+    }
+    if let Some(match_vendorstr) = &policy.match_vendorstr {
+        outcome = PolicyMatch::MatchSucceeded;
+        if let Some(vendorstr) = &req.pkt.options.other.get(&dhcppkt::OPTION_VENDOR_CLASS) {
+            if vendorstr.as_slice() != match_vendorstr.as_bytes() {
+                return PolicyMatch::MatchFailed;
+            }
+        }
+    }
+    if let Some(match_userstr) = &policy.match_userstr {
+        outcome = PolicyMatch::MatchSucceeded;
+        if let Some(userstr) = &req.pkt.options.other.get(&dhcppkt::OPTION_USER_CLASS) {
+            if userstr.as_slice() != match_userstr.as_bytes() {
+                return PolicyMatch::MatchFailed;
+            }
+        }
+    }
     if let Some(match_clientid) = &policy.match_clientid {
         outcome = PolicyMatch::MatchSucceeded;
         if let Some(clientid) = &req.pkt.options.clientidentifier {
