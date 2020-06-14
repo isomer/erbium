@@ -35,16 +35,6 @@ impl Ipv4Subnet {
     pub fn new(addr: std::net::Ipv4Addr, prefixlen: u8) -> Result<Self, Error> {
         let ret = Self { addr, prefixlen };
         /* If the prefix is too short, then return an error */
-        println!(
-            "{:?} ({:x})  {}/{} ({:x}) = {:?} ({:?})",
-            ret.addr,
-            u32::from(ret.addr),
-            ret.netmask(),
-            ret.prefixlen,
-            u32::from(ret.netmask()),
-            std::net::Ipv4Addr::from(u32::from(ret.addr) & !u32::from(ret.netmask())),
-            u32::from(ret.addr) & !u32::from(ret.netmask())
-        );
         if u32::from(ret.addr) & !u32::from(ret.netmask()) != 0 {
             Err(Error::InvalidSubnet)
         } else {
