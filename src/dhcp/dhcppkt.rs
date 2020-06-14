@@ -154,6 +154,12 @@ impl fmt::Debug for MessageType {
     }
 }
 
+impl std::default::Default for MessageType {
+    fn default() -> Self {
+        DHCPNAK
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct DhcpOption(u8);
 pub const OPTION_SUBNETMASK: DhcpOption = DhcpOption(1);
@@ -211,7 +217,7 @@ impl fmt::Debug for DhcpOption {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DhcpOptions {
     pub messagetype: MessageType,
     pub hostname: Option<String>,

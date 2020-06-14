@@ -44,14 +44,14 @@ pub enum Error {
     NoAssignableAddress,
 }
 
-impl ToString for Error {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::DbError(reason, e) => format!("{}: {}", reason, e.to_string()),
-            Error::NoSuchPool(s) => format!("No Such Pool: {}", s),
-            Error::DuplicatePool(s) => format!("Duplicate Pool: {}", s),
-            Error::CorruptDatabase(s) => format!("Corrupt Database: {}", s),
-            Error::NoAssignableAddress => "No Assignable Address".into(),
+            Error::DbError(reason, e) => write!(f, "{}: {}", reason, e),
+            Error::NoSuchPool(s) => write!(f, "No Such Pool: {}", s),
+            Error::DuplicatePool(s) => write!(f, "Duplicate Pool: {}", s),
+            Error::CorruptDatabase(s) => write!(f, "Corrupt Database: {}", s),
+            Error::NoAssignableAddress => write!(f, "No Assignable Address"),
         }
     }
 }
@@ -427,6 +427,7 @@ fn map_no_row_to_none<T>(e: rusqlite::Error) -> Result<Option<T>, Error> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Netblock {
     pub addr: std::net::Ipv4Addr,
     pub prefixlen: u8,

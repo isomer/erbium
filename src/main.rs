@@ -20,16 +20,18 @@
 use std::error::Error;
 use tokio::stream::StreamExt;
 
-mod dhcp;
-mod dns;
-mod net;
+use erbium::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let netinfo = net::netinfo::SharedNetInfo::new().await;
+    let config_file = std::path::Path::new("dhcp.conf");
+    let conf = erbium::config::load_config_from_path(config_file).await?;
     let mut services = futures::stream::FuturesUnordered::new();
 
-    services.push(tokio::spawn(dhcp::run(netinfo)));
+    println!("Configuration: {:?}", *conf.lock().await);
+
+    services.push(tokio::spawn(dhcp::run(netinfo, conf)));
     services.push(tokio::spawn(dns::run()));
 
     let x = services.next().await.unwrap();

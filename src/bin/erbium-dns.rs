@@ -25,6 +25,7 @@ use erbium::dns;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let _config_file = std::path::Path::new("erbium.conf");
     let mut services = futures::stream::FuturesUnordered::new();
 
     services.push(tokio::spawn(dns::run()));
@@ -35,4 +36,3 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-

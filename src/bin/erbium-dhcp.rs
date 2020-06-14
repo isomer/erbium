@@ -26,10 +26,12 @@ use erbium::dhcp;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let mut services = futures::stream::FuturesUnordered::new();
     let netinfo = erbium::net::netinfo::SharedNetInfo::new().await;
+    let config_file = std::path::Path::new("erbium.conf");
+    let conf = erbium::config::load_config_from_path(config_file).await?;
+    let mut services = futures::stream::FuturesUnordered::new();
 
-    services.push(tokio::spawn(dhcp::run(netinfo)));
+    services.push(tokio::spawn(dhcp::run(netinfo, conf)));
 
     while let Some(x) = services.next().await {
         println!("Service complete: {:?}", x)
