@@ -18,3 +18,33 @@ pub mod netinfo;
 pub mod packet;
 pub mod raw;
 pub mod udp;
+
+// TODO: Write better Debug or to_string() method.
+#[derive(Clone, Debug)]
+pub struct Ipv4Subnet {
+    pub addr: std::net::Ipv4Addr,
+    pub prefixlen: u8,
+}
+
+#[derive(Debug)]
+pub enum Error {
+    InvalidSubnet,
+}
+
+impl Ipv4Subnet {
+    pub fn new(addr: std::net::Ipv4Addr, prefixlen: u8) -> Result<Self, Error> {
+        let ret = Self { addr, prefixlen };
+        /* If the prefix is too short, then return an error */
+        if u32::from(ret.addr) & !u32::from(ret.netmask()) != 0 {
+            Err(Error::InvalidSubnet)
+        } else {
+            Ok(ret)
+        }
+    }
+    pub fn netmask(&self) -> std::net::Ipv4Addr {
+        (u32::from(self.addr) & (((1 << self.prefixlen) - 1) as u32).to_be()).into()
+    }
+    pub fn contains(&self, ip: std::net::Ipv4Addr) -> bool {
+        u32::from(ip) & u32::from(self.netmask()) == u32::from(self.addr)
+    }
+}
