@@ -1,3 +1,22 @@
+/*   Copyright 2020 Perry Lorier
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ *  SPDX-License-Identifier: Apache-2.0
+ *
+ *  DHCP Configuration parsing.
+ */
+use std::ops::Sub;
 use yaml_rust::yaml;
 
 #[derive(Debug)]
@@ -76,6 +95,20 @@ pub struct Policy {
     pub policies: Vec<Policy>,
 }
 
+impl Policy {
+    fn get_all_used_addresses(&self) -> std::collections::HashSet<std::net::Ipv4Addr> {
+        let mut addrset: std::collections::HashSet<std::net::Ipv4Addr> = Default::default();
+        if let Some(address) = &self.apply_address {
+            addrset.extend(address.iter());
+        }
+        for p in &self.policies {
+            addrset.extend(p.get_all_used_addresses());
+        }
+
+        addrset
+    }
+}
+
 #[derive(Debug)]
 pub struct Config {
     pub policies: Vec<Policy>,
@@ -121,7 +154,7 @@ impl Config {
                             ))
                         })?
                         .parse()
-                        .map_err(|err| {
+                        .map_err(|_| {
                             Error::InvalidConfig(format!("iplist contains an invalid IP: {:?}", ip))
                         })?,
                 )
@@ -162,6 +195,7 @@ impl Config {
     fn parse_policy(fragment: &yaml::Yaml) -> Result<Policy, Error> {
         if let Some(h) = fragment.as_hash() {
             let mut policy: Policy = Default::default();
+            let mut addresses: Option<Vec<std::net::Ipv4Addr>> = None;
             for (k, v) in h {
                 match k.as_str() {
                     Some("match-interface") => {
@@ -219,8 +253,9 @@ impl Config {
                         );
                     }
                     Some("apply-address") => {
-                        policy.apply_address = Some(
-                            Config::parse_iplist(v)
+                        let addresses = addresses.get_or_insert_with(|| Vec::new());
+                        addresses.push(
+                            Config::parse_ip(v)
                                 .map_err(|x| x.annotate("Failed to parse apply-address"))?,
                         );
                     }
@@ -228,7 +263,7 @@ impl Config {
                         let subnet = Config::parse_subnet(v)
                             .map_err(|x| x.annotate("Failed to parse apply-subnet"))?;
                         let base: u32 = subnet.network().into();
-                        let addresses = policy.apply_address.get_or_insert_with(|| Vec::new());
+                        let addresses = addresses.get_or_insert_with(|| Vec::new());
                         for i in 1..((1 << (32 - subnet.prefixlen)) - 1) {
                             addresses.push((base + i).into())
                         }
@@ -268,7 +303,7 @@ impl Config {
                                 .ok_or(Error::InvalidConfig("Missing start in range".into()))?;
                             let end =
                                 end.ok_or(Error::InvalidConfig("Missing end in range".into()))?;
-                            let addresses = policy.apply_address.get_or_insert_with(|| Vec::new());
+                            let addresses = addresses.get_or_insert_with(|| Vec::new());
                             for i in u32::from(start)..=u32::from(end) {
                                 addresses.push(i.into());
                             }
@@ -290,6 +325,18 @@ impl Config {
                     }
                     None => return Err(Error::InvalidConfig("Policy is not hash".into())),
                 }
+            }
+            /* If this Policy overrides addresses, then remove any addresses that are reserved for
+             * sub policies */
+            if let Some(mut addrvec) = addresses {
+                let mut addrset: std::collections::HashSet<std::net::Ipv4Addr> = Default::default();
+                addrset.extend(addrvec.drain(..));
+                for p in &policy.policies {
+                    addrset = addrset.sub(&p.get_all_used_addresses());
+                }
+                let mut addrvec: Vec<std::net::Ipv4Addr> = addrset.drain().collect();
+                addrvec.sort();
+                policy.apply_address = Some(addrvec);
             }
             Ok(policy)
         } else {
