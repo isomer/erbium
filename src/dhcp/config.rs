@@ -91,7 +91,7 @@ pub struct Policy {
     pub match_chaddr: Option<Vec<u8>>,
     pub match_subnet: Option<crate::net::Ipv4Subnet>,
     pub apply_dnsserver: Option<Vec<std::net::Ipv4Addr>>,
-    pub apply_address: Option<Vec<std::net::Ipv4Addr>>,
+    pub apply_address: Option<super::pool::PoolAddresses>,
     pub policies: Vec<Policy>,
 }
 
@@ -334,9 +334,7 @@ impl Config {
                 for p in &policy.policies {
                     addrset = addrset.sub(&p.get_all_used_addresses());
                 }
-                let mut addrvec: Vec<std::net::Ipv4Addr> = addrset.drain().collect();
-                addrvec.sort();
-                policy.apply_address = Some(addrvec);
+                policy.apply_address = Some(addrset);
             }
             Ok(policy)
         } else {

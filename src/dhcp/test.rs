@@ -71,31 +71,19 @@ fn mk_dhcp_request() -> dhcp::DHCPRequest {
     }
 }
 
-fn mk_default_pools() -> pool::Pools {
-    let mut pool = pool::Pools::new_in_memory().expect("Failed to create pool");
-    pool.add_pool("default")
-        .expect("Failed to create default pool");
-    pool.add_subnet(
-        "default",
-        pool::Netblock {
-            addr: "192.168.0.0".parse().expect("Failed to parse IP"),
-            prefixlen: 24,
-        },
-    )
-    .expect("Failed to add netblock to default pool");
-
-    pool.add_pool("empty").expect("Failed to create empty pool");
-    pool
-}
-
 fn mk_default_config() -> crate::config::Config {
+    let mut apply_address: pool::PoolAddresses = Default::default();
+    for i in 0..256 {
+        apply_address
+            .insert((u32::from("192.0.2.0".parse::<std::net::Ipv4Addr>().unwrap()) + i).into());
+    }
     crate::config::Config {
         dhcp: dhcp::config::Config {
             policies: vec![dhcp::config::Policy {
                 match_subnet: Some(
-                    crate::net::Ipv4Subnet::new("192.168.0.0".parse().unwrap(), 24).unwrap(),
+                    crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
                 ),
-                apply_address: Some(vec!["192.168.0.1".parse().unwrap()]),
+                apply_address: Some(apply_address),
                 ..Default::default()
             }],
         },
@@ -142,7 +130,7 @@ fn test_handle_pkt() {
         Some(String::from("Client Identifier").as_bytes().to_vec());
     let bytes = orig_pkt.pkt.serialise();
 
-    let mut p = mk_default_pools();
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
@@ -195,7 +183,7 @@ fn truncated_pkt() {
  */
 #[tokio::test]
 async fn ignore_unused_flag_bits() {
-    let mut p = mk_default_pools();
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
     let mut pkt = mk_dhcp_request();
     pkt.pkt.flags = 0x7FFF;
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
@@ -217,7 +205,7 @@ async fn ignore_unused_flag_bits() {
  */
 #[tokio::test]
 async fn confirm_yiaddr_set() {
-    let mut p = mk_default_pools();
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
@@ -288,7 +276,7 @@ fn dhcpinform_dont_check_existing_lease() {
  */
 #[tokio::test]
 async fn server_address_set() {
-    let mut p = mk_default_pools();
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
@@ -307,7 +295,7 @@ async fn server_address_set() {
 #[tokio::test]
 async fn ignore_other_request() {
     let pools = std::sync::Arc::new(sync::Mutex::new(
-        pool::Pools::new_in_memory().expect("Failed to create pool"),
+        pool::Pool::new_in_memory().expect("Failed to create pool"),
     ));
     let mut p = pools.lock().await;
     let mut pkt = mk_dhcp_request();
@@ -315,8 +303,9 @@ async fn ignore_other_request() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     serverids.insert(SERVER_IP2);
+    let cfg = mk_default_config();
     let reply =
-        dhcp::handle_request(&mut p, &pkt, serverids).expect_err("Handled request not to me");
+        dhcp::handle_request(&mut p, &pkt, serverids, &cfg).expect_err("Handled request not to me");
     assert_eq!(
         reply,
         dhcp::DhcpError::OtherServer,
