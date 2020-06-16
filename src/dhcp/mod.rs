@@ -31,7 +31,7 @@ use nix::libc;
 
 pub mod config;
 mod dhcppkt;
-mod pool;
+pub mod pool;
 
 #[cfg(test)]
 mod test;
@@ -39,10 +39,10 @@ mod test;
 type Pool = Arc<sync::Mutex<pool::Pool>>;
 type UdpSocket = udp::UdpSocket;
 type ServerIds = std::collections::HashSet<net::Ipv4Addr>;
-type SharedServerIds = Arc<sync::Mutex<ServerIds>>;
+pub type SharedServerIds = Arc<sync::Mutex<ServerIds>>;
 
 #[derive(Debug, PartialEq, Eq)]
-enum DhcpError {
+pub enum DhcpError {
     UnknownMessageType(dhcppkt::MessageType),
     NoLeasesAvailable,
     ParseError(dhcppkt::ParseError),
@@ -349,7 +349,7 @@ fn handle_request(
     }
 }
 
-fn handle_pkt(
+pub fn handle_pkt(
     mut pools: &mut pool::Pool,
     buf: &[u8],
     dst: net::Ipv4Addr,
@@ -360,7 +360,7 @@ fn handle_pkt(
     let dhcp = dhcppkt::parse(buf);
     match dhcp {
         Ok(req) => {
-            println!("Parse: {:?}", req);
+            //println!("Parse: {:?}", req);
             let request = DHCPRequest {
                 pkt: req,
                 serverip: dst,
@@ -436,7 +436,7 @@ async fn recvdhcp(
             if let Some(si) = r.options.serveridentifier {
                 serverids.lock().await.insert(si);
             }
-            println!("Reply: {:?}", r);
+            //println!("Reply: {:?}", r);
             let buf = r.serialise();
             let srcip = std::net::SocketAddrV4::new(dst, 67);
             if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) = netinfo

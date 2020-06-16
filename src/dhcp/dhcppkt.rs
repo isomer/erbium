@@ -25,6 +25,7 @@ use std::net;
 pub enum ParseError {
     UnexpectedEndOfInput,
     WrongMagic,
+    InvalidPacket,
 }
 
 impl std::error::Error for ParseError {
@@ -38,6 +39,7 @@ impl std::fmt::Display for ParseError {
         match self {
             ParseError::UnexpectedEndOfInput => write!(f, "Unexpected End Of Input"),
             ParseError::WrongMagic => write!(f, "Wrong Magic"),
+            ParseError::InvalidPacket => write!(f, "Invalid Packet"),
         }
     }
 }
@@ -350,8 +352,19 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
         Err(x) => return Err(x),
     }
 
+    let messagetype = raw_options.remove(&OPTION_MSGTYPE);
+
+    let messagetype = messagetype
+        .filter(|m| m.len() >= 1) // TODO: should be ==, but fuzzing
+        .ok_or(ParseError::InvalidPacket)?[0];
+
+    let serverid = raw_options
+        .remove(&OPTION_SERVERID)
+        .filter(|sid| sid.len() == 4)
+        .map(|sid| net::Ipv4Addr::new(sid[0], sid[1], sid[2], sid[3]));
+
     let options = DhcpOptions {
-        messagetype: MessageType(raw_options.remove(&OPTION_MSGTYPE).unwrap()[0]), // TODO: better error handling if msgtype is missing
+        messagetype: MessageType(messagetype),
         hostname: raw_options
             .remove(&OPTION_HOSTNAME)
             .and_then(|host| String::from_utf8(null_terminated(host).to_vec()).ok()),
@@ -363,9 +376,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
                 .map(|&x| DhcpOption(x))
                 .collect::<Vec<DhcpOption>>()
         }),
-        serveridentifier: raw_options
-            .remove(&OPTION_SERVERID)
-            .map(|sid| net::Ipv4Addr::new(sid[0], sid[1], sid[2], sid[3])),
+        serveridentifier: serverid,
         clientidentifier: raw_options.remove(&OPTION_CLIENTID),
         other: raw_options,
     };
