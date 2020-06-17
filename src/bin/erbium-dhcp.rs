@@ -26,8 +26,16 @@ use erbium::dhcp;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let args: Vec<_> = std::env::args_os().collect();
+    let config_file = match args.len() {
+        1 => std::path::Path::new("erbium.conf"),
+        2 => std::path::Path::new(&args[1]),
+        _ => {
+            println!("Usage: {} <configfile>", args[0].to_string_lossy());
+            return Ok(());
+        }
+    };
     let netinfo = erbium::net::netinfo::SharedNetInfo::new().await;
-    let config_file = std::path::Path::new("erbium.conf");
     let conf = erbium::config::load_config_from_path(config_file).await?;
     let mut services = futures::stream::FuturesUnordered::new();
 

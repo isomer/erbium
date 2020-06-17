@@ -22,7 +22,16 @@ extern crate erbium;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config_file = std::path::Path::new("erbium.conf");
+    let args: Vec<_> = std::env::args_os().collect();
+    let config_file = match args.len() {
+        1 => std::path::Path::new("erbium.conf"),
+        2 => std::path::Path::new(&args[1]),
+        _ => {
+            println!("Usage: {} <configfile>", args[0].to_string_lossy());
+            return Ok(());
+        }
+    };
+    println!("Loading config from {}", config_file.display());
     let conf = erbium::config::load_config_from_path(config_file).await?;
     println!("Parse config: {:?}", conf.lock().await);
     Ok(())
