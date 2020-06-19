@@ -6,6 +6,7 @@ edition = "2018"
 default-run = "erbium"
 description = "Network services for small/home networks"
 license = "Apache-2.0"
+repository = "https://github.com/isomer/erbium.git"
 
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
