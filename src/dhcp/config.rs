@@ -90,8 +90,14 @@ pub struct Policy {
     pub match_clientid: Option<String>,
     pub match_chaddr: Option<Vec<u8>>,
     pub match_subnet: Option<crate::net::Ipv4Subnet>,
+    pub match_other:
+        std::collections::HashMap<super::dhcppkt::DhcpOption, super::dhcppkt::DhcpOptionTypeValue>,
     pub apply_dnsserver: Option<Vec<std::net::Ipv4Addr>>,
     pub apply_address: Option<super::pool::PoolAddresses>,
+    pub apply_default_lease: Option<std::time::Duration>,
+    pub apply_max_lease: Option<std::time::Duration>,
+    pub apply_other:
+        std::collections::HashMap<super::dhcppkt::DhcpOption, super::dhcppkt::DhcpOptionTypeValue>,
     pub policies: Vec<Policy>,
 }
 
@@ -192,6 +198,89 @@ impl Config {
         }
     }
 
+    fn parse_duration(value: &yaml::Yaml) -> Result<std::time::Duration, Error> {
+        if let Some(v) = value.as_str() {
+            let mut num = None;
+            let mut ret = Default::default();
+            for c in v.chars() {
+                match c {
+                    '0'..='9' => {
+                        if let Some(n) = num {
+                            num = Some(n * 10 + c as u64 - '0' as u64);
+                        } else {
+                            num = Some(c as u64 - '0' as u64);
+                        }
+                    }
+                    's' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap());
+                    }
+                    'm' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap() * 60);
+                    }
+                    'h' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap() * 3600);
+                    }
+                    'd' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap() * 86400);
+                    }
+                    'w' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap() * 7 * 86400);
+                    }
+                    x if x.is_whitespace() => (),
+                    '_' => (),
+                    _ => Err(Error::InvalidConfig(format!(
+                        "Unexpected {} in duration",
+                        c
+                    )))?,
+                }
+            }
+            if let Some(n) = num {
+                ret += std::time::Duration::from_secs(n);
+            }
+            Ok(ret)
+        } else {
+            Err(Error::InvalidConfig(format!(
+                "Expected duration, got {:?}",
+                value
+            )))
+        }
+    }
+
+    fn parse_generic(
+        name: &str,
+        value: &yaml::Yaml,
+    ) -> Result<
+        (
+            super::dhcppkt::DhcpOption,
+            super::dhcppkt::DhcpOptionTypeValue,
+        ),
+        Error,
+    > {
+        let maybe_opt = super::dhcppkt::name_to_option(name);
+        if let Some(opt) = maybe_opt {
+            use super::dhcppkt::*;
+            Ok((
+                opt,
+                match option_to_type(opt) {
+                    Some(DhcpOptionType::String) => {
+                        DhcpOptionTypeValue::String(Config::parse_string(value)?)
+                    }
+                    Some(DhcpOptionType::IpList) => {
+                        DhcpOptionTypeValue::IpList(Config::parse_iplist(value)?)
+                    }
+                    None => {
+                        return Err(Error::InvalidConfig(format!(
+                            "Missing type information for {}",
+                            name
+                        )))
+                    }
+                },
+            ))
+        } else {
+            return Err(Error::InvalidConfig(format!("Unknown option {}", name)));
+        }
+    }
+
     fn parse_policy(fragment: &yaml::Yaml) -> Result<Policy, Error> {
         if let Some(h) = fragment.as_hash() {
             let mut policy: Policy = Default::default();
@@ -231,20 +320,26 @@ impl Config {
                     Some("match-clientid") => {
                         policy.match_clientid = Some(
                             Config::parse_string(v)
-                                .map_err(|x| x.annotate("Failed to parse clientid"))?,
+                                .map_err(|x| x.annotate("Failed to parse match-clientid"))?,
                         );
                     }
                     Some("match-hardware-address") => {
-                        policy.match_chaddr = Some(
-                            Config::parse_mac(v)
-                                .map_err(|x| x.annotate("Failed to parse hardware-address"))?,
-                        );
+                        policy.match_chaddr =
+                            Some(Config::parse_mac(v).map_err(|x| {
+                                x.annotate("Failed to parse match-hardware-address")
+                            })?);
                     }
                     Some("match-subnet") => {
                         policy.match_subnet = Some(
                             Config::parse_subnet(v)
-                                .map_err(|x| x.annotate("Failed to parse subnet"))?,
+                                .map_err(|x| x.annotate("Failed to parse match-subnet"))?,
                         );
+                    }
+                    Some(x) if x.starts_with("match-") => {
+                        let name = &x[6..];
+                        let (opt, value) = Config::parse_generic(name, v)
+                            .map_err(|e| e.annotate(&format!("Failed to parse {}", x)))?;
+                        policy.match_other.insert(opt, value);
                     }
                     Some("apply-dns-server") => {
                         policy.apply_dnsserver = Some(
@@ -259,14 +354,17 @@ impl Config {
                                 .map_err(|x| x.annotate("Failed to parse apply-address"))?,
                         );
                     }
-                    Some("apply-subnet") => {
-                        let subnet = Config::parse_subnet(v)
-                            .map_err(|x| x.annotate("Failed to parse apply-subnet"))?;
-                        let base: u32 = subnet.network().into();
-                        let addresses = addresses.get_or_insert_with(|| Vec::new());
-                        for i in 1..((1 << (32 - subnet.prefixlen)) - 1) {
-                            addresses.push((base + i).into())
-                        }
+                    Some("apply-default-lease") => {
+                        policy.apply_default_lease = Some(
+                            Config::parse_duration(v)
+                                .map_err(|x| x.annotate("Failed to parse apply-default-lease"))?,
+                        );
+                    }
+                    Some("apply-max-lease") => {
+                        policy.apply_default_lease = Some(
+                            Config::parse_duration(v)
+                                .map_err(|x| x.annotate("Failed to parse apply-max-lease"))?,
+                        );
                     }
                     Some("apply-range") => {
                         if let Some(range) = v.as_hash() {
@@ -313,6 +411,21 @@ impl Config {
                                 v
                             )));
                         }
+                    }
+                    Some("apply-subnet") => {
+                        let subnet = Config::parse_subnet(v)
+                            .map_err(|x| x.annotate("Failed to parse apply-subnet"))?;
+                        let base: u32 = subnet.network().into();
+                        let addresses = addresses.get_or_insert_with(|| Vec::new());
+                        for i in 1..((1 << (32 - subnet.prefixlen)) - 1) {
+                            addresses.push((base + i).into())
+                        }
+                    }
+                    Some(x) if x.starts_with("apply-") => {
+                        let name = &x[6..];
+                        let (opt, value) = Config::parse_generic(name, v)
+                            .map_err(|e| e.annotate(&format!("Failed to parse {}", x)))?;
+                        policy.apply_other.insert(opt, value);
                     }
                     Some("Policies") => {
                         policy.policies = Config::parse_policies(v)?;
@@ -393,4 +506,16 @@ impl Config {
             Err(Error::InvalidConfig("Missing dhcp section".into()))
         }
     }
+}
+
+#[test]
+fn test_duration() {
+    assert_eq!(
+        Config::parse_duration(&yaml::Yaml::String("5s".into())).unwrap(),
+        std::time::Duration::from_secs(5)
+    );
+    assert_eq!(
+        Config::parse_duration(&yaml::Yaml::String("1w2d3h4m5s".into())).unwrap(),
+        std::time::Duration::from_secs(1 * 7 * 86400 + 2 * 86400 + 3 * 3600 + 4 * 60 + 5)
+    );
 }

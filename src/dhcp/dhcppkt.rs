@@ -184,8 +184,57 @@ pub const OPTION_VENDOR_CLASS: DhcpOption = DhcpOption(60);
 pub const OPTION_CLIENTID: DhcpOption = DhcpOption(61);
 pub const OPTION_USER_CLASS: DhcpOption = DhcpOption(77); /* RFC3004 */
 pub const OPTION_FQDN: DhcpOption = DhcpOption(81); /* RFC4702 */
+pub const OPTION_PCODE: DhcpOption = DhcpOption(100); /* RFC4833 */
+pub const OPTION_TCODE: DhcpOption = DhcpOption(101); /* RFC4833 */
 pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
 pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
+
+pub fn name_to_option(name: &str) -> Option<DhcpOption> {
+    match name {
+        "domain-name" => Some(OPTION_DOMAINNAME),
+        "routers" => Some(OPTION_ROUTERADDR),
+        "tz" => Some(OPTION_PCODE),
+        "tzdb" => Some(OPTION_TCODE),
+        "hostname" => Some(OPTION_HOSTNAME),
+        _ => None,
+    }
+}
+
+pub enum DhcpOptionType {
+    String,
+    IpList,
+}
+
+#[derive(Debug, Clone)]
+pub enum DhcpOptionTypeValue {
+    String(String),
+    IpList(Vec<std::net::Ipv4Addr>),
+}
+
+impl DhcpOptionTypeValue {
+    pub fn as_bytes(&self) -> Vec<u8> {
+        match self {
+            DhcpOptionTypeValue::String(s) => s.as_bytes().iter().cloned().collect(),
+            DhcpOptionTypeValue::IpList(v) => {
+                v.iter().map(|x| x.octets()).fold(vec![], |mut acc, v| {
+                    acc.extend(v.iter());
+                    acc
+                })
+            }
+        }
+    }
+}
+
+pub fn option_to_type(opt: DhcpOption) -> Option<DhcpOptionType> {
+    match opt {
+        OPTION_DOMAINNAME => Some(DhcpOptionType::String),
+        OPTION_ROUTERADDR => Some(DhcpOptionType::IpList),
+        OPTION_PCODE => Some(DhcpOptionType::String),
+        OPTION_TCODE => Some(DhcpOptionType::String),
+        OPTION_HOSTNAME => Some(DhcpOptionType::String),
+        _ => None,
+    }
+}
 
 impl ToString for DhcpOption {
     fn to_string(&self) -> String {
@@ -212,6 +261,8 @@ impl ToString for DhcpOption {
             &OPTION_FQDN => String::from("FQDN"),
             &OPTION_DOMAINSEARCH => String::from("DOMAINSEARCH"),
             &OPTION_CIDRROUTE => String::from("CIDRROUTE"),
+            &OPTION_PCODE => String::from("tz"),
+            &OPTION_TCODE => String::from("tzdb"),
             DhcpOption(x) => format!("#{}", x),
         }
     }

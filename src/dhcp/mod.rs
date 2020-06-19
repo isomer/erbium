@@ -164,6 +164,17 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
         }
     }
 
+    for (k, m) in policy.match_other.iter() {
+        if let Some(v) = req.pkt.options.other.get(k) {
+            outcome = PolicyMatch::MatchSucceeded;
+            if &m.as_bytes() != v {
+                return PolicyMatch::MatchFailed;
+            }
+        } else {
+            return PolicyMatch::MatchFailed;
+        }
+    }
+
     outcome
 }
 
