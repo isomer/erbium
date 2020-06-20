@@ -435,13 +435,14 @@ async fn recvdhcp(
         unimplemented!()
     };
     let dst = netinfo.get_ipv4_by_ifidx(intf).await.unwrap(); /* TODO: Error? */
+    let lockedconf = conf.lock().await;
     match handle_pkt(
         &mut pool,
         pkt,
         dst,
         get_serverids(&serverids).await,
         intf,
-        &*conf.lock().await,
+        &lockedconf,
     ) {
         Ok(r) => {
             if let Some(si) = r.options.serveridentifier {
