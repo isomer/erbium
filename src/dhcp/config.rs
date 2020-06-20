@@ -228,10 +228,12 @@ impl Config {
                     }
                     x if x.is_whitespace() => (),
                     '_' => (),
-                    _ => Err(Error::InvalidConfig(format!(
-                        "Unexpected {} in duration",
-                        c
-                    )))?,
+                    _ => {
+                        return Err(Error::InvalidConfig(format!(
+                            "Unexpected {} in duration",
+                            c
+                        )))
+                    }
                 }
             }
             if let Some(n) = num {
@@ -277,7 +279,7 @@ impl Config {
                 },
             ))
         } else {
-            return Err(Error::InvalidConfig(format!("Unknown option {}", name)));
+            Err(Error::InvalidConfig(format!("Unknown option {}", name)))
         }
     }
 
@@ -348,7 +350,7 @@ impl Config {
                         );
                     }
                     Some("apply-address") => {
-                        let addresses = addresses.get_or_insert_with(|| Vec::new());
+                        let addresses = addresses.get_or_insert_with(Vec::new);
                         addresses.push(
                             Config::parse_ip(v)
                                 .map_err(|x| x.annotate("Failed to parse apply-address"))?,
@@ -397,11 +399,13 @@ impl Config {
                                     }
                                 }
                             }
-                            let start = start
-                                .ok_or(Error::InvalidConfig("Missing start in range".into()))?;
-                            let end =
-                                end.ok_or(Error::InvalidConfig("Missing end in range".into()))?;
-                            let addresses = addresses.get_or_insert_with(|| Vec::new());
+                            let start = start.ok_or_else(|| {
+                                Error::InvalidConfig("Missing start in range".into())
+                            })?;
+                            let end = end.ok_or_else(|| {
+                                Error::InvalidConfig("Missing end in range".into())
+                            })?;
+                            let addresses = addresses.get_or_insert_with(Vec::new);
                             for i in u32::from(start)..=u32::from(end) {
                                 addresses.push(i.into());
                             }
@@ -416,7 +420,7 @@ impl Config {
                         let subnet = Config::parse_subnet(v)
                             .map_err(|x| x.annotate("Failed to parse apply-subnet"))?;
                         let base: u32 = subnet.network().into();
-                        let addresses = addresses.get_or_insert_with(|| Vec::new());
+                        let addresses = addresses.get_or_insert_with(Vec::new);
                         for i in 1..((1 << (32 - subnet.prefixlen)) - 1) {
                             addresses.push((base + i).into())
                         }

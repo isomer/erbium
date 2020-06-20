@@ -214,7 +214,7 @@ pub enum DhcpOptionTypeValue {
 impl DhcpOptionTypeValue {
     pub fn as_bytes(&self) -> Vec<u8> {
         match self {
-            DhcpOptionTypeValue::String(s) => s.as_bytes().iter().cloned().collect(),
+            DhcpOptionTypeValue::String(s) => s.as_bytes().to_vec(),
             DhcpOptionTypeValue::IpList(v) => {
                 v.iter().map(|x| x.octets()).fold(vec![], |mut acc, v| {
                     acc.extend(v.iter());
@@ -257,7 +257,7 @@ impl ToString for DhcpOption {
             &OPTION_PARAMLIST => String::from("Parameter List"),
             &OPTION_VENDOR_CLASS => String::from("vendor-class"),
             &OPTION_CLIENTID => String::from("Client Id"),
-            &OPTION_VENDOR_CLASS => String::from("user-class"),
+            &OPTION_USER_CLASS => String::from("user-class"),
             &OPTION_FQDN => String::from("FQDN"),
             &OPTION_DOMAINSEARCH => String::from("DOMAINSEARCH"),
             &OPTION_CIDRROUTE => String::from("CIDRROUTE"),
@@ -406,7 +406,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
     let messagetype = raw_options.remove(&OPTION_MSGTYPE);
 
     let messagetype = messagetype
-        .filter(|m| m.len() >= 1) // TODO: should be ==, but fuzzing
+        .filter(|m| !m.is_empty()) // TODO: should be ==, but fuzzing
         .ok_or(ParseError::InvalidPacket)?[0];
 
     let serverid = raw_options
