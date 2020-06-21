@@ -85,14 +85,11 @@ fn hexstring(s: &[u8]) -> Result<Vec<u8>, HexError> {
 #[derive(Clone, Debug, Default)]
 pub struct Policy {
     pub match_interface: Option<String>,
-    pub match_vendorstr: Option<String>,
-    pub match_userstr: Option<String>,
     pub match_clientid: Option<String>,
     pub match_chaddr: Option<Vec<u8>>,
     pub match_subnet: Option<crate::net::Ipv4Subnet>,
     pub match_other:
         std::collections::HashMap<super::dhcppkt::DhcpOption, super::dhcppkt::DhcpOptionTypeValue>,
-    pub apply_dnsserver: Option<Vec<std::net::Ipv4Addr>>,
     pub apply_address: Option<super::pool::PoolAddresses>,
     pub apply_default_lease: Option<std::time::Duration>,
     pub apply_max_lease: Option<std::time::Duration>,
@@ -338,24 +335,6 @@ impl Config {
                                 .map_err(|x| x.annotate("Failed to parse match-interface"))?,
                         );
                     }
-                    Some("match-vendor-class") => {
-                        policy.match_vendorstr = Some(
-                            Config::parse_string(v)
-                                .map_err(|x| x.annotate("Failed to parse match-vendor-class"))?,
-                        );
-                    }
-                    Some("match-user-class") => {
-                        policy.match_userstr = Some(
-                            Config::parse_string(v)
-                                .map_err(|x| x.annotate("Failed to parse match-user-class"))?,
-                        );
-                    }
-                    Some("match-client-class") => {
-                        policy.match_vendorstr = Some(
-                            Config::parse_string(v)
-                                .map_err(|x| x.annotate("Failed to parse match-client-class"))?,
-                        );
-                    }
                     Some("match-clientid") => {
                         policy.match_clientid = Some(
                             Config::parse_string(v)
@@ -379,12 +358,6 @@ impl Config {
                         let (opt, value) = Config::parse_generic(name, v)
                             .map_err(|e| e.annotate(&format!("Failed to parse {}", x)))?;
                         policy.match_other.insert(opt, value);
-                    }
-                    Some("apply-dns-server") => {
-                        policy.apply_dnsserver = Some(
-                            Config::parse_iplist(v)
-                                .map_err(|x| x.annotate("Failed to parse apply-dns-server"))?,
-                        );
                     }
                     Some("apply-address") => {
                         let addresses = addresses.get_or_insert_with(Vec::new);

@@ -18,6 +18,7 @@
  */
 use std::collections;
 use std::convert::TryInto;
+use std::iter::FromIterator;
 use std::net;
 use std::sync::Arc;
 use tokio::sync;
@@ -121,22 +122,6 @@ enum PolicyMatch {
 fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
     let mut outcome = PolicyMatch::NoMatch;
     //if let Some(policy.match_interface ...
-    if let Some(match_vendorstr) = &policy.match_vendorstr {
-        outcome = PolicyMatch::MatchSucceeded;
-        if let Some(vendorstr) = &req.pkt.options.other.get(&dhcppkt::OPTION_VENDOR_CLASS) {
-            if vendorstr.as_slice() != match_vendorstr.as_bytes() {
-                return PolicyMatch::MatchFailed;
-            }
-        }
-    }
-    if let Some(match_userstr) = &policy.match_userstr {
-        outcome = PolicyMatch::MatchSucceeded;
-        if let Some(userstr) = &req.pkt.options.other.get(&dhcppkt::OPTION_USERCLASS) {
-            if userstr.as_slice() != match_userstr.as_bytes() {
-                return PolicyMatch::MatchFailed;
-            }
-        }
-    }
     if let Some(match_chaddr) = &policy.match_chaddr {
         outcome = PolicyMatch::MatchSucceeded;
         if req.pkt.chaddr != *match_chaddr {
@@ -184,24 +169,28 @@ fn apply_policy(req: &DHCPRequest, policy: &config::Policy, response: &mut Respo
         return false;
     }
 
-    if let Some(dnsserver) = &policy.apply_dnsserver {
-        response.options.other.insert(
-            dhcppkt::OPTION_DOMAINSERVER,
-            dnsserver
-                .iter()
-                .map(|x| x.octets())
-                .fold(Vec::new(), |mut v, x| {
-                    v.extend(x.iter());
-                    v
-                }),
-        );
-    }
-
     if let Some(address) = &policy.apply_address {
         response.address = Some(address.clone()); /* HELP: I tried to make the lifetimes worked, and failed */
-        println!("Applying addresses: {:?}", response.address);
-    } else {
-        println!("No addresses to apply");
+    }
+
+    // TODO: This should probably just be a u128 bitvector
+    let pl: std::collections::HashSet<
+        dhcppkt::DhcpOption,
+        std::collections::hash_map::RandomState,
+    > = std::collections::HashSet::from_iter(
+        req.pkt
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+            .unwrap_or_else(Vec::new)
+            .iter()
+            .cloned()
+            .map(dhcppkt::DhcpOption::from),
+    );
+
+    for (k, v) in &policy.apply_other {
+        if pl.contains(k) {
+            response.options.mutate_option(k, v);
+        }
     }
 
     /* And check to see if a subpolicy also matches */
@@ -343,19 +332,18 @@ fn handle_request(
                 chaddr: req.pkt.chaddr.clone(),
                 sname: vec![],
                 file: vec![],
-                options: dhcppkt::DhcpOptions {
-                    other: collections::HashMap::new(),
-                }
-                .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPACK)
-                .set_option(
-                    &dhcppkt::OPTION_SERVERID,
-                    &req.pkt.options.get_serverid().unwrap_or(req.serverip),
-                )
-                .maybe_set_option(
-                    &dhcppkt::OPTION_CLIENTID,
-                    req.pkt.options.get_clientid().as_ref(),
-                )
-                .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32)),
+                options: response
+                    .options
+                    .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPACK)
+                    .set_option(
+                        &dhcppkt::OPTION_SERVERID,
+                        &req.pkt.options.get_serverid().unwrap_or(req.serverip),
+                    )
+                    .maybe_set_option(
+                        &dhcppkt::OPTION_CLIENTID,
+                        req.pkt.options.get_clientid().as_ref(),
+                    )
+                    .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32)),
             }),
             Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
             Err(e) => Err(DhcpError::InternalError(e.to_string())),

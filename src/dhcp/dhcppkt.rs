@@ -413,6 +413,12 @@ const OPT_INFO: &'static [(&'static str, DhcpOption, DhcpOptionType)] = &[
     ),
 ];
 
+impl From<u8> for DhcpOption {
+    fn from(v: u8) -> Self {
+        DhcpOption(v)
+    }
+}
+
 #[derive(Copy, Clone)]
 pub enum DhcpOptionType {
     String,
@@ -586,6 +592,12 @@ impl DhcpOptions {
         let mut v = Vec::new();
         value.serialise(&mut v);
         self.set_raw_option(option, &v)
+    }
+
+    pub fn mutate_option<T: Serialise>(&mut self, option: &DhcpOption, value: &T) {
+        let mut v = Vec::new();
+        value.serialise(&mut v);
+        self.other.insert(option.clone(), v);
     }
 
     pub fn maybe_set_option<T: Serialise>(self, option: &DhcpOption, value: Option<&T>) -> Self {
@@ -789,6 +801,34 @@ impl<T: Serialise> Serialise for Vec<T> {
     fn serialise(&self, v: &mut Vec<u8>) {
         for i in self {
             i.serialise(v);
+        }
+    }
+}
+
+impl Serialise for String {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        self.as_bytes().serialise(v)
+    }
+}
+
+impl Serialise for i32 {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        for i in self.to_be_bytes().iter() {
+            i.serialise(v)
+        }
+    }
+}
+
+impl Serialise for DhcpOptionTypeValue {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        match self {
+            DhcpOptionTypeValue::String(x) => x.serialise(v),
+            DhcpOptionTypeValue::IpList(x) => x.serialise(v),
+            DhcpOptionTypeValue::Ip(x) => x.serialise(v),
+            DhcpOptionTypeValue::I32(x) => x.serialise(v),
+            DhcpOptionTypeValue::U8(x) => x.serialise(v),
+            DhcpOptionTypeValue::U16(x) => x.serialise(v),
+            DhcpOptionTypeValue::U32(x) => x.serialise(v),
         }
     }
 }
