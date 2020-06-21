@@ -238,7 +238,7 @@ pub const OPTION_SUBNETSELECT: DhcpOption = DhcpOption(104);
 //pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
 pub const OPTION_CAPTIVEPORTAL: DhcpOption = DhcpOption(160);
 
-const OPT_INFO: &'static [(&'static str, DhcpOption, DhcpOptionType)] = &[
+const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     ("subnet-mask", OPTION_SUBNETMASK, DhcpOptionType::Ip),
     ("time-offset", OPTION_TIMEOFFSET, DhcpOptionType::I32),
     ("routers", OPTION_ROUTERADDR, DhcpOptionType::IpList),
@@ -584,7 +584,7 @@ impl DhcpOptions {
     }
 
     pub fn set_raw_option(mut self, option: &DhcpOption, value: &[u8]) -> Self {
-        self.other.insert(option.clone(), value.to_vec());
+        self.other.insert(*option, value.to_vec());
         self
     }
 
@@ -597,7 +597,7 @@ impl DhcpOptions {
     pub fn mutate_option<T: Serialise>(&mut self, option: &DhcpOption, value: &T) {
         let mut v = Vec::new();
         value.serialise(&mut v);
-        self.other.insert(option.clone(), v);
+        self.other.insert(*option, v);
     }
 
     pub fn maybe_set_option<T: Serialise>(self, option: &DhcpOption, value: Option<&T>) -> Self {

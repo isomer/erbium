@@ -305,10 +305,7 @@ impl Config {
                             .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
                     ),
                     Some(DhcpOptionType::Bool) => {
-                        DhcpOptionTypeValue::U8(match Config::parse_bool(value)? {
-                            false => 0,
-                            true => 1,
-                        })
+                        DhcpOptionTypeValue::U8(Config::parse_bool(value)? as u8)
                     }
                     None => {
                         return Err(Error::InvalidConfig(format!(
