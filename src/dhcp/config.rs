@@ -85,7 +85,6 @@ fn hexstring(s: &[u8]) -> Result<Vec<u8>, HexError> {
 #[derive(Clone, Debug, Default)]
 pub struct Policy {
     pub match_interface: Option<String>,
-    pub match_hostname: Option<String>,
     pub match_vendorstr: Option<String>,
     pub match_userstr: Option<String>,
     pub match_clientid: Option<String>,
@@ -337,12 +336,6 @@ impl Config {
                         policy.match_interface = Some(
                             Config::parse_string(v)
                                 .map_err(|x| x.annotate("Failed to parse match-interface"))?,
-                        );
-                    }
-                    Some("match-hostname") => {
-                        policy.match_hostname = Some(
-                            Config::parse_string(v)
-                                .map_err(|x| x.annotate("Failed to parse match-hostname"))?,
                         );
                     }
                     Some("match-vendor-class") => {

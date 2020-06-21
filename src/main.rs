@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let netinfo = net::netinfo::SharedNetInfo::new().await;
     let config_file = if args.len() == 1 {
-        std::path::Path::new("dhcp.conf")
+        std::path::Path::new("erbium.conf")
     } else {
         std::path::Path::new(&args[1])
     };

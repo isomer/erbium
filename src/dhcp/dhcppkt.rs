@@ -207,7 +207,7 @@ pub const OPTION_NETBIOSSCOPE: DhcpOption = DhcpOption(47);
 pub const OPTION_XWFONTSRVS: DhcpOption = DhcpOption(48);
 pub const OPTION_XWDISPLAY: DhcpOption = DhcpOption(49);
 pub const OPTION_ADDRESSREQUEST: DhcpOption = DhcpOption(50);
-pub const OPTION_ADDRESSLEASETIME: DhcpOption = DhcpOption(51);
+pub const OPTION_LEASETIME: DhcpOption = DhcpOption(51);
 pub const OPTION_MSGTYPE: DhcpOption = DhcpOption(53);
 pub const OPTION_SERVERID: DhcpOption = DhcpOption(54);
 pub const OPTION_PARAMLIST: DhcpOption = DhcpOption(55);
@@ -490,26 +490,115 @@ impl ToString for DhcpOption {
 
 impl fmt::Debug for DhcpOption {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "DhcpOption({})", self.to_string());
+        return write!(f, "{}", self.to_string());
+    }
+}
+
+pub trait DhcpParse {
+    type Item;
+    fn parse_into(v: &[u8]) -> Option<Self::Item>;
+}
+
+impl DhcpParse for std::net::Ipv4Addr {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self::Item> {
+        if v.len() != 4 {
+            None
+        } else {
+            Some(std::net::Ipv4Addr::new(v[0], v[1], v[2], v[3]))
+        }
+    }
+}
+
+/* HELP WANTED: I can't figure out how to make this a straight &[u8] -> Some(&[u8]) with no copies,
+ * while preserving lifetimes etc.
+ */
+impl DhcpParse for Vec<u8> {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        Some(v.to_vec())
+    }
+}
+
+/* This doesn't actually parse into a u64, this just parses as many bytes as it can find into a u64
+ */
+impl DhcpParse for u64 {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        Some(v.iter().fold(0u64, |acc, &v| (acc << 8) + (v as u64)))
+    }
+}
+
+impl DhcpParse for std::time::Duration {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        u64::parse_into(v).map(std::time::Duration::from_secs)
+    }
+}
+
+impl DhcpParse for MessageType {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        if v.len() != 1 {
+            None
+        } else {
+            Some(MessageType(v[0]))
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DhcpOptions {
-    pub messagetype: MessageType,
-    pub hostname: Option<String>,
-    pub leasetime: Option<std::time::Duration>,
-    pub parameterlist: Option<Vec<DhcpOption>>,
-    pub serveridentifier: Option<net::Ipv4Addr>,
-    pub clientidentifier: Option<Vec<u8>>,
     pub other: collections::HashMap<DhcpOption, Vec<u8>>,
 }
 
 impl DhcpOptions {
+    pub fn get_raw_option(&self, option: &DhcpOption) -> Option<&[u8]> {
+        self.other.get(option).map(|x| x.as_slice())
+    }
+
+    pub fn get_option<T: DhcpParse>(&self, option: &DhcpOption) -> Option<T::Item> {
+        self.get_raw_option(option).and_then(|x| T::parse_into(x))
+    }
+
+    pub fn get_serverid(&self) -> Option<std::net::Ipv4Addr> {
+        self.get_option::<std::net::Ipv4Addr>(&OPTION_SERVERID)
+    }
+
+    pub fn get_clientid(&self) -> Option<Vec<u8>> {
+        self.get_option::<Vec<u8>>(&OPTION_CLIENTID)
+    }
+
     pub fn get_address_request(&self) -> Option<net::Ipv4Addr> {
-        self.other
-            .get(&OPTION_ADDRESSREQUEST)
-            .map(|addr| net::Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]))
+        self.get_option::<std::net::Ipv4Addr>(&OPTION_LEASETIME)
+    }
+
+    pub fn get_messagetype(&self) -> Option<MessageType> {
+        self.get_option::<MessageType>(&OPTION_MSGTYPE)
+    }
+
+    pub fn set_raw_option(mut self, option: &DhcpOption, value: &[u8]) -> Self {
+        self.other.insert(option.clone(), value.to_vec());
+        self
+    }
+
+    pub fn set_option<T: Serialise>(self, option: &DhcpOption, value: &T) -> Self {
+        let mut v = Vec::new();
+        value.serialise(&mut v);
+        self.set_raw_option(option, &v)
+    }
+
+    pub fn maybe_set_option<T: Serialise>(self, option: &DhcpOption, value: Option<&T>) -> Self {
+        if let Some(v) = value {
+            self.set_option(option, v)
+        } else {
+            self
+        }
+    }
+
+    pub fn remove_option(mut self, option: &DhcpOption) -> Self {
+        self.other.remove(option);
+        self
     }
 }
 
@@ -623,34 +712,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
         Err(x) => return Err(x),
     }
 
-    let messagetype = raw_options.remove(&OPTION_MSGTYPE);
-
-    let messagetype = messagetype
-        .filter(|m| !m.is_empty()) // TODO: should be ==, but fuzzing
-        .ok_or(ParseError::InvalidPacket)?[0];
-
-    let serverid = raw_options
-        .remove(&OPTION_SERVERID)
-        .filter(|sid| sid.len() == 4)
-        .map(|sid| net::Ipv4Addr::new(sid[0], sid[1], sid[2], sid[3]));
-
-    let options = DhcpOptions {
-        messagetype: MessageType(messagetype),
-        hostname: raw_options
-            .remove(&OPTION_HOSTNAME)
-            .and_then(|host| String::from_utf8(null_terminated(host).to_vec()).ok()),
-        leasetime: raw_options.remove(&OPTION_ADDRESSLEASETIME).map(|dur| {
-            std::time::Duration::from_secs(dur.iter().fold(0u64, |acc, &v| (acc << 8) + (v as u64)))
-        }),
-        parameterlist: raw_options.remove(&OPTION_PARAMLIST).map(|l| {
-            l.iter()
-                .map(|&x| DhcpOption(x))
-                .collect::<Vec<DhcpOption>>()
-        }),
-        serveridentifier: serverid,
-        clientidentifier: raw_options.remove(&OPTION_CLIENTID),
-        other: raw_options,
-    };
+    let options = DhcpOptions { other: raw_options };
 
     Ok(DHCP {
         op: DhcpOp(op),
@@ -671,7 +733,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
     })
 }
 
-trait Serialise {
+pub trait Serialise {
     fn serialise(&self, v: &mut Vec<u8>);
 }
 
@@ -711,7 +773,27 @@ impl Serialise for DhcpOption {
     }
 }
 
-fn serialise_bytes<T>(option: DhcpOption, bytes: &[T], v: &mut Vec<u8>)
+impl Serialise for &[u8] {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        v.extend(*self);
+    }
+}
+
+impl Serialise for MessageType {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        self.0.serialise(v);
+    }
+}
+
+impl<T: Serialise> Serialise for Vec<T> {
+    fn serialise(&self, v: &mut Vec<u8>) {
+        for i in self {
+            i.serialise(v);
+        }
+    }
+}
+
+fn serialise_option<T>(option: DhcpOption, bytes: &[T], v: &mut Vec<u8>)
 where
     T: Serialise,
 {
@@ -724,35 +806,8 @@ where
 
 impl Serialise for DhcpOptions {
     fn serialise(&self, v: &mut Vec<u8>) {
-        /* Serialise DHCP Message Type */
-        serialise_bytes(OPTION_MSGTYPE, &[self.messagetype.0], v);
-
-        if let Some(h) = &self.hostname {
-            serialise_bytes(OPTION_HOSTNAME, h.as_bytes(), v);
-        }
-
-        if let Some(l) = &self.leasetime {
-            serialise_bytes(
-                OPTION_ADDRESSLEASETIME,
-                &(l.as_secs() as u32).to_be_bytes(),
-                v,
-            );
-        }
-
-        if let Some(si) = &self.serveridentifier {
-            serialise_bytes(OPTION_SERVERID, &si.octets(), v);
-        }
-
-        if let Some(ci) = &self.clientidentifier {
-            serialise_bytes(OPTION_CLIENTID, &ci, v);
-        }
-
-        if let Some(p) = &self.parameterlist {
-            serialise_bytes(OPTION_PARAMLIST, p.as_slice(), v);
-        }
-
         for (o, p) in self.other.iter() {
-            serialise_bytes(*o, p, v);
+            serialise_option(*o, p, v);
         }
 
         /* Add end of options marker */
@@ -798,8 +853,7 @@ impl DHCP {
 
     pub fn get_client_id(&self) -> Vec<u8> {
         self.options
-            .clientidentifier
-            .clone()
+            .get_clientid()
             .unwrap_or_else(|| self.chaddr.clone())
     }
 }

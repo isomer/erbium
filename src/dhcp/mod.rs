@@ -48,6 +48,7 @@ pub enum DhcpError {
     ParseError(dhcppkt::ParseError),
     InternalError(String),
     OtherServer,
+    NoPolicyConfigured,
 }
 
 impl std::error::Error for DhcpError {
@@ -64,6 +65,7 @@ impl std::fmt::Display for DhcpError {
             DhcpError::ParseError(e) => write!(f, "Parse Error: {:?}", e),
             DhcpError::InternalError(e) => write!(f, "Internal Error: {:?}", e),
             DhcpError::OtherServer => write!(f, "Packet for a different DHCP server"),
+            DhcpError::NoPolicyConfigured => write!(f, "No policy configured for client"),
         }
     }
 }
@@ -109,7 +111,7 @@ impl std::default::Default for DHCPRequest {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 enum PolicyMatch {
     NoMatch,
     MatchFailed,
@@ -119,14 +121,6 @@ enum PolicyMatch {
 fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
     let mut outcome = PolicyMatch::NoMatch;
     //if let Some(policy.match_interface ...
-    if let Some(match_hostname) = &policy.match_hostname {
-        outcome = PolicyMatch::MatchSucceeded;
-        if let Some(hostname) = &req.pkt.options.hostname {
-            if hostname != match_hostname {
-                return PolicyMatch::MatchFailed;
-            }
-        }
-    }
     if let Some(match_vendorstr) = &policy.match_vendorstr {
         outcome = PolicyMatch::MatchSucceeded;
         if let Some(vendorstr) = &req.pkt.options.other.get(&dhcppkt::OPTION_VENDOR_CLASS) {
@@ -143,14 +137,6 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
             }
         }
     }
-    if let Some(match_clientid) = &policy.match_clientid {
-        outcome = PolicyMatch::MatchSucceeded;
-        if let Some(clientid) = &req.pkt.options.clientidentifier {
-            if clientid.as_slice() != match_clientid.as_bytes() {
-                return PolicyMatch::MatchFailed;
-            }
-        }
-    }
     if let Some(match_chaddr) = &policy.match_chaddr {
         outcome = PolicyMatch::MatchSucceeded;
         if req.pkt.chaddr != *match_chaddr {
@@ -160,6 +146,12 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
     if let Some(match_subnet) = &policy.match_subnet {
         outcome = PolicyMatch::MatchSucceeded;
         if !match_subnet.contains(req.serverip) {
+            println!(
+                "Failed {:?} vs {:?}: {:?}",
+                match_subnet,
+                req.serverip,
+                match_subnet.contains(req.serverip)
+            );
             return PolicyMatch::MatchFailed;
         }
     }
@@ -168,12 +160,16 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
         if let Some(v) = req.pkt.options.other.get(k) {
             outcome = PolicyMatch::MatchSucceeded;
             if &m.as_bytes() != v {
+                println!("{:?} != {:?}", m, v);
                 return PolicyMatch::MatchFailed;
             }
         } else {
+            println!("Missing {:?}", k);
             return PolicyMatch::MatchFailed;
         }
     }
+
+    println!("Returning outcome: {:?}", outcome);
 
     outcome
 }
@@ -202,7 +198,10 @@ fn apply_policy(req: &DHCPRequest, policy: &config::Policy, response: &mut Respo
     }
 
     if let Some(address) = &policy.apply_address {
-        response.address = Some(address.clone()); /* I tried to make the lifetimes worked, and failed */
+        response.address = Some(address.clone()); /* HELP: I tried to make the lifetimes worked, and failed */
+        println!("Applying addresses: {:?}", response.address);
+    } else {
+        println!("No addresses to apply");
     }
 
     /* And check to see if a subpolicy also matches */
@@ -252,18 +251,19 @@ fn handle_discover<'l>(
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     let mut response: Response = Response {
         options: dhcppkt::DhcpOptions {
-            messagetype: dhcppkt::DHCPOFFER,
-            hostname: req.pkt.options.hostname.clone(),
-            parameterlist: None,
-            leasetime: None,
-            serveridentifier: Some(req.serverip),
-            clientidentifier: req.pkt.options.clientidentifier.clone(),
             other: collections::HashMap::new(),
-        },
+        }
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
+        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
+        .maybe_set_option(
+            &dhcppkt::OPTION_CLIENTID,
+            req.pkt.options.get_clientid().as_ref(),
+        ),
         ..Default::default()
     };
-    let policy = apply_policies(req, &conf.dhcp.policies, &mut response);
-    if let Some(addresses) = response.address {
+    if !apply_policies(req, &conf.dhcp.policies, &mut response) {
+        Err(DhcpError::NoPolicyConfigured)
+    } else if let Some(addresses) = response.address {
         match pools.allocate_address(
             &req.pkt.get_client_id(),
             req.pkt.options.get_address_request(),
@@ -284,10 +284,10 @@ fn handle_discover<'l>(
                 chaddr: req.pkt.chaddr.clone(),
                 sname: vec![],
                 file: vec![],
-                options: dhcppkt::DhcpOptions {
-                    serveridentifier: Some(req.serverip),
-                    ..response.options
-                },
+                options: response
+                    .options
+                    .clone()
+                    .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
             }),
             Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
             Err(e) => Err(DhcpError::InternalError(e.to_string())),
@@ -303,25 +303,26 @@ fn handle_request(
     serverids: ServerIds,
     conf: &super::config::Config,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
-    if let Some(si) = req.pkt.options.serveridentifier {
+    if let Some(si) = req.pkt.options.get_serverid() {
         if !serverids.contains(&si) {
             return Err(DhcpError::OtherServer);
         }
     }
     let mut response: Response = Response {
         options: dhcppkt::DhcpOptions {
-            messagetype: dhcppkt::DHCPOFFER,
-            hostname: req.pkt.options.hostname.clone(),
-            parameterlist: None,
-            leasetime: None,
-            serveridentifier: Some(req.serverip),
-            clientidentifier: req.pkt.options.clientidentifier.clone(),
             other: collections::HashMap::new(),
-        },
+        }
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
+        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
+        .maybe_set_option(
+            &dhcppkt::OPTION_CLIENTID,
+            req.pkt.options.get_clientid().as_ref(),
+        ),
         ..Default::default()
     };
-    let policy = apply_policies(req, &conf.dhcp.policies, &mut response);
-    if let Some(addresses) = response.address {
+    if !apply_policies(req, &conf.dhcp.policies, &mut response) {
+        Err(DhcpError::NoPolicyConfigured)
+    } else if let Some(addresses) = response.address {
         match pools.allocate_address(
             &req.pkt.get_client_id(),
             req.pkt.options.get_address_request(),
@@ -343,14 +344,18 @@ fn handle_request(
                 sname: vec![],
                 file: vec![],
                 options: dhcppkt::DhcpOptions {
-                    messagetype: dhcppkt::DHCPACK,
-                    hostname: req.pkt.options.hostname.clone(),
-                    parameterlist: None,
-                    leasetime: Some(lease.expire),
-                    serveridentifier: req.pkt.options.serveridentifier,
-                    clientidentifier: req.pkt.options.clientidentifier.clone(),
                     other: collections::HashMap::new(),
-                },
+                }
+                .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPACK)
+                .set_option(
+                    &dhcppkt::OPTION_SERVERID,
+                    &req.pkt.options.get_serverid().unwrap_or(req.serverip),
+                )
+                .maybe_set_option(
+                    &dhcppkt::OPTION_CLIENTID,
+                    req.pkt.options.get_clientid().as_ref(),
+                )
+                .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32)),
             }),
             Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
             Err(e) => Err(DhcpError::InternalError(e.to_string())),
@@ -377,10 +382,13 @@ pub fn handle_pkt(
                 serverip: dst,
                 ifindex: intf,
             };
-            match request.pkt.options.messagetype {
-                dhcppkt::DHCPDISCOVER => handle_discover(&mut pools, &request, serverids, conf),
-                dhcppkt::DHCPREQUEST => handle_request(&mut pools, &request, serverids, conf),
-                x => Err(DhcpError::UnknownMessageType(x)),
+            match request.pkt.options.get_messagetype() {
+                Some(dhcppkt::DHCPDISCOVER) => {
+                    handle_discover(&mut pools, &request, serverids, conf)
+                }
+                Some(dhcppkt::DHCPREQUEST) => handle_request(&mut pools, &request, serverids, conf),
+                Some(x) => Err(DhcpError::UnknownMessageType(x)),
+                None => Err(DhcpError::ParseError(dhcppkt::ParseError::InvalidPacket)),
             }
         }
         Err(e) => Err(DhcpError::ParseError(e)),
@@ -445,7 +453,7 @@ async fn recvdhcp(
         &lockedconf,
     ) {
         Ok(r) => {
-            if let Some(si) = r.options.serveridentifier {
+            if let Some(si) = r.options.get_serverid() {
                 serverids.lock().await.insert(si);
             }
             //println!("Reply: {:?}", r);
@@ -471,7 +479,7 @@ async fn recvdhcp(
                 println!("Not a usable LinkLayer?!");
             }
         }
-        Err(e) => println!("Error processing DHCP Packet from {:?}: {:?}", src, e),
+        Err(e) => println!("Error processing DHCP Packet to {:?}: {:?}", dst, e),
     }
 }
 

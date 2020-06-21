@@ -301,10 +301,9 @@ impl Pool {
 
         self.conn
             .execute(
-                "INSERT INTO leases (address, clientid, start, expiry)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT (address) DO
-             UPDATE SET clientid=?2, start=?3, expiry=?4",
+                "INSERT OR REPLACE
+                 INTO leases (address, clientid, start, expiry)
+                 VALUES (?1, ?2, ?3, ?4)",
                 rusqlite::params![
                     lease.ip.to_string(),
                     clientid,

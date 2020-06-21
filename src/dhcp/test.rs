@@ -55,11 +55,10 @@ fn mk_dhcp_request_pkt() -> dhcppkt::DHCP {
         sname: vec![],
         file: vec![],
         options: dhcppkt::DhcpOptions {
-            messagetype: dhcppkt::DHCPREQUEST,
-            hostname: Some("example.org".to_string()),
-            parameterlist: Some(vec![dhcppkt::OPTION_HOSTNAME]),
             ..Default::default()
-        },
+        }
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST)
+        .set_option(&dhcppkt::OPTION_HOSTNAME, &vec![dhcppkt::OPTION_HOSTNAME]),
     }
 }
 
@@ -93,16 +92,13 @@ fn mk_default_config() -> crate::config::Config {
 #[test]
 fn test_parsing_inverse_serialising() {
     let mut orig_pkt = mk_dhcp_request();
-    orig_pkt.pkt.options.hostname = Some("host.example.org".into());
-    orig_pkt.pkt.options.leasetime = Some(std::time::Duration::from_secs(321));
-    orig_pkt.pkt.options.serveridentifier = Some(SERVER_IP);
-    orig_pkt.pkt.options.clientidentifier =
-        Some(String::from("Client Identifier").as_bytes().to_vec());
-    orig_pkt
+    orig_pkt.pkt.options = orig_pkt
         .pkt
         .options
-        .other
-        .insert(dhcppkt::OPTION_NTPSERVERS, vec![192, 0, 2, 1]);
+        .set_option(&dhcppkt::OPTION_LEASETIME, &(321 as u32))
+        .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP)
+        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_NTPSERVERS, &EXAMPLE_IP4);
     let bytes = orig_pkt.pkt.serialise();
     let new_pkt = dhcppkt::parse(bytes.as_slice()).expect("Failed to parse DHCP packet");
     assert!(
@@ -123,11 +119,12 @@ fn test_parsing_inverse_serialising() {
 #[test]
 fn test_handle_pkt() {
     let mut orig_pkt = mk_dhcp_request();
-    orig_pkt.pkt.options.hostname = Some("host.example.org".into());
-    orig_pkt.pkt.options.leasetime = Some(std::time::Duration::from_secs(321));
-    orig_pkt.pkt.options.serveridentifier = Some(SERVER_IP);
-    orig_pkt.pkt.options.clientidentifier =
-        Some(String::from("Client Identifier").as_bytes().to_vec());
+    orig_pkt.pkt.options = orig_pkt
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_LEASETIME, &321u32)
+        .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP);
     let bytes = orig_pkt.pkt.serialise();
 
     let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
@@ -142,11 +139,13 @@ fn test_handle_pkt() {
 fn truncated_pkt() {
     /* Check that truncated packets don't cause panics or other problems */
     let mut orig_pkt = mk_dhcp_request();
-    orig_pkt.pkt.options.hostname = Some("host.example.org".into());
-    orig_pkt.pkt.options.leasetime = Some(std::time::Duration::from_secs(321));
-    orig_pkt.pkt.options.serveridentifier = Some(SERVER_IP);
-    orig_pkt.pkt.options.clientidentifier =
-        Some(String::from("Client Identifier").as_bytes().to_vec());
+    Some(String::from("Client Identifier").as_bytes().to_vec());
+    orig_pkt.pkt.options = orig_pkt
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_LEASETIME, &(321u32))
+        .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP);
     let bytes = orig_pkt.pkt.serialise();
     for i in 0..(bytes.len() - 1) {
         match dhcppkt::parse(&bytes[0..i]) {
@@ -285,7 +284,7 @@ async fn server_address_set() {
     assert_ne!(
         reply
             .options
-            .serveridentifier
+            .get_serverid()
             .expect("server identifier not set on repliy"),
         net::Ipv4Addr::UNSPECIFIED,
         "server identifier is not set on replies"
@@ -299,7 +298,10 @@ async fn ignore_other_request() {
     ));
     let mut p = pools.lock().await;
     let mut pkt = mk_dhcp_request();
-    pkt.pkt.options.serveridentifier = Some(NOT_SERVER_IP);
+    pkt.pkt.options = pkt
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_SERVERID, &NOT_SERVER_IP);
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     serverids.insert(SERVER_IP2);
@@ -382,7 +384,11 @@ async fn ignore_other_request() {
 #[test]
 fn client_identifier_or_chaddr() {
     let mut ci = mk_dhcp_request();
-    ci.pkt.options.clientidentifier = Some(vec![1, 2, 3]);
+    ci.pkt.options = ci
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &vec![1u8, 2, 3]);
+    println!("{:?}", ci.pkt.options);
     assert_eq!(
         ci.pkt.get_client_id(),
         vec![1, 2, 3],
@@ -390,7 +396,7 @@ fn client_identifier_or_chaddr() {
     );
 
     let mut ch = mk_dhcp_request();
-    ch.pkt.options.clientidentifier = None;
+    ch.pkt.options = ch.pkt.options.remove_option(&dhcppkt::OPTION_CLIENTID);
     assert_eq!(
         ch.pkt.get_client_id(),
         vec![
