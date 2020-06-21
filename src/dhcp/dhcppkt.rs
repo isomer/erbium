@@ -167,48 +167,275 @@ pub struct DhcpOption(u8);
 pub const OPTION_SUBNETMASK: DhcpOption = DhcpOption(1);
 pub const OPTION_TIMEOFFSET: DhcpOption = DhcpOption(2);
 pub const OPTION_ROUTERADDR: DhcpOption = DhcpOption(3);
+pub const OPTION_TIMESERVER: DhcpOption = DhcpOption(4);
+pub const OPTION_NAMESERVER: DhcpOption = DhcpOption(5);
 pub const OPTION_DOMAINSERVER: DhcpOption = DhcpOption(6);
+pub const OPTION_LOGSERVER: DhcpOption = DhcpOption(7);
+pub const OPTION_QUOTESERVER: DhcpOption = DhcpOption(8);
+pub const OPTION_LPRSERVER: DhcpOption = DhcpOption(9);
+pub const OPTION_IMPRESSSERVER: DhcpOption = DhcpOption(10);
+pub const OPTION_RLPSERVER: DhcpOption = DhcpOption(11);
 pub const OPTION_HOSTNAME: DhcpOption = DhcpOption(12);
 pub const OPTION_DOMAINNAME: DhcpOption = DhcpOption(15);
+pub const OPTION_ROOTPATH: DhcpOption = DhcpOption(17);
+pub const OPTION_EXTFILE: DhcpOption = DhcpOption(18);
+pub const OPTION_FORWARD: DhcpOption = DhcpOption(19);
+pub const OPTION_SRCRT: DhcpOption = DhcpOption(20);
+pub const OPTION_MAXDGASSM: DhcpOption = DhcpOption(21);
+pub const OPTION_TTL: DhcpOption = DhcpOption(23);
+pub const OPTION_MTUTMOUT: DhcpOption = DhcpOption(24);
 pub const OPTION_MTUIF: DhcpOption = DhcpOption(26);
-pub const OPTION_BROADCASTADDR: DhcpOption = DhcpOption(28);
+pub const OPTION_MTUSUB: DhcpOption = DhcpOption(27);
+pub const OPTION_BROADCAST: DhcpOption = DhcpOption(28);
+pub const OPTION_MASKDISCOVERY: DhcpOption = DhcpOption(29);
+pub const OPTION_MASKSUPPLIER: DhcpOption = DhcpOption(30);
+pub const OPTION_RTRDISCOVERY: DhcpOption = DhcpOption(31);
+pub const OPTION_RTRREQ: DhcpOption = DhcpOption(32);
+pub const OPTION_TRAILERS: DhcpOption = DhcpOption(34);
+pub const OPTION_ARPTIMEOUT: DhcpOption = DhcpOption(35);
+pub const OPTION_ETHERNET: DhcpOption = DhcpOption(36);
+pub const OPTION_TCPTTL: DhcpOption = DhcpOption(37);
+pub const OPTION_TCPKEEPALIVE: DhcpOption = DhcpOption(38);
+pub const OPTION_TCPKEEPALIVEGARBAGE: DhcpOption = DhcpOption(39);
+pub const OPTION_NISDOMAIN: DhcpOption = DhcpOption(40);
+pub const OPTION_NISSERVERS: DhcpOption = DhcpOption(41);
 pub const OPTION_NTPSERVERS: DhcpOption = DhcpOption(42);
 pub const OPTION_NETBIOSNAMESRV: DhcpOption = DhcpOption(44);
+pub const OPTION_NETBIOSDISTSRV: DhcpOption = DhcpOption(45);
+pub const OPTION_NETBIOSTYPE: DhcpOption = DhcpOption(46);
 pub const OPTION_NETBIOSSCOPE: DhcpOption = DhcpOption(47);
+pub const OPTION_XWFONTSRVS: DhcpOption = DhcpOption(48);
+pub const OPTION_XWDISPLAY: DhcpOption = DhcpOption(49);
 pub const OPTION_ADDRESSREQUEST: DhcpOption = DhcpOption(50);
 pub const OPTION_ADDRESSLEASETIME: DhcpOption = DhcpOption(51);
 pub const OPTION_MSGTYPE: DhcpOption = DhcpOption(53);
 pub const OPTION_SERVERID: DhcpOption = DhcpOption(54);
 pub const OPTION_PARAMLIST: DhcpOption = DhcpOption(55);
+pub const OPTION_MESSAGE: DhcpOption = DhcpOption(56);
+pub const OPTION_MAXMSGSIZE: DhcpOption = DhcpOption(57);
+pub const OPTION_RENEWALTIME: DhcpOption = DhcpOption(58);
+pub const OPTION_REBINDTIME: DhcpOption = DhcpOption(59);
 pub const OPTION_VENDOR_CLASS: DhcpOption = DhcpOption(60);
 pub const OPTION_CLIENTID: DhcpOption = DhcpOption(61);
-pub const OPTION_USER_CLASS: DhcpOption = DhcpOption(77); /* RFC3004 */
+pub const OPTION_NIS3DOMAIN: DhcpOption = DhcpOption(64);
+pub const OPTION_NIS3SERVERS: DhcpOption = DhcpOption(65);
+pub const OPTION_HOMEAGENT: DhcpOption = DhcpOption(68);
+pub const OPTION_SMTP: DhcpOption = DhcpOption(69);
+pub const OPTION_POP3: DhcpOption = DhcpOption(70);
+pub const OPTION_NNTP: DhcpOption = DhcpOption(71);
+pub const OPTION_WWW: DhcpOption = DhcpOption(72);
+pub const OPTION_FINGER: DhcpOption = DhcpOption(73);
+pub const OPTION_IRC: DhcpOption = DhcpOption(74);
+pub const OPTION_STREETTALK: DhcpOption = DhcpOption(75);
+pub const OPTION_STDA: DhcpOption = DhcpOption(76);
+pub const OPTION_USERCLASS: DhcpOption = DhcpOption(77); /* RFC3004 */
 pub const OPTION_FQDN: DhcpOption = DhcpOption(81); /* RFC4702 */
 pub const OPTION_PCODE: DhcpOption = DhcpOption(100); /* RFC4833 */
 pub const OPTION_TCODE: DhcpOption = DhcpOption(101); /* RFC4833 */
-pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
-pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
+pub const OPTION_AUTOCONF: DhcpOption = DhcpOption(103);
+pub const OPTION_SUBNETSELECT: DhcpOption = DhcpOption(104);
+//pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
+//pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
+pub const OPTION_CAPTIVEPORTAL: DhcpOption = DhcpOption(160);
 
-pub fn name_to_option(name: &str) -> Option<DhcpOption> {
-    match name {
-        "domain-name" => Some(OPTION_DOMAINNAME),
-        "routers" => Some(OPTION_ROUTERADDR),
-        "tz" => Some(OPTION_PCODE),
-        "tzdb" => Some(OPTION_TCODE),
-        "hostname" => Some(OPTION_HOSTNAME),
-        _ => None,
-    }
-}
+const OPT_INFO: &'static [(&'static str, DhcpOption, DhcpOptionType)] = &[
+    ("subnet-mask", OPTION_SUBNETMASK, DhcpOptionType::Ip),
+    ("time-offset", OPTION_TIMEOFFSET, DhcpOptionType::I32),
+    ("routers", OPTION_ROUTERADDR, DhcpOptionType::IpList),
+    ("time-server", OPTION_TIMESERVER, DhcpOptionType::IpList),
+    ("name-server", OPTION_NAMESERVER, DhcpOptionType::IpList),
+    ("dns-server", OPTION_DOMAINSERVER, DhcpOptionType::IpList),
+    ("log-server", OPTION_LOGSERVER, DhcpOptionType::IpList),
+    ("quote-server", OPTION_QUOTESERVER, DhcpOptionType::IpList),
+    ("lpr-server", OPTION_LPRSERVER, DhcpOptionType::IpList),
+    // 10
+    (
+        "impress-server",
+        OPTION_IMPRESSSERVER,
+        DhcpOptionType::IpList,
+    ),
+    ("rlp-server", OPTION_RLPSERVER, DhcpOptionType::IpList),
+    ("hostname", OPTION_HOSTNAME, DhcpOptionType::String),
+    //("bootfile-size", OPTION_BOOTFILESZ, DhcpOptionType::u16),
+    //("merit-dump-file", OPTION_MRTDUMPF, ...)
+    ("domain-name", OPTION_DOMAINNAME, DhcpOptionType::String),
+    //("swap-server", OPTION_SWAPSRV, ...)
+    ("root-path", OPTION_ROOTPATH, DhcpOptionType::String),
+    ("extension-file", OPTION_EXTFILE, DhcpOptionType::String),
+    ("forward", OPTION_FORWARD, DhcpOptionType::Bool),
+    // 20
+    ("source-route", OPTION_SRCRT, DhcpOptionType::Bool),
+    //("policy-filter", OPTION_POLICYFLT, DhcpOptionType::...),
+    (
+        "max-reassembly",
+        OPTION_MAXDGASSM,
+        DhcpOptionType::Seconds16,
+    ),
+    ("default-ttl", OPTION_TTL, DhcpOptionType::U8),
+    ("mtu-timeout", OPTION_MTUTMOUT, DhcpOptionType::Seconds32),
+    //("mtu-plateu", OPTION_MTUPLATEAU, DhcpOptionType::...), [u16]
+    ("mtu", OPTION_MTUIF, DhcpOptionType::U16),
+    ("mtu-subnet", OPTION_MTUSUB, DhcpOptionType::Bool),
+    ("broadcast", OPTION_BROADCAST, DhcpOptionType::Ip),
+    ("mask-discovery", OPTION_MASKDISCOVERY, DhcpOptionType::Bool),
+    // 30
+    ("mask-supplier", OPTION_MASKSUPPLIER, DhcpOptionType::Bool),
+    (
+        "router-discovery",
+        OPTION_RTRDISCOVERY,
+        DhcpOptionType::Bool,
+    ),
+    ("router-request", OPTION_RTRREQ, DhcpOptionType::Ip),
+    //("static-route",  OPTION_STATICROUTE, DhcpOptionType::...), // Needs special handling.
+    ("trailers", OPTION_TRAILERS, DhcpOptionType::Bool),
+    ("arp-timeout", OPTION_ARPTIMEOUT, DhcpOptionType::Seconds32),
+    ("ethernet", OPTION_ETHERNET, DhcpOptionType::Bool),
+    ("tcp-ttl", OPTION_TCPTTL, DhcpOptionType::U16),
+    (
+        "tcp-keepalive",
+        OPTION_TCPKEEPALIVE,
+        DhcpOptionType::Seconds32,
+    ),
+    (
+        "tcp-keepalive-garbage",
+        OPTION_TCPKEEPALIVEGARBAGE,
+        DhcpOptionType::Bool,
+    ),
+    // 40
+    ("nis-domain", OPTION_NISDOMAIN, DhcpOptionType::String),
+    ("nis-servers", OPTION_NISSERVERS, DhcpOptionType::IpList),
+    ("ntp-servers", OPTION_NTPSERVERS, DhcpOptionType::IpList),
+    // vendor specific options should be handled specially.
+    (
+        "netbios-namesrv",
+        OPTION_NETBIOSNAMESRV,
+        DhcpOptionType::IpList,
+    ),
+    (
+        "netbios-distsrv",
+        OPTION_NETBIOSDISTSRV,
+        DhcpOptionType::IpList,
+    ),
+    ("netbios-type", OPTION_NETBIOSTYPE, DhcpOptionType::U8), /* enum? */
+    ("netbios-scope", OPTION_NETBIOSSCOPE, DhcpOptionType::String),
+    (
+        "xwindow-font-servers",
+        OPTION_XWFONTSRVS,
+        DhcpOptionType::IpList,
+    ),
+    ("xwindow-display", OPTION_XWDISPLAY, DhcpOptionType::IpList),
+    // address-request, handled specially.
+    // address-time, handled specially.
+    // overload, handled specially.
+    // dhcp msg type, handled specially.
+    ("server-id", OPTION_SERVERID, DhcpOptionType::Ip),
+    // parameter list, handled specially.
+    ("message", OPTION_MESSAGE, DhcpOptionType::String),
+    ("max-size", OPTION_MAXMSGSIZE, DhcpOptionType::U16),
+    (
+        "renewal-time",
+        OPTION_RENEWALTIME,
+        DhcpOptionType::Seconds16,
+    ), // seconds
+    ("rebind-time", OPTION_REBINDTIME, DhcpOptionType::Seconds16), // seconds
+    // 60
+    ("class-id", OPTION_VENDOR_CLASS, DhcpOptionType::String),
+    ("client-id", OPTION_CLIENTID, DhcpOptionType::String),
+    // netware
+    // netware
+    ("nisplus-domain", OPTION_NIS3DOMAIN, DhcpOptionType::String),
+    (
+        "nisplus-servers",
+        OPTION_NIS3SERVERS,
+        DhcpOptionType::IpList,
+    ),
+    //("tftp-server",  OPTION_TFTPSERVER, DhcpOptionType::String), handled specially.
+    //bootfile name, handled specially.
+    (
+        "home-agent-servers",
+        OPTION_HOMEAGENT,
+        DhcpOptionType::IpList,
+    ),
+    ("smtp-servers", OPTION_SMTP, DhcpOptionType::IpList),
+    // 70
+    ("pop3-servers", OPTION_POP3, DhcpOptionType::IpList),
+    ("nntp-servers", OPTION_NNTP, DhcpOptionType::IpList),
+    ("www-servers", OPTION_WWW, DhcpOptionType::IpList),
+    ("finger-servers", OPTION_FINGER, DhcpOptionType::IpList),
+    ("irc-servers", OPTION_IRC, DhcpOptionType::IpList),
+    (
+        "streettalk-servers",
+        OPTION_STREETTALK,
+        DhcpOptionType::IpList,
+    ),
+    ("stda-servers", OPTION_STDA, DhcpOptionType::IpList),
+    ("user-class", OPTION_USERCLASS, DhcpOptionType::String),
+    //("directory-agent", OPTION_
+    //("server-scope"
+    //("rapid-commit"
+    // 80
+    ("fqdn", OPTION_FQDN, DhcpOptionType::String),
+    // option 82 (relay agent information) needs special handling.
+    // iSNS
+    // NDS Servers
+    // NDS Tree
+    // NDS Context
+    // BCMCS
+    // BCMCS
+    // 90
+    // Authentication, needs special handling
+    // client-last-transaction-time, RFC4388
+    // associated-ip, RFC4388
+    // client-system, RFC4578
+    // client-ndi, RFC4578
+    // ldap, RFC3679
+    //
+    //("uuid",      OPTION_UUID,       DhcpOptionType::String), RFC4578
+    // userauth, RFC2485
+    // geoconf civic, RFC4776
+    // 100
+    ("tz-rule", OPTION_PCODE, DhcpOptionType::String),
+    ("tz-name", OPTION_TCODE, DhcpOptionType::String),
+    // uuid/guid
+    ("autoconfig", OPTION_AUTOCONF, DhcpOptionType::Bool),
+    ("subnet-selection", OPTION_SUBNETSELECT, DhcpOptionType::Ip), // RFC3011 -- needs better support
+    //("search-path", OPTION_DNSSEARCH, DhcpOptionType::...), // RFC3397
+    //("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::...), // RFC3361
+    //121: classless routes, RFC3442 -- Don't intend to implement.
+    //122: Cablelabs Client configuration, RFC3495
+    //123: GeoConf, RFC6225
+    //124: Vendor Identifying Vendor Class -- needs special support, RFC3925
+    //125: Vendor Identifying Vendor Specific Information -- needs special support, RFC3925
+    (
+        "captive-portal",
+        OPTION_CAPTIVEPORTAL,
+        DhcpOptionType::String,
+    ),
+];
 
+#[derive(Copy, Clone)]
 pub enum DhcpOptionType {
     String,
+    Ip,
     IpList,
+    I32,
+    U8,
+    U16,
+    U32,
+    Bool,
+    Seconds16,
+    Seconds32,
 }
 
 #[derive(Debug, Clone)]
 pub enum DhcpOptionTypeValue {
     String(String),
     IpList(Vec<std::net::Ipv4Addr>),
+    Ip(std::net::Ipv4Addr),
+    I32(i32),
+    U8(u8),
+    U16(u16),
+    U32(u32),
 }
 
 impl DhcpOptionTypeValue {
@@ -221,50 +448,43 @@ impl DhcpOptionTypeValue {
                     acc
                 })
             }
+            DhcpOptionTypeValue::Ip(i) => i.octets().to_vec(),
+            DhcpOptionTypeValue::I32(x) => x.to_be_bytes().to_vec(),
+            DhcpOptionTypeValue::U8(x) => x.to_be_bytes().to_vec(),
+            DhcpOptionTypeValue::U16(x) => x.to_be_bytes().to_vec(),
+            DhcpOptionTypeValue::U32(x) => x.to_be_bytes().to_vec(),
         }
     }
 }
 
-pub fn option_to_type(opt: DhcpOption) -> Option<DhcpOptionType> {
-    match opt {
-        OPTION_DOMAINNAME => Some(DhcpOptionType::String),
-        OPTION_ROUTERADDR => Some(DhcpOptionType::IpList),
-        OPTION_PCODE => Some(DhcpOptionType::String),
-        OPTION_TCODE => Some(DhcpOptionType::String),
-        OPTION_HOSTNAME => Some(DhcpOptionType::String),
-        _ => None,
+impl DhcpOption {
+    pub fn get_type(&self) -> Option<DhcpOptionType> {
+        for (_name, option, ty) in OPT_INFO {
+            if option == self {
+                return Some(*ty);
+            }
+        }
+        None
     }
+}
+
+pub fn name_to_option(lookup_name: &str) -> Option<DhcpOption> {
+    for (name, option, _ty) in OPT_INFO {
+        if *name == lookup_name {
+            return Some(*option);
+        }
+    }
+    None
 }
 
 impl ToString for DhcpOption {
     fn to_string(&self) -> String {
-        match self {
-            &OPTION_SUBNETMASK => String::from("SUBNETMASK"),
-            &OPTION_TIMEOFFSET => String::from("TIMEOFFSET"),
-            &OPTION_ROUTERADDR => String::from("ROUTERADDR"),
-            &OPTION_DOMAINSERVER => String::from("DOMAINSERVER"),
-            &OPTION_HOSTNAME => String::from("Hostname"),
-            &OPTION_DOMAINNAME => String::from("DOMAINNAME"),
-            &OPTION_MTUIF => String::from("MTUIF"),
-            &OPTION_BROADCASTADDR => String::from("BROADCASTADDR"),
-            &OPTION_NTPSERVERS => String::from("NTPSERVERS"),
-            &OPTION_NETBIOSNAMESRV => String::from("NETBIOSNAMESRV"),
-            &OPTION_NETBIOSSCOPE => String::from("NETBIOSSCOPE"),
-            &OPTION_ADDRESSREQUEST => String::from("ADDRESSREQUEST"),
-            &OPTION_ADDRESSLEASETIME => String::from("ADDRESSLEASETIME"),
-            &OPTION_MSGTYPE => String::from("DHCP Message Type"),
-            &OPTION_SERVERID => String::from("Server Id"),
-            &OPTION_PARAMLIST => String::from("Parameter List"),
-            &OPTION_VENDOR_CLASS => String::from("vendor-class"),
-            &OPTION_CLIENTID => String::from("Client Id"),
-            &OPTION_USER_CLASS => String::from("user-class"),
-            &OPTION_FQDN => String::from("FQDN"),
-            &OPTION_DOMAINSEARCH => String::from("DOMAINSEARCH"),
-            &OPTION_CIDRROUTE => String::from("CIDRROUTE"),
-            &OPTION_PCODE => String::from("tz"),
-            &OPTION_TCODE => String::from("tzdb"),
-            DhcpOption(x) => format!("#{}", x),
+        for (name, option, _ty) in OPT_INFO {
+            if option == self {
+                return (*name).into();
+            }
         }
+        format!("#{}", self.0)
     }
 }
 

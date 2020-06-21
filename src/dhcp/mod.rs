@@ -137,7 +137,7 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
     }
     if let Some(match_userstr) = &policy.match_userstr {
         outcome = PolicyMatch::MatchSucceeded;
-        if let Some(userstr) = &req.pkt.options.other.get(&dhcppkt::OPTION_USER_CLASS) {
+        if let Some(userstr) = &req.pkt.options.other.get(&dhcppkt::OPTION_USERCLASS) {
             if userstr.as_slice() != match_userstr.as_bytes() {
                 return PolicyMatch::MatchFailed;
             }

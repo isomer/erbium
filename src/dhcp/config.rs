@@ -16,6 +16,7 @@
  *
  *  DHCP Configuration parsing.
  */
+use std::convert::TryFrom;
 use std::ops::Sub;
 use yaml_rust::yaml;
 
@@ -248,6 +249,18 @@ impl Config {
         }
     }
 
+    fn parse_number(value: &yaml::Yaml) -> Result<i64, Error> {
+        value
+            .as_i64()
+            .ok_or_else(|| Error::InvalidConfig(format!("Expected Integer, got '{:?}'", value)))
+    }
+
+    fn parse_bool(value: &yaml::Yaml) -> Result<bool, Error> {
+        value
+            .as_bool()
+            .ok_or_else(|| Error::InvalidConfig(format!("Expected Integer, got '{:?}'", value)))
+    }
+
     fn parse_generic(
         name: &str,
         value: &yaml::Yaml,
@@ -263,12 +276,43 @@ impl Config {
             use super::dhcppkt::*;
             Ok((
                 opt,
-                match option_to_type(opt) {
+                match opt.get_type() {
                     Some(DhcpOptionType::String) => {
                         DhcpOptionTypeValue::String(Config::parse_string(value)?)
                     }
                     Some(DhcpOptionType::IpList) => {
                         DhcpOptionTypeValue::IpList(Config::parse_iplist(value)?)
+                    }
+                    Some(DhcpOptionType::Ip) => DhcpOptionTypeValue::Ip(Config::parse_ip(value)?),
+                    Some(DhcpOptionType::I32) => DhcpOptionTypeValue::I32(
+                        i32::try_from(Config::parse_number(value)?)
+                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
+                    ),
+                    Some(DhcpOptionType::U8) => DhcpOptionTypeValue::U8(
+                        u8::try_from(Config::parse_number(value)?)
+                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
+                    ),
+                    Some(DhcpOptionType::U16) => DhcpOptionTypeValue::U16(
+                        u16::try_from(Config::parse_number(value)?)
+                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
+                    ),
+                    Some(DhcpOptionType::U32) => DhcpOptionTypeValue::U32(
+                        u32::try_from(Config::parse_number(value)?)
+                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
+                    ),
+                    Some(DhcpOptionType::Seconds16) => DhcpOptionTypeValue::U16(
+                        u16::try_from(Config::parse_duration(value)?.as_secs())
+                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
+                    ),
+                    Some(DhcpOptionType::Seconds32) => DhcpOptionTypeValue::U32(
+                        u32::try_from(Config::parse_duration(value)?.as_secs())
+                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
+                    ),
+                    Some(DhcpOptionType::Bool) => {
+                        DhcpOptionTypeValue::U8(match Config::parse_bool(value)? {
+                            false => 0,
+                            true => 1,
+                        })
                     }
                     None => {
                         return Err(Error::InvalidConfig(format!(
