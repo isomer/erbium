@@ -111,6 +111,15 @@ dhcp:
       - match-interface: eth0
         apply-dns-server: ['8.8.8.8', '8.8.4.4']
         apply-subnet: 192.168.0.0/24
+        apply-time-offset: 3600
+        apply-domain-name: erbium.dev
+        apply-forward: false
+        apply-mtu: 1500
+        apply-broadcast: 192.168.255.255
+        apply-rebind-time: 120
+        apply-renewal-time: 90s
+        apply-arp-timeout: 1w
+
 
         Policies:
            - { match-hostname: myhost, apply-address: 192.168.0.1 }
