@@ -237,6 +237,10 @@ impl Config {
                 ret += std::time::Duration::from_secs(n);
             }
             Ok(ret)
+        } else if let Some(s) = value.as_i64() {
+            Ok(std::time::Duration::from_secs(u64::try_from(s).map_err(
+                |_| Error::InvalidConfig("Durations cannot be negative".into()),
+            )?))
         } else {
             Err(Error::InvalidConfig(format!(
                 "Expected duration, got {:?}",
@@ -248,13 +252,13 @@ impl Config {
     fn parse_number(value: &yaml::Yaml) -> Result<i64, Error> {
         value
             .as_i64()
-            .ok_or_else(|| Error::InvalidConfig(format!("Expected Integer, got '{:?}'", value)))
+            .ok_or_else(|| Error::InvalidConfig(format!("Expected Number, got '{:?}'", value)))
     }
 
     fn parse_bool(value: &yaml::Yaml) -> Result<bool, Error> {
         value
             .as_bool()
-            .ok_or_else(|| Error::InvalidConfig(format!("Expected Integer, got '{:?}'", value)))
+            .ok_or_else(|| Error::InvalidConfig(format!("Expected Boolean, got '{:?}'", value)))
     }
 
     fn parse_generic(
