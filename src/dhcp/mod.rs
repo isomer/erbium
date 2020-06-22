@@ -131,12 +131,6 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
     if let Some(match_subnet) = &policy.match_subnet {
         outcome = PolicyMatch::MatchSucceeded;
         if !match_subnet.contains(req.serverip) {
-            println!(
-                "Failed {:?} vs {:?}: {:?}",
-                match_subnet,
-                req.serverip,
-                match_subnet.contains(req.serverip)
-            );
             return PolicyMatch::MatchFailed;
         }
     }
@@ -145,16 +139,12 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
         if let Some(v) = req.pkt.options.other.get(k) {
             outcome = PolicyMatch::MatchSucceeded;
             if &m.as_bytes() != v {
-                println!("{:?} != {:?}", m, v);
                 return PolicyMatch::MatchFailed;
             }
         } else {
-            println!("Missing {:?}", k);
             return PolicyMatch::MatchFailed;
         }
     }
-
-    println!("Returning outcome: {:?}", outcome);
 
     outcome
 }
@@ -546,7 +536,6 @@ pub async fn run(
 fn test_policy() {
     let cfg = config::Policy {
         match_subnet: Some(crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap()),
-        apply_dnsserver: Some(vec!["192.0.2.53".parse().unwrap()]),
         ..Default::default()
     };
     let req = DHCPRequest {
