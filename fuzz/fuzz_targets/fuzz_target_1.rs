@@ -13,7 +13,6 @@ fuzz_target!(|data: &[u8]| {
                 match_subnet: Some(
                     erbium::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
                 ),
-                apply_dnsserver: Some(vec!["192.0.2.53".parse().unwrap()]),
                 ..Default::default()
             }],
         },
