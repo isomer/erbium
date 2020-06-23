@@ -22,8 +22,7 @@ use tokio::stream::StreamExt;
 
 use erbium::*;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn go() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args_os().collect();
     if args.len() > 2 {
         println!("Usage: {} <configfile>", args[0].to_string_lossy());
@@ -47,4 +46,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Service complete: {:?}", x);
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    match go().await {
+        Ok(()) => (),
+        Err(x) => println!("Error: {}", x),
+    }
 }

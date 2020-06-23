@@ -24,8 +24,7 @@ extern crate erbium;
 
 use erbium::dhcp;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn go() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args_os().collect();
     let config_file = match args.len() {
         1 => std::path::Path::new("erbium.conf"),
@@ -46,4 +45,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    match go().await {
+        Ok(()) => (),
+        Err(x) => println!("Error: {}", x),
+    }
 }
