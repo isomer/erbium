@@ -193,17 +193,15 @@ impl Pool {
             )
             .or_else(map_no_row_to_none)?
         {
-            println!("Reusing existing lease: {:?}", lease);
-            return Ok(Lease {
-                ip: lease.0.parse::<std::net::Ipv4Addr>().map_err(|e| {
-                    Error::CorruptDatabase(format!(
-                        "Failed to parse IP: {} ({:?})",
-                        e.to_string(),
-                        lease.0
-                    ))
-                })?,
-                expire: std::time::Duration::from_secs((lease.1 - (ts as u32)).into()),
-            });
+            if let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>() {
+                if addresses.contains(&ip) {
+                    println!("Reusing existing lease: {:?}", lease);
+                    return Ok(Lease {
+                        ip,
+                        expire: std::time::Duration::from_secs((lease.1 - (ts as u32)).into()),
+                    });
+                }
+            }
         }
 
         /* o The client's previous address as recorded in the client's (now
