@@ -164,7 +164,7 @@ impl std::default::Default for MessageType {
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct DhcpOption(u8);
-pub const OPTION_SUBNETMASK: DhcpOption = DhcpOption(1);
+pub const OPTION_NETMASK: DhcpOption = DhcpOption(1);
 pub const OPTION_TIMEOFFSET: DhcpOption = DhcpOption(2);
 pub const OPTION_ROUTERADDR: DhcpOption = DhcpOption(3);
 pub const OPTION_TIMESERVER: DhcpOption = DhcpOption(4);
@@ -239,7 +239,7 @@ pub const OPTION_SUBNETSELECT: DhcpOption = DhcpOption(104);
 pub const OPTION_CAPTIVEPORTAL: DhcpOption = DhcpOption(160);
 
 const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
-    ("subnet-mask", OPTION_SUBNETMASK, DhcpOptionType::Ip),
+    ("netmask", OPTION_NETMASK, DhcpOptionType::Ip),
     ("time-offset", OPTION_TIMEOFFSET, DhcpOptionType::I32),
     ("routers", OPTION_ROUTERADDR, DhcpOptionType::IpList),
     ("time-server", OPTION_TIMESERVER, DhcpOptionType::IpList),
