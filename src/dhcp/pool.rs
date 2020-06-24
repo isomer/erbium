@@ -273,14 +273,6 @@ impl Pool {
         requested: Option<std::net::Ipv4Addr>,
         addresses: &PoolAddresses,
     ) -> Result<Lease, Error> {
-        println!(
-            "Allocating lease for {}",
-            clientid
-                .iter()
-                .map(|b| format!("{:X}", b))
-                .collect::<Vec<String>>()
-                .join(":")
-        );
         let lease = self.select_address(clientid, requested, addresses)?;
 
         let min_expire_time = std::time::Duration::from_secs(300);

@@ -354,7 +354,24 @@ pub fn handle_pkt(
     let dhcp = dhcppkt::parse(buf);
     match dhcp {
         Ok(req) => {
-            //println!("Parse: {:?}", req);
+            println!(
+                "Received {} for {} ({:?}) on {}",
+                req.options
+                    .get_messagetype()
+                    .map(|x| x.to_string())
+                    .unwrap_or("[unknown]".into()),
+                req.chaddr
+                    .iter()
+                    .map(|b| format!("{:0>2x}", b))
+                    .collect::<Vec<String>>()
+                    .join(":"),
+                String::from_utf8_lossy(
+                    &req.options
+                        .get_option::<Vec<u8>>(&dhcppkt::OPTION_HOSTNAME)
+                        .unwrap_or(vec![])
+                ),
+                intf
+            );
             let request = DHCPRequest {
                 pkt: req,
                 serverip: dst,
