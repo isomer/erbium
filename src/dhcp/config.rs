@@ -432,7 +432,7 @@ impl Config {
                             .map_err(|x| x.annotate("Failed to parse apply-subnet"))?;
                         let base: u32 = subnet.network().into();
                         let addresses = addresses.get_or_insert_with(Vec::new);
-                        for i in 1..((1 << (32 - subnet.prefixlen)) - 1) {
+                        for i in 1..(((1 << (32 - subnet.prefixlen)) - 1) - 1) {
                             addresses.push((base + i).into())
                         }
                     }
