@@ -480,17 +480,21 @@ async fn recvdhcp(
                 .get_linkaddr_by_ifidx(intf.try_into().unwrap())
                 .await
             {
-                let etherbuf = packet::Fragment::new_udp(
-                    srcip,
-                    &srcll,
-                    ip4,
-                    &to_array(&r.chaddr).unwrap(), /* TODO: Error handling */
-                    packet::Tail::Payload(&buf),
-                )
-                .flatten();
+                if let Some(chaddr) = to_array(&r.chaddr) {
+                    let etherbuf = packet::Fragment::new_udp(
+                        srcip,
+                        &srcll,
+                        ip4,
+                        &chaddr,
+                        packet::Tail::Payload(&buf),
+                    )
+                    .flatten();
 
-                if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
-                    println!("Failed to send reply to {:?}: {:?}", src, e);
+                    if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
+                        println!("Failed to send reply to {:?}: {:?}", src, e);
+                    }
+                } else {
+                    println!("Cannot send reply to invalid address {:?}", r.chaddr);
                 }
             } else {
                 println!("Not a usable LinkLayer?!");
