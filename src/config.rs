@@ -71,6 +71,11 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
     Ok(std::sync::Arc::new(tokio::sync::Mutex::new(conf)))
 }
 
+#[cfg(test)]
+pub fn load_config_from_string_for_test(cfg: &str) -> Result<SharedConfig, Error> {
+    load_config_from_string(cfg)
+}
+
 /* We support reading configs from a yaml file, _or_ a program (eg a shell script?) that outputs
  * yaml on stdout.
  *

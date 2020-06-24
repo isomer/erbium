@@ -584,3 +584,90 @@ fn test_policy() {
 
     assert_eq!(apply_policies(&req, policies.as_slice(), &mut resp), true);
 }
+
+#[tokio::test]
+async fn test_config_parse() -> Result<(), Box<dyn std::error::Error>> {
+    let cfg = crate::config::load_config_from_string_for_test(
+        "---
+dhcp:
+    Policies:
+      - match-subnet: 192.168.0.0/24
+        apply-dns-server: ['8.8.8.8', '8.8.4.4']
+        apply-subnet: 192.168.0.0/24
+        apply-time-offset: 3600
+        apply-domain-name: erbium.dev
+        apply-forward: false
+        apply-mtu: 1500
+        apply-broadcast: 192.168.255.255
+        apply-rebind-time: 120
+        apply-renewal-time: 90s
+        apply-arp-timeout: 1w
+
+
+        Policies:
+           - { match-hostname: myhost, apply-address: 192.168.0.1 }
+           - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
+
+
+      - match-interface: dmz
+        apply-dns-server: ['8.8.8.8']
+        apply-subnet: 192.0.2.0/24
+
+        # Reserve some space from the pool for servers
+        Policies:
+          - apply-range: {start: 192.0.2.10, end: 192.0.2.20}
+
+            # From the reserved pool, assign a static address.
+            Policies:
+              - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
+
+          # Reserve space for VPN endpoints
+          - match-user-class: VPN
+            apply-subnet: 192.0.2.128/25
+        ",
+    )?;
+
+    let mut resp = Response {
+        ..Default::default()
+    };
+    if !apply_policies(
+        &DHCPRequest {
+            pkt: dhcppkt::DHCP {
+                op: dhcppkt::OP_BOOTREQUEST,
+                htype: dhcppkt::HWTYPE_ETHERNET,
+                hlen: 6,
+                hops: 0,
+                xid: 0,
+                secs: 0,
+                flags: 0,
+                ciaddr: net::Ipv4Addr::UNSPECIFIED,
+                yiaddr: net::Ipv4Addr::UNSPECIFIED,
+                siaddr: net::Ipv4Addr::UNSPECIFIED,
+                giaddr: net::Ipv4Addr::UNSPECIFIED,
+                chaddr: vec![0, 1, 2, 3, 4, 5],
+                sname: vec![],
+                file: vec![],
+                options: dhcppkt::DhcpOptions {
+                    ..Default::default()
+                },
+            },
+            serverip: "192.168.0.67".parse().unwrap(),
+            ifindex: 1,
+        },
+        &cfg.lock().await.dhcp.policies,
+        &mut resp,
+    ) {
+        panic!("No policies applied");
+    }
+
+    println!("{:?}", cfg.lock().await);
+
+    assert_eq!(
+        resp.address,
+        Some(std::collections::HashSet::from_iter(
+            [std::net::Ipv4Addr::new(192, 168, 0, 2)].iter().cloned()
+        ))
+    );
+
+    Ok(())
+}
