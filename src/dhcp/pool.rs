@@ -198,7 +198,15 @@ impl Pool {
                     println!("Reusing existing lease: {:?}", lease);
                     return Ok(Lease {
                         ip,
-                        expire: std::time::Duration::from_secs((lease.1 - (ts as u32) * 2).into()),
+                        expire: std::time::Duration::from_secs(
+                            (lease
+                                .1
+                                .checked_sub(ts as u32)
+                                .unwrap_or(0)
+                                .checked_mul(2)
+                                .unwrap_or(0))
+                            .into(),
+                        ),
                     });
                 }
             }
