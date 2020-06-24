@@ -316,4 +316,7 @@ impl SharedNetInfo {
     pub async fn get_mtu_by_ifidx(&self, ifidx: u32) -> Option<u32> {
         self.0.read().await.intf.get(&ifidx).map(|x| x.mtu)
     }
+    pub async fn get_name_by_ifidx(&self, ifidx: u32) -> Option<String> {
+        self.0.read().await.intf.get(&ifidx).map(|x| x.name.clone())
+    }
 }

@@ -467,7 +467,10 @@ async fn recvdhcp(
                         .get_option::<Vec<u8>>(&dhcppkt::OPTION_HOSTNAME)
                         .unwrap_or(vec![])
                 ),
-                intf,
+                netinfo
+                    .get_name_by_ifidx(intf)
+                    .await
+                    .unwrap_or("<unknown if>".into()),
                 r.yiaddr,
                 r.options
                     .get_option::<u32>(&dhcppkt::OPTION_LEASETIME)
