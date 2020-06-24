@@ -433,6 +433,11 @@ impl Config {
                             dhcppkt::OPTION_NETMASK,
                             dhcppkt::DhcpOptionTypeValue::Ip(subnet.netmask()),
                         );
+                        // And also set the broadcast address, based on the subnet provided.
+                        policy.apply_other.insert(
+                            dhcppkt::OPTION_BROADCAST,
+                            dhcppkt::DhcpOptionTypeValue::Ip(subnet.broadcast()),
+                        );
                     }
                     Some(x) if x.starts_with("apply-") => {
                         let name = &x[6..];
