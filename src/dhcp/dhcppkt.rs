@@ -700,6 +700,9 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
     let siaddr = get_ipv4(&mut it)?;
     let giaddr = get_ipv4(&mut it)?;
     let chaddr = get_bytes(&mut it, 16)?;
+    if hlen as usize > chaddr.len() {
+        return Err(ParseError::InvalidPacket);
+    }
     let sname = null_terminated(get_bytes(&mut it, 64)?);
     let file = null_terminated(get_bytes(&mut it, 128)?);
     let mut raw_options: collections::HashMap<DhcpOption, Vec<u8>> = collections::HashMap::new();
@@ -738,7 +741,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
         yiaddr,
         siaddr,
         giaddr,
-        chaddr,
+        chaddr: chaddr[0..hlen as usize].to_vec(),
         sname,
         file,
         options,
