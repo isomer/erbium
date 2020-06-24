@@ -355,7 +355,7 @@ pub fn handle_pkt(
     match dhcp {
         Ok(req) => {
             println!(
-                "Received {} for {} ({:?}) on {}",
+                "Received {} for {} ({}) on {}",
                 req.options
                     .get_messagetype()
                     .map(|x| x.to_string())
@@ -451,6 +451,28 @@ async fn recvdhcp(
             if let Some(si) = r.options.get_serverid() {
                 serverids.lock().await.insert(si);
             }
+            println!(
+                "Sending {} for {} ({}) on {} with {} for {}",
+                r.options
+                    .get_messagetype()
+                    .map(|x| x.to_string())
+                    .unwrap_or("[unknown]".into()),
+                r.chaddr
+                    .iter()
+                    .map(|b| format!("{:0>2x}", b))
+                    .collect::<Vec<String>>()
+                    .join(":"),
+                String::from_utf8_lossy(
+                    &r.options
+                        .get_option::<Vec<u8>>(&dhcppkt::OPTION_HOSTNAME)
+                        .unwrap_or(vec![])
+                ),
+                intf,
+                r.yiaddr,
+                r.options
+                    .get_option::<u32>(&dhcppkt::OPTION_LEASETIME)
+                    .unwrap_or(0)
+            );
             //println!("Reply: {:?}", r);
             let buf = r.serialise();
             let srcip = std::net::SocketAddrV4::new(dst, 67);

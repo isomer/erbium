@@ -535,6 +535,13 @@ impl DhcpParse for u64 {
     }
 }
 
+impl DhcpParse for u32 {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        Some(v.iter().fold(0u32, |acc, &v| (acc << 8) + (v as u32)))
+    }
+}
+
 impl DhcpParse for std::time::Duration {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
