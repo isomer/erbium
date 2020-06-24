@@ -50,7 +50,6 @@ fn mk_dhcp_request_pkt() -> dhcppkt::DHCP {
         giaddr: net::Ipv4Addr::UNSPECIFIED,
         chaddr: vec![
             0x00, 0x00, 0x5E, 0x00, 0x53, 0x00, /* Reserved for documentation, per RFC7042 */
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ],
         sname: vec![],
         file: vec![],
@@ -399,10 +398,7 @@ fn client_identifier_or_chaddr() {
     ch.pkt.options = ch.pkt.options.remove_option(&dhcppkt::OPTION_CLIENTID);
     assert_eq!(
         ch.pkt.get_client_id(),
-        vec![
-            0x00, 0x00, 0x5E, 0x00, 0x53, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00,
-        ],
+        vec![0x00, 0x00, 0x5E, 0x00, 0x53, 0x00,],
         "Did not use chaddr"
     );
 }
