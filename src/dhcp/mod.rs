@@ -437,7 +437,12 @@ async fn recvdhcp(
         println!("from={:?}", src);
         unimplemented!()
     };
-    let dst = netinfo.get_ipv4_by_ifidx(intf).await.unwrap(); /* TODO: Error? */
+    let optional_dst = netinfo.get_ipv4_by_ifidx(intf).await;
+    if optional_dst.is_none() {
+        println!("No IPv4 found on interface {}", intf);
+        return;
+    }
+    let dst = optional_dst.unwrap();
     let lockedconf = conf.lock().await;
     match handle_pkt(
         &mut pool,
