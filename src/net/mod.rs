@@ -50,6 +50,9 @@ impl Ipv4Subnet {
     pub fn contains(&self, ip: std::net::Ipv4Addr) -> bool {
         u32::from(ip) & u32::from(self.netmask()) == u32::from(self.addr)
     }
+    pub fn broadcast(&self) -> std::net::Ipv4Addr {
+        (u32::from(self.network()) | !u32::from(self.netmask())).into()
+    }
 }
 
 #[test]
@@ -79,6 +82,16 @@ fn test_netmask() -> Result<(), Error> {
         "255.255.255.255".parse::<std::net::Ipv4Addr>().unwrap()
     );
     Ok(())
+}
+
+#[test]
+fn test_broadcast() {
+    assert_eq!(
+        Ipv4Subnet::new("192.168.1.0".parse().unwrap(), 24)
+            .unwrap()
+            .broadcast(),
+        std::net::Ipv4Addr::new(192, 168, 1, 255)
+    );
 }
 
 #[test]

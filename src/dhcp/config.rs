@@ -16,6 +16,7 @@
  *
  *  DHCP Configuration parsing.
  */
+use super::dhcppkt;
 use std::convert::TryFrom;
 use std::ops::Sub;
 use yaml_rust::yaml;
@@ -88,13 +89,11 @@ pub struct Policy {
     pub match_clientid: Option<String>,
     pub match_chaddr: Option<Vec<u8>>,
     pub match_subnet: Option<crate::net::Ipv4Subnet>,
-    pub match_other:
-        std::collections::HashMap<super::dhcppkt::DhcpOption, super::dhcppkt::DhcpOptionTypeValue>,
+    pub match_other: std::collections::HashMap<dhcppkt::DhcpOption, dhcppkt::DhcpOptionTypeValue>,
     pub apply_address: Option<super::pool::PoolAddresses>,
     pub apply_default_lease: Option<std::time::Duration>,
     pub apply_max_lease: Option<std::time::Duration>,
-    pub apply_other:
-        std::collections::HashMap<super::dhcppkt::DhcpOption, super::dhcppkt::DhcpOptionTypeValue>,
+    pub apply_other: std::collections::HashMap<dhcppkt::DhcpOption, dhcppkt::DhcpOptionTypeValue>,
     pub policies: Vec<Policy>,
 }
 
@@ -264,16 +263,10 @@ impl Config {
     fn parse_generic(
         name: &str,
         value: &yaml::Yaml,
-    ) -> Result<
-        (
-            super::dhcppkt::DhcpOption,
-            super::dhcppkt::DhcpOptionTypeValue,
-        ),
-        Error,
-    > {
-        let maybe_opt = super::dhcppkt::name_to_option(name);
+    ) -> Result<(dhcppkt::DhcpOption, dhcppkt::DhcpOptionTypeValue), Error> {
+        let maybe_opt = dhcppkt::name_to_option(name);
         if let Some(opt) = maybe_opt {
-            use super::dhcppkt::*;
+            use dhcppkt::*;
             Ok((
                 opt,
                 match opt.get_type() {
@@ -435,6 +428,11 @@ impl Config {
                         for i in 1..(((1 << (32 - subnet.prefixlen)) - 1) - 1) {
                             addresses.push((base + i).into())
                         }
+                        // Also set the subnet mask, based on the subnet provided.
+                        policy.apply_other.insert(
+                            dhcppkt::OPTION_NETMASK,
+                            dhcppkt::DhcpOptionTypeValue::Ip(subnet.netmask()),
+                        );
                     }
                     Some(x) if x.starts_with("apply-") => {
                         let name = &x[6..];
