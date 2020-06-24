@@ -230,21 +230,19 @@ impl Pool {
             )
             .or_else(map_no_row_to_none)?
         {
-            println!("Reviving old lease: {:?}", lease);
-            return Ok(Lease {
-                ip: lease.0.parse::<std::net::Ipv4Addr>().map_err(|e| {
-                    Error::CorruptDatabase(format!(
-                        "Failed to parse IP: {:?} ({:?})",
-                        e.to_string(),
-                        lease.0,
-                    ))
-                })?,
-                /* If a device is constantly asking for the same lease, we should double
-                 * the lease time.  This means transient devices get short leases, and
-                 * devices that are more permanent get longer leases.
-                 */
-                expire: std::time::Duration::from_secs(2 * (lease.2 - lease.1) as u64),
-            });
+            if let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>() {
+                if addresses.contains(&ip) {
+                    println!("Reviving old lease: {:?}", lease);
+                    return Ok(Lease {
+                        ip,
+                        /* If a device is constantly asking for the same lease, we should double
+                         * the lease time.  This means transient devices get short leases, and
+                         * devices that are more permanent get longer leases.
+                         */
+                        expire: std::time::Duration::from_secs(2 * (lease.2 - lease.1) as u64),
+                    });
+                }
+            }
         }
 
         /* o The address requested in the 'Requested IP Address' option, if that
@@ -469,4 +467,25 @@ fn acquire_requested_address_invalid() {
 
     /* Do not assigned the reserved address! */
     assert_ne!(lease.ip, requested);
+}
+
+#[test]
+fn dont_hand_out_old_stale_lease() {
+    /* If this client previously had an address that is no longer in the pool,
+     * don't hand out the old address! Give them a new one!
+     */
+    let mut p = Pool::new_in_memory().expect("Failed to create in memory pools");
+
+    let mut addrpool: PoolAddresses = Default::default();
+    let old_reserved = "192.168.0.101".parse().unwrap();
+    p.reserve_address(b"client", old_reserved);
+
+    addrpool.insert("192.168.0.100".parse().unwrap());
+
+    let lease = p
+        .select_address(b"client", Some(old_reserved), &addrpool)
+        .expect("Failed to allocate address");
+
+    /* Do not assigned the old_reserved address! */
+    assert_ne!(lease.ip, old_reserved);
 }
