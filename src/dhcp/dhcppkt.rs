@@ -485,10 +485,21 @@ impl DhcpOptionTypeValue {
     }
 }
 
+fn escape_char(&c: &u8) -> String {
+    match c {
+        b' '..=b'~' => char::from(c).to_string(),
+        x => format!("\\x{:0>2x}", x),
+    }
+}
+
+fn escape_str(c: &[u8]) -> String {
+    c.iter().map(escape_char).collect::<Vec<String>>().join("")
+}
+
 impl std::fmt::Display for DhcpOptionTypeValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DhcpOptionTypeValue::String(s) => s.fmt(f),
+            DhcpOptionTypeValue::String(s) => write!(f, "{}", escape_str(s.as_bytes())),
             DhcpOptionTypeValue::Ip(i) => i.fmt(f),
             DhcpOptionTypeValue::U8(i) => i.fmt(f),
             DhcpOptionTypeValue::U16(i) => i.fmt(f),

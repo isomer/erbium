@@ -388,6 +388,9 @@ pub fn handle_pkt(
                 req.options
                     .other
                     .iter()
+                    // We already decode MSGTYPE and PARAMLIST elsewhere, so don't try and decode
+                    // them here.  It just leads to confusing looking messages.
+                    .filter(|(&k, _)| k != dhcppkt::OPTION_MSGTYPE && k != dhcppkt::OPTION_PARAMLIST)
                     .map(|(k, v)| format!(
                         "{}({})",
                         k.to_string(),
