@@ -366,19 +366,7 @@ fn format_client(req: &dhcppkt::DHCP) -> String {
     )
 }
 
-async fn log_pkt(req: &dhcppkt::DHCP, intf: u32, netinfo: &crate::net::netinfo::SharedNetInfo) {
-    println!(
-        "{}: {} on {}",
-        format_client(&req),
-        req.options
-            .get_messagetype()
-            .map(|x| x.to_string())
-            .unwrap_or("[unknown]".into()),
-        netinfo
-            .get_name_by_ifidx(intf)
-            .await
-            .unwrap_or("<unknown>".into())
-    );
+fn log_options(req: &dhcppkt::DHCP) {
     println!(
         "{}: Options: {}",
         format_client(&req),
@@ -394,11 +382,27 @@ async fn log_pkt(req: &dhcppkt::DHCP, intf: u32, netinfo: &crate::net::netinfo::
                 k.get_type()
                     .and_then(|x| x.decode(v))
                     .map(|x| format!("{}", x))
-                    .unwrap_or("<unknown>".into())
+                    .unwrap_or("<decode-failed>".into())
             ))
             .collect::<Vec<String>>()
             .join(" "),
     );
+}
+
+async fn log_pkt(req: &dhcppkt::DHCP, intf: u32, netinfo: &crate::net::netinfo::SharedNetInfo) {
+    println!(
+        "{}: {} on {}",
+        format_client(&req),
+        req.options
+            .get_messagetype()
+            .map(|x| x.to_string())
+            .unwrap_or("[unknown]".into()),
+        netinfo
+            .get_name_by_ifidx(intf)
+            .await
+            .unwrap_or("<unknown>".into())
+    );
+    log_options(req);
     println!(
         "{}: Requested: {}",
         format_client(&req),
@@ -529,24 +533,13 @@ async fn recvdhcp(
 
     /* Log what we're sending */
     println!(
-        "Sending {} for {} ({}) on {} with {} for {}",
+        "{}: Sending {} on {} with {} for {}",
+        format_client(&reply),
         reply
             .options
             .get_messagetype()
             .map(|x| x.to_string())
             .unwrap_or("[unknown]".into()),
-        reply
-            .chaddr
-            .iter()
-            .map(|b| format!("{:0>2x}", b))
-            .collect::<Vec<String>>()
-            .join(":"),
-        String::from_utf8_lossy(
-            &reply
-                .options
-                .get_option::<Vec<u8>>(&dhcppkt::OPTION_HOSTNAME)
-                .unwrap_or(vec![])
-        ),
         netinfo
             .get_name_by_ifidx(intf)
             .await
@@ -557,6 +550,7 @@ async fn recvdhcp(
             .get_option::<u32>(&dhcppkt::OPTION_LEASETIME)
             .unwrap_or(0)
     );
+    log_options(&reply);
 
     /* Collect metadata ready to send */
     let srcll = if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) = netinfo

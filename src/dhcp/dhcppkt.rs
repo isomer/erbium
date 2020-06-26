@@ -576,21 +576,21 @@ impl DhcpParse for std::net::Ipv4Addr {
 impl DhcpParse for Vec<std::net::Ipv4Addr> {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self::Item> {
-        let mut it = v.iter();
+        let mut it = v.iter().copied();
         let mut ret = vec![];
         while let Some(o1) = it.next() {
             let o2 = it.next();
             let o3 = it.next();
             let o4 = it.next();
             /* did we not get 4 octets? */
-            if o4.is_some() {
+            if o4.is_none() {
                 return None;
             }
             ret.push(std::net::Ipv4Addr::new(
-                *o1,
-                *o2.unwrap(),
-                *o3.unwrap(),
-                *o4.unwrap(),
+                o1,
+                o2.unwrap(),
+                o3.unwrap(),
+                o4.unwrap(),
             ));
         }
         Some(ret)
