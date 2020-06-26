@@ -366,7 +366,7 @@ fn format_client(req: &dhcppkt::DHCP) -> String {
     )
 }
 
-pub fn log_pkt(req: &dhcppkt::DHCP, intf: u32) {
+async fn log_pkt(req: &dhcppkt::DHCP, intf: u32, netinfo: &crate::net::netinfo::SharedNetInfo) {
     println!(
         "{}: {} on {}",
         format_client(&req),
@@ -374,7 +374,10 @@ pub fn log_pkt(req: &dhcppkt::DHCP, intf: u32) {
             .get_messagetype()
             .map(|x| x.to_string())
             .unwrap_or("[unknown]".into()),
-        intf
+        netinfo
+            .get_name_by_ifidx(intf)
+            .await
+            .unwrap_or("<unknown>".into())
     );
     println!(
         "{}: Options: {}",
@@ -488,7 +491,7 @@ async fn recvdhcp(
     };
 
     /* Log what we've got */
-    log_pkt(&req, intf);
+    log_pkt(&req, intf, &netinfo).await;
     let request = DHCPRequest {
         pkt: req,
         serverip: optional_dst.unwrap(),
