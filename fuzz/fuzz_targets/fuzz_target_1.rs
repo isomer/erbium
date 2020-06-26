@@ -4,7 +4,6 @@ extern crate erbium;
 
 fuzz_target!(|data: &[u8]| {
     let mut pools = erbium::dhcp::pool::Pool::new_in_memory().expect("failed to create pool");
-    let dst = "192.168.0.1".parse().unwrap();
     let serverids = std::collections::HashSet::new();
 
     let cfg = erbium::config::Config {
@@ -18,5 +17,15 @@ fuzz_target!(|data: &[u8]| {
         },
     };
 
-    erbium::dhcp::handle_pkt(&mut pools, data, dst, serverids, 1, &cfg);
+    if let Ok(pkt) = erbium::dhcp::dhcppkt::parse(data) {
+        let request = erbium::dhcp::DHCPRequest {
+            pkt,
+            serverip: "192.168.0.1".parse().unwrap(),
+            ifindex: 1,
+        };
+
+        if let Ok(reply) = erbium::dhcp::handle_pkt(&mut pools, &request, serverids, &cfg) {
+            let _ = reply.serialise();
+        }
+    }
 });

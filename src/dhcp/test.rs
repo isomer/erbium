@@ -117,21 +117,19 @@ fn test_parsing_inverse_serialising() {
 
 #[test]
 fn test_handle_pkt() {
-    let mut orig_pkt = mk_dhcp_request();
-    orig_pkt.pkt.options = orig_pkt
+    let mut request = mk_dhcp_request();
+    request.pkt.options = request
         .pkt
         .options
         .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
         .set_option(&dhcppkt::OPTION_LEASETIME, &321u32)
         .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP);
-    let bytes = orig_pkt.pkt.serialise();
 
     let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
-    dhcp::handle_pkt(&mut p, &bytes, SERVER_IP, serverids, 1, &conf)
-        .expect("Failed to handle request");
+    dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
 }
 
 #[test]

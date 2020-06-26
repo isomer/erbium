@@ -31,7 +31,11 @@ use crate::net::udp;
 use nix::libc;
 
 pub mod config;
+#[cfg(fuzzing)]
+pub mod dhcppkt;
+#[cfg(not(fuzzing))]
 mod dhcppkt;
+
 pub mod pool;
 
 #[cfg(test)]
@@ -72,13 +76,13 @@ impl std::fmt::Display for DhcpError {
 }
 
 #[derive(Debug)]
-struct DHCPRequest {
+pub struct DHCPRequest {
     /// The DHCP request packet.
-    pkt: dhcppkt::DHCP,
+    pub pkt: dhcppkt::DHCP,
     /// The IP address that the request was received on.
-    serverip: std::net::Ipv4Addr,
+    pub serverip: std::net::Ipv4Addr,
     /// The interface index that the request was received on.
-    ifindex: u32,
+    pub ifindex: u32,
 }
 
 #[cfg(test)]
@@ -362,75 +366,62 @@ fn format_client(req: &dhcppkt::DHCP) -> String {
     )
 }
 
+pub fn log_pkt(req: &dhcppkt::DHCP, intf: u32) {
+    println!(
+        "{}: {} on {}",
+        format_client(&req),
+        req.options
+            .get_messagetype()
+            .map(|x| x.to_string())
+            .unwrap_or("[unknown]".into()),
+        intf
+    );
+    println!(
+        "{}: Options: {}",
+        format_client(&req),
+        req.options
+            .other
+            .iter()
+            // We already decode MSGTYPE and PARAMLIST elsewhere, so don't try and decode
+            // them here.  It just leads to confusing looking messages.
+            .filter(|(&k, _)| k != dhcppkt::OPTION_MSGTYPE && k != dhcppkt::OPTION_PARAMLIST)
+            .map(|(k, v)| format!(
+                "{}({})",
+                k.to_string(),
+                k.get_type()
+                    .and_then(|x| x.decode(v))
+                    .map(|x| format!("{}", x))
+                    .unwrap_or("<unknown>".into())
+            ))
+            .collect::<Vec<String>>()
+            .join(" "),
+    );
+    println!(
+        "{}: Requested: {}",
+        format_client(&req),
+        req.options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+            .map(|v| v
+                .iter()
+                .map(|&x| dhcppkt::DhcpOption::new(x))
+                .map(|o| o.to_string())
+                .collect::<Vec<String>>()
+                .join(" "))
+            .unwrap_or("<none>".into())
+    );
+}
+
 pub fn handle_pkt(
     mut pools: &mut pool::Pool,
-    buf: &[u8],
-    dst: net::Ipv4Addr,
+    request: &DHCPRequest,
     serverids: ServerIds,
-    intf: u32,
     conf: &super::config::Config,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
-    let dhcp = dhcppkt::parse(buf);
-    match dhcp {
-        Ok(req) => {
-            println!(
-                "{}: {} on {}",
-                format_client(&req),
-                req.options
-                    .get_messagetype()
-                    .map(|x| x.to_string())
-                    .unwrap_or("[unknown]".into()),
-                intf
-            );
-            println!(
-                "{}: Options: {}",
-                format_client(&req),
-                req.options
-                    .other
-                    .iter()
-                    // We already decode MSGTYPE and PARAMLIST elsewhere, so don't try and decode
-                    // them here.  It just leads to confusing looking messages.
-                    .filter(|(&k, _)| k != dhcppkt::OPTION_MSGTYPE && k != dhcppkt::OPTION_PARAMLIST)
-                    .map(|(k, v)| format!(
-                        "{}({})",
-                        k.to_string(),
-                        k.get_type()
-                            .and_then(|x| x.decode(v))
-                            .map(|x| format!("{}", x))
-                            .unwrap_or("<unknown>".into())
-                    ))
-                    .collect::<Vec<String>>()
-                    .join(" "),
-            );
-            println!(
-                "{}: Requested: {}",
-                format_client(&req),
-                req.options
-                    .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
-                    .map(|v| v
-                        .iter()
-                        .map(|&x| dhcppkt::DhcpOption::new(x))
-                        .map(|o| o.to_string())
-                        .collect::<Vec<String>>()
-                        .join(" "))
-                    .unwrap_or("<none>".into())
-            );
-
-            let request = DHCPRequest {
-                pkt: req,
-                serverip: dst,
-                ifindex: intf,
-            };
-            match request.pkt.options.get_messagetype() {
-                Some(dhcppkt::DHCPDISCOVER) => {
-                    handle_discover(&mut pools, &request, serverids, conf)
-                }
-                Some(dhcppkt::DHCPREQUEST) => handle_request(&mut pools, &request, serverids, conf),
-                Some(x) => Err(DhcpError::UnknownMessageType(x)),
-                None => Err(DhcpError::ParseError(dhcppkt::ParseError::InvalidPacket)),
-            }
-        }
-        Err(e) => Err(DhcpError::ParseError(e)),
+    match request.pkt.options.get_messagetype() {
+        Some(dhcppkt::DHCPDISCOVER) => handle_discover(&mut pools, &request, serverids, conf),
+        Some(dhcppkt::DHCPREQUEST) => handle_request(&mut pools, &request, serverids, conf),
+        Some(x) => Err(DhcpError::UnknownMessageType(x)),
+        None => Err(DhcpError::ParseError(dhcppkt::ParseError::InvalidPacket)),
     }
 }
 
@@ -474,7 +465,7 @@ async fn recvdhcp(
     intf: u32,
     conf: super::config::SharedConfig,
 ) {
-    let mut pool = pools.lock().await;
+    /* First, lets find the various metadata IP addresses */
     let ip4 = if let net::SocketAddr::V4(f) = src {
         f
     } else {
@@ -486,73 +477,115 @@ async fn recvdhcp(
         println!("No IPv4 found on interface {}", intf);
         return;
     }
-    let dst = optional_dst.unwrap();
-    let lockedconf = conf.lock().await;
-    match handle_pkt(
-        &mut pool,
-        pkt,
-        dst,
-        get_serverids(&serverids).await,
-        intf,
-        &lockedconf,
-    ) {
-        Ok(r) => {
-            if let Some(si) = r.options.get_serverid() {
-                serverids.lock().await.insert(si);
-            }
-            println!(
-                "Sending {} for {} ({}) on {} with {} for {}",
-                r.options
-                    .get_messagetype()
-                    .map(|x| x.to_string())
-                    .unwrap_or("[unknown]".into()),
-                r.chaddr
-                    .iter()
-                    .map(|b| format!("{:0>2x}", b))
-                    .collect::<Vec<String>>()
-                    .join(":"),
-                String::from_utf8_lossy(
-                    &r.options
-                        .get_option::<Vec<u8>>(&dhcppkt::OPTION_HOSTNAME)
-                        .unwrap_or(vec![])
-                ),
-                netinfo
-                    .get_name_by_ifidx(intf)
-                    .await
-                    .unwrap_or("<unknown if>".into()),
-                r.yiaddr,
-                r.options
-                    .get_option::<u32>(&dhcppkt::OPTION_LEASETIME)
-                    .unwrap_or(0)
-            );
-            //println!("Reply: {:?}", r);
-            let buf = r.serialise();
-            let srcip = std::net::SocketAddrV4::new(dst, 67);
-            if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) = netinfo
-                .get_linkaddr_by_ifidx(intf.try_into().unwrap())
-                .await
-            {
-                if let Some(chaddr) = to_array(&r.chaddr) {
-                    let etherbuf = packet::Fragment::new_udp(
-                        srcip,
-                        &srcll,
-                        ip4,
-                        &chaddr,
-                        packet::Tail::Payload(&buf),
-                    )
-                    .flatten();
 
-                    if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
-                        println!("Failed to send reply to {:?}: {:?}", src, e);
-                    }
-                } else {
-                    println!("Cannot send reply to invalid address {:?}", r.chaddr);
-                }
-            } else {
-                println!("Not a usable LinkLayer?!");
-            }
+    /* Now lets decode the packet, and if it fails decode, fail the function early */
+    let req = match dhcppkt::parse(pkt) {
+        Err(e) => {
+            println!("Failed to parse packet: {}", e);
+            return;
         }
-        Err(e) => println!("Error processing DHCP Packet to {:?}: {:?}", dst, e),
+        Ok(req) => req,
+    };
+
+    /* Log what we've got */
+    log_pkt(&req, intf);
+    let request = DHCPRequest {
+        pkt: req,
+        serverip: optional_dst.unwrap(),
+        ifindex: intf,
+    };
+
+    /* Now, lets process the packet we've found */
+    let reply;
+    {
+        /* Limit the amount of time we have these locked to just handling the packet */
+        let mut pool = pools.lock().await;
+        let lockedconf = conf.lock().await;
+
+        reply = match handle_pkt(
+            &mut pool,
+            &request,
+            get_serverids(&serverids).await,
+            &lockedconf,
+        ) {
+            Err(e) => {
+                println!("Failed to handle packet: {}", e);
+                return;
+            }
+            Ok(r) => r,
+        };
+    }
+
+    /* Now, we should have a packet ready to send */
+    /* First, if we're claiming to be particular IP, we should remember that as an IP that is one
+     * of ours
+     */
+    if let Some(si) = reply.options.get_serverid() {
+        serverids.lock().await.insert(si);
+    }
+
+    /* Log what we're sending */
+    println!(
+        "Sending {} for {} ({}) on {} with {} for {}",
+        reply
+            .options
+            .get_messagetype()
+            .map(|x| x.to_string())
+            .unwrap_or("[unknown]".into()),
+        reply
+            .chaddr
+            .iter()
+            .map(|b| format!("{:0>2x}", b))
+            .collect::<Vec<String>>()
+            .join(":"),
+        String::from_utf8_lossy(
+            &reply
+                .options
+                .get_option::<Vec<u8>>(&dhcppkt::OPTION_HOSTNAME)
+                .unwrap_or(vec![])
+        ),
+        netinfo
+            .get_name_by_ifidx(intf)
+            .await
+            .unwrap_or("<unknown if>".into()),
+        reply.yiaddr,
+        reply
+            .options
+            .get_option::<u32>(&dhcppkt::OPTION_LEASETIME)
+            .unwrap_or(0)
+    );
+
+    /* Collect metadata ready to send */
+    let srcll = if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) = netinfo
+        .get_linkaddr_by_ifidx(intf.try_into().unwrap())
+        .await
+    {
+        srcll
+    } else {
+        println!("Not a usable LinkLayer?!");
+        return;
+    };
+
+    let chaddr = if let Some(chaddr) = to_array(&reply.chaddr) {
+        chaddr
+    } else {
+        println!("Cannot send reply to invalid address {:?}", reply.chaddr);
+        return;
+    };
+
+    /* Construct the raw packet from the reply to send */
+    let replybuf = reply.serialise();
+    let etherbuf = packet::Fragment::new_udp(
+        std::net::SocketAddrV4::new(request.serverip, 67),
+        &srcll,
+        ip4,
+        &chaddr,
+        packet::Tail::Payload(&replybuf),
+    )
+    .flatten();
+
+    if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
+        println!("Failed to send reply to {:?}: {:?}", src, e);
     }
 }
 
