@@ -343,6 +343,25 @@ fn handle_request(
     }
 }
 
+fn format_mac(v: &[u8]) -> String {
+    v.iter()
+        .map(|b| format!("{:0>2x}", b))
+        .collect::<Vec<String>>()
+        .join(":")
+}
+
+fn format_client(req: &dhcppkt::DHCP) -> String {
+    format!(
+        "{} ({})",
+        format_mac(&req.chaddr),
+        String::from_utf8_lossy(
+            &req.options
+                .get_option::<Vec<u8>>(&dhcppkt::OPTION_HOSTNAME)
+                .unwrap_or(vec![])
+        ),
+    )
+}
+
 pub fn handle_pkt(
     mut pools: &mut pool::Pool,
     buf: &[u8],
@@ -355,23 +374,45 @@ pub fn handle_pkt(
     match dhcp {
         Ok(req) => {
             println!(
-                "Received {} for {} ({}) on {}",
+                "{}: {} on {}",
+                format_client(&req),
                 req.options
                     .get_messagetype()
                     .map(|x| x.to_string())
                     .unwrap_or("[unknown]".into()),
-                req.chaddr
-                    .iter()
-                    .map(|b| format!("{:0>2x}", b))
-                    .collect::<Vec<String>>()
-                    .join(":"),
-                String::from_utf8_lossy(
-                    &req.options
-                        .get_option::<Vec<u8>>(&dhcppkt::OPTION_HOSTNAME)
-                        .unwrap_or(vec![])
-                ),
                 intf
             );
+            println!(
+                "{}: Options: {}",
+                format_client(&req),
+                req.options
+                    .other
+                    .iter()
+                    .map(|(k, v)| format!(
+                        "{}({})",
+                        k.to_string(),
+                        k.get_type()
+                            .and_then(|x| x.decode(v))
+                            .map(|x| format!("{}", x))
+                            .unwrap_or("<unknown>".into())
+                    ))
+                    .collect::<Vec<String>>()
+                    .join(" "),
+            );
+            println!(
+                "{}: Requested: {}",
+                format_client(&req),
+                req.options
+                    .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+                    .map(|v| v
+                        .iter()
+                        .map(|&x| dhcppkt::DhcpOption::new(x))
+                        .map(|o| o.to_string())
+                        .collect::<Vec<String>>()
+                        .join(" "))
+                    .unwrap_or("<none>".into())
+            );
+
             let request = DHCPRequest {
                 pkt: req,
                 serverip: dst,

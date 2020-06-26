@@ -324,8 +324,9 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
         DhcpOptionType::IpList,
     ),
     ("xwindow-display", OPTION_XWDISPLAY, DhcpOptionType::IpList),
-    // address-request, handled specially.
-    // address-time, handled specially.
+    // 50
+    ("address-request", OPTION_ADDRESSREQUEST, DhcpOptionType::Ip),
+    ("lease-time", OPTION_LEASETIME, DhcpOptionType::Seconds32),
     // overload, handled specially.
     // dhcp msg type, handled specially.
     ("server-id", OPTION_SERVERID, DhcpOptionType::Ip),
@@ -433,6 +434,27 @@ pub enum DhcpOptionType {
     Seconds32,
 }
 
+type IpList = Vec<std::net::Ipv4Addr>;
+type U8Str = Vec<u8>;
+
+impl DhcpOptionType {
+    pub fn decode(&self, v: &[u8]) -> Option<DhcpOptionTypeValue> {
+        match self {
+            &DhcpOptionType::String => U8Str::parse_into(v)
+                .map(|x| DhcpOptionTypeValue::String(String::from_utf8_lossy(&x).to_string())),
+            &DhcpOptionType::Ip => std::net::Ipv4Addr::parse_into(v).map(DhcpOptionTypeValue::Ip),
+            &DhcpOptionType::IpList => IpList::parse_into(v).map(DhcpOptionTypeValue::IpList),
+            &DhcpOptionType::I32 => i32::parse_into(v).map(DhcpOptionTypeValue::I32),
+            &DhcpOptionType::U8 => u8::parse_into(v).map(DhcpOptionTypeValue::U8),
+            &DhcpOptionType::U16 => u16::parse_into(v).map(DhcpOptionTypeValue::U16),
+            &DhcpOptionType::U32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32),
+            &DhcpOptionType::Bool => u8::parse_into(v).map(DhcpOptionTypeValue::U8), // ?
+            &DhcpOptionType::Seconds16 => u16::parse_into(v).map(DhcpOptionTypeValue::U16), // ?
+            &DhcpOptionType::Seconds32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32), // ?
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum DhcpOptionTypeValue {
     String(String),
@@ -463,7 +485,31 @@ impl DhcpOptionTypeValue {
     }
 }
 
+impl std::fmt::Display for DhcpOptionTypeValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DhcpOptionTypeValue::String(s) => s.fmt(f),
+            DhcpOptionTypeValue::Ip(i) => i.fmt(f),
+            DhcpOptionTypeValue::U8(i) => i.fmt(f),
+            DhcpOptionTypeValue::U16(i) => i.fmt(f),
+            DhcpOptionTypeValue::U32(i) => i.fmt(f),
+            DhcpOptionTypeValue::I32(i) => i.fmt(f),
+            DhcpOptionTypeValue::IpList(l) => write!(
+                f,
+                "{}",
+                l.iter()
+                    .map(|i| format!("{}", i))
+                    .collect::<Vec<String>>()
+                    .join(",")
+            ),
+        }
+    }
+}
+
 impl DhcpOption {
+    pub fn new(opt: u8) -> Self {
+        DhcpOption(opt)
+    }
     pub fn get_type(&self) -> Option<DhcpOptionType> {
         for (_name, option, ty) in OPT_INFO {
             if option == self {
@@ -516,6 +562,30 @@ impl DhcpParse for std::net::Ipv4Addr {
     }
 }
 
+impl DhcpParse for Vec<std::net::Ipv4Addr> {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self::Item> {
+        let mut it = v.iter();
+        let mut ret = vec![];
+        while let Some(o1) = it.next() {
+            let o2 = it.next();
+            let o3 = it.next();
+            let o4 = it.next();
+            /* did we not get 4 octets? */
+            if o4.is_some() {
+                return None;
+            }
+            ret.push(std::net::Ipv4Addr::new(
+                *o1,
+                *o2.unwrap(),
+                *o3.unwrap(),
+                *o4.unwrap(),
+            ));
+        }
+        Some(ret)
+    }
+}
+
 /* HELP WANTED: I can't figure out how to make this a straight &[u8] -> Some(&[u8]) with no copies,
  * while preserving lifetimes etc.
  */
@@ -531,14 +601,39 @@ impl DhcpParse for Vec<u8> {
 impl DhcpParse for u64 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0u64, |acc, &v| (acc << 8) + (v as u64)))
+        Some(v.iter().fold(0u64, |acc, &v| (acc << 8) + (v as Self)))
     }
 }
 
 impl DhcpParse for u32 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0u32, |acc, &v| (acc << 8) + (v as u32)))
+        Some(v.iter().fold(0u32, |acc, &v| (acc << 8) + (v as Self)))
+    }
+}
+
+impl DhcpParse for u16 {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        Some(v.iter().fold(0u16, |acc, &v| (acc << 8) + (v as Self)))
+    }
+}
+
+impl DhcpParse for i32 {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        Some(v.iter().fold(0i32, |acc, &v| (acc << 8) + (v as Self)))
+    }
+}
+
+impl DhcpParse for u8 {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        if v.len() != 1 {
+            None
+        } else {
+            v.get(0).copied()
+        }
     }
 }
 
