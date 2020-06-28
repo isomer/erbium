@@ -9,20 +9,20 @@ license = "Apache-2.0"
 repository = "https://github.com/isomer/erbium.git"
 
 [dependencies]
-tokio = { version = "0.2", features = ["full"] }
 async-std = { version = "", features = ["tokio02"] }
-rand = ""
-nix = { version = "0.17", path="/home/perry/build/nix" }
-futures = ""
-mio = { version = "0.6.20" }
-rusqlite = { version = "0.23.0" }
-tokio-util = { version="", features= ["codec"] }
 bytes = ""
+futures = ""
 futures-core = ""
 futures-sink = ""
+hostname = { version = "0.3.0" }
+mio = { version = "0.6.20" }
 netlink-packet-route = ""
 netlink-sys = { version="", features=["tokio_socket"] }
-hostname = { version = "0.3.0" }
+nix = { version = "0.17", path="/home/perry/build/nix" }
+rand = ""
+rusqlite = { version = "0.23.0" }
+tokio-util = { version="", features= ["codec"] }
+tokio = { version = "0.2", features = ["full"] }
 yaml-rust = { version = "0.4" }
 
 [lib]
