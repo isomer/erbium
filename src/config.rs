@@ -112,9 +112,9 @@ fn test_config_parse() -> Result<(), Error> {
     load_config_from_string(
         "---
 dhcp:
-    Policies:
+    policies:
       - match-interface: eth0
-        apply-dns-server: ['8.8.8.8', '8.8.4.4']
+        apply-dns-servers: ['8.8.8.8', '8.8.4.4']
         apply-subnet: 192.168.0.0/24
         apply-time-offset: 3600
         apply-domain-name: erbium.dev
@@ -126,20 +126,20 @@ dhcp:
         apply-arp-timeout: 1w
 
 
-        Policies:
-           - { match-hostname: myhost, apply-address: 192.168.0.1 }
+        policies:
+           - { match-host-name: myhost, apply-address: 192.168.0.1 }
 
 
       - match-interface: dmz
-        apply-dns-server: ['8.8.8.8']
+        apply-dns-servers: ['8.8.8.8']
         apply-subnet: 192.0.2.0/24
 
         # Reserve some space from the pool for servers
-        Policies:
+        policies:
           - apply-range: {start: 192.0.2.10, end: 192.0.2.20}
 
             # From the reserved pool, assign a static address.
-            Policies:
+            policies:
               - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
 
           # Reserve space for VPN endpoints
