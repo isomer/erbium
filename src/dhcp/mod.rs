@@ -559,14 +559,18 @@ async fn recvdhcp(
     {
         srcll
     } else {
-        println!("Not a usable LinkLayer?!");
+        println!("{}: Not a usable LinkLayer?!", format_client(&reply));
         return;
     };
 
     let chaddr = if let Some(chaddr) = to_array(&reply.chaddr) {
         chaddr
     } else {
-        println!("Cannot send reply to invalid address {:?}", reply.chaddr);
+        println!(
+            "{}: Cannot send reply to invalid address {:?}",
+            format_client(&reply),
+            reply.chaddr
+        );
         return;
     };
 
@@ -582,7 +586,7 @@ async fn recvdhcp(
     .flatten();
 
     if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
-        println!("Failed to send reply to {:?}: {:?}", src, e);
+        println!("{}: Failed to send reply: {:?}", format_client(&reply), e);
     }
 }
 
