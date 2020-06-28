@@ -447,7 +447,7 @@ impl Config {
                         }
                     }
                     Some("policies") => {
-                        if policy.policies.len() > 0 {
+                        if !policy.policies.is_empty() {
                             return Err(Error::InvalidConfig(
                                 "Can't specify policies twice in one policy".into(),
                             ));
