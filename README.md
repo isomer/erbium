@@ -9,5 +9,5 @@ use (production or otherwise).
 
 
 
-[^0] Erbium is the 68th element in the periodic table, the same as the server
+[^0] Erbium is the 68th element in the periodic table, the same as the client
 port number for DHCP.
