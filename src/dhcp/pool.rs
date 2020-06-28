@@ -17,8 +17,9 @@
  *  DHCP Pool Management.
  */
 
-extern crate rand;
-use ::rand::prelude::SliceRandom;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
 
 pub type PoolAddresses = std::collections::HashSet<std::net::Ipv4Addr>;
 
@@ -55,6 +56,12 @@ impl Error {
     fn emit(reason: String, e: rusqlite::Error) -> Error {
         Error::DbError(reason, e)
     }
+}
+
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
 }
 
 impl Pool {
@@ -129,10 +136,29 @@ impl Pool {
         }
     }
 
-    fn select_new_address(&mut self, ts: u32, addresses: &PoolAddresses) -> Result<Lease, Error> {
+    fn select_new_address(
+        &mut self,
+        ts: u32,
+        addresses: &PoolAddresses,
+        clientid: &[u8],
+    ) -> Result<Lease, Error> {
         println!("Assigning new lease");
-        let mut addresses: Vec<std::net::Ipv4Addr> = addresses.iter().cloned().collect();
-        addresses.shuffle(&mut rand::thread_rng());
+        /* This performs a consistent hash of the clientid and the IP addresses
+         * then orders by the distance from the hash of the clientid
+         */
+        let clienthash = calculate_hash(&clientid);
+        let mut addresses = addresses
+            .iter()
+            .map(|ip| (calculate_hash(ip), ip))
+            .map(|(h, ip)| (h ^ clienthash, ip))
+            .collect::<Vec<_>>();
+        addresses.sort_unstable();
+        let addresses = addresses
+            .iter()
+            .map(|(_dist, ip)| ip)
+            .copied()
+            .collect::<Vec<_>>();
+        /* Now for each address, see if it's in use, and if so, return it */
         for i in addresses {
             if self
                 .conn
@@ -150,7 +176,7 @@ impl Pool {
                 == None
             {
                 return Ok(Lease {
-                    ip: i,
+                    ip: *i,
                     expire: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
                 });
             }
@@ -262,7 +288,7 @@ impl Pool {
          *   the message was received (if 'giaddr' is 0) or on the address of
          *   the relay agent that forwarded the message ('giaddr' when not 0).
          */
-        self.select_new_address(ts as u32, addresses)
+        self.select_new_address(ts as u32, addresses, clientid)
     }
 
     pub fn allocate_address(
