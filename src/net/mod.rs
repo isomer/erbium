@@ -85,12 +85,15 @@ fn test_netmask() -> Result<(), Error> {
 }
 
 #[test]
-fn test_broadcast() {
+fn test_prefix() {
+    let subnet = Ipv4Subnet::new("192.0.2.112".parse().unwrap(), 28).unwrap();
     assert_eq!(
-        Ipv4Subnet::new("192.168.1.0".parse().unwrap(), 24)
-            .unwrap()
-            .broadcast(),
-        std::net::Ipv4Addr::new(192, 168, 1, 255)
+        subnet.broadcast(),
+        "192.0.2.127".parse::<std::net::Ipv4Addr>().unwrap()
+    );
+    assert_eq!(
+        subnet.netmask(),
+        "255.255.255.240".parse::<std::net::Ipv4Addr>().unwrap()
     );
 }
 
