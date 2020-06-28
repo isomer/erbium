@@ -86,7 +86,6 @@ fn hexstring(s: &[u8]) -> Result<Vec<u8>, HexError> {
 #[derive(Clone, Debug, Default)]
 pub struct Policy {
     pub match_interface: Option<String>,
-    pub match_clientid: Option<String>,
     pub match_chaddr: Option<Vec<u8>>,
     pub match_subnet: Option<crate::net::Ipv4Subnet>,
     pub match_other: std::collections::HashMap<dhcppkt::DhcpOption, dhcppkt::DhcpOptionTypeValue>,
@@ -304,6 +303,9 @@ impl Config {
                     Some(DhcpOptionType::Bool) => {
                         DhcpOptionTypeValue::U8(Config::parse_bool(value)? as u8)
                     }
+                    Some(DhcpOptionType::HwAddr) => {
+                        DhcpOptionTypeValue::HwAddr(Config::parse_mac(value)?)
+                    }
                     None => {
                         return Err(Error::InvalidConfig(format!(
                             "Missing type information for {}",
@@ -329,19 +331,23 @@ impl Config {
                                 .map_err(|x| x.annotate("Failed to parse match-interface"))?,
                         );
                     }
-                    Some("match-clientid") => {
-                        policy.match_clientid = Some(
-                            Config::parse_string(v)
-                                .map_err(|x| x.annotate("Failed to parse match-clientid"))?,
-                        );
-                    }
                     Some("match-hardware-address") => {
+                        if policy.match_chaddr.is_some() {
+                            return Err(Error::InvalidConfig(
+                                "match-hardware-address specified twice".into(),
+                            ));
+                        }
                         policy.match_chaddr =
                             Some(Config::parse_mac(v).map_err(|x| {
                                 x.annotate("Failed to parse match-hardware-address")
                             })?);
                     }
                     Some("match-subnet") => {
+                        if policy.match_subnet.is_some() {
+                            return Err(Error::InvalidConfig(
+                                "match-subnet specified twice".into(),
+                            ));
+                        }
                         policy.match_subnet = Some(
                             Config::parse_subnet(v)
                                 .map_err(|x| x.annotate("Failed to parse match-subnet"))?,
@@ -428,24 +434,24 @@ impl Config {
                         for i in 1..(((1 << (32 - subnet.prefixlen)) - 1) - 1) {
                             addresses.push((base + i).into())
                         }
-                        // Also set the subnet mask, based on the subnet provided.
-                        policy.apply_other.insert(
-                            dhcppkt::OPTION_NETMASK,
-                            dhcppkt::DhcpOptionTypeValue::Ip(subnet.netmask()),
-                        );
-                        // And also set the broadcast address, based on the subnet provided.
-                        policy.apply_other.insert(
-                            dhcppkt::OPTION_BROADCAST,
-                            dhcppkt::DhcpOptionTypeValue::Ip(subnet.broadcast()),
-                        );
                     }
                     Some(x) if x.starts_with("apply-") => {
                         let name = &x[6..];
                         let (opt, value) = Config::parse_generic(name, v)
                             .map_err(|e| e.annotate(&format!("Failed to parse {}", x)))?;
-                        policy.apply_other.insert(opt, value);
+                        if policy.apply_other.insert(opt, value).is_some() {
+                            return Err(Error::InvalidConfig(format!(
+                                "Duplicate specification of {}",
+                                x
+                            )));
+                        }
                     }
                     Some("policies") => {
+                        if policy.policies.len() > 0 {
+                            return Err(Error::InvalidConfig(
+                                "Can't specify policies twice in one policy".into(),
+                            ));
+                        }
                         policy.policies = Config::parse_policies(v)?;
                     }
                     Some(x) => {

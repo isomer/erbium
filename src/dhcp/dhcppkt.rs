@@ -341,7 +341,7 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     ("rebind-time", OPTION_REBINDTIME, DhcpOptionType::Seconds16), // seconds
     // 60
     ("class-id", OPTION_VENDOR_CLASS, DhcpOptionType::String),
-    ("client-id", OPTION_CLIENTID, DhcpOptionType::String),
+    ("client-id", OPTION_CLIENTID, DhcpOptionType::HwAddr),
     // netware
     // netware
     ("nisplus-domain", OPTION_NIS3DOMAIN, DhcpOptionType::String),
@@ -432,6 +432,7 @@ pub enum DhcpOptionType {
     Bool,
     Seconds16,
     Seconds32,
+    HwAddr,
 }
 
 type IpList = Vec<std::net::Ipv4Addr>;
@@ -451,6 +452,7 @@ impl DhcpOptionType {
             DhcpOptionType::Bool => u8::parse_into(v).map(DhcpOptionTypeValue::U8), // ?
             DhcpOptionType::Seconds16 => u16::parse_into(v).map(DhcpOptionTypeValue::U16), // ?
             DhcpOptionType::Seconds32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32), // ?
+            DhcpOptionType::HwAddr => U8Str::parse_into(v).map(DhcpOptionTypeValue::HwAddr),
         }
     }
 }
@@ -464,6 +466,7 @@ pub enum DhcpOptionTypeValue {
     U8(u8),
     U16(u16),
     U32(u32),
+    HwAddr(Vec<u8>),
 }
 
 impl DhcpOptionTypeValue {
@@ -481,6 +484,7 @@ impl DhcpOptionTypeValue {
             DhcpOptionTypeValue::U8(x) => x.to_be_bytes().to_vec(),
             DhcpOptionTypeValue::U16(x) => x.to_be_bytes().to_vec(),
             DhcpOptionTypeValue::U32(x) => x.to_be_bytes().to_vec(),
+            DhcpOptionTypeValue::HwAddr(x) => x.clone(),
         }
     }
 }
@@ -512,6 +516,14 @@ impl std::fmt::Display for DhcpOptionTypeValue {
                     .map(|i| format!("{}", i))
                     .collect::<Vec<String>>()
                     .join(",")
+            ),
+            DhcpOptionTypeValue::HwAddr(x) => write!(
+                f,
+                "{}",
+                x.iter()
+                    .map(|b| format!("{:0>2x}", b))
+                    .collect::<Vec<String>>()
+                    .join(":")
             ),
         }
     }
@@ -936,6 +948,7 @@ impl Serialise for DhcpOptionTypeValue {
             DhcpOptionTypeValue::U8(x) => x.serialise(v),
             DhcpOptionTypeValue::U16(x) => x.serialise(v),
             DhcpOptionTypeValue::U32(x) => x.serialise(v),
+            DhcpOptionTypeValue::HwAddr(x) => x.serialise(v),
         }
     }
 }
