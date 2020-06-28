@@ -10,7 +10,7 @@ repository = "https://github.com/isomer/erbium.git"
 
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
-async-std = { version = "", features = ["unstable"] }
+async-std = { version = "", features = ["tokio02"] }
 rand = ""
 nix = { version = "0.17", path="/home/perry/build/nix" }
 futures = ""
