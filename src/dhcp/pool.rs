@@ -96,8 +96,9 @@ impl Pool {
     }
 
     pub fn new() -> Result<Pool, Error> {
-        let conn = rusqlite::Connection::open("erbium-leases.sqlite")
-            .map_err(|e| Error::emit("Creating database erbium-leases.sqlite".into(), e))?;
+        let conn = rusqlite::Connection::open("/var/lib/erbium/leases.sqlite").map_err(|e| {
+            Error::emit("Creating database /var/lib/erbium/leases.sqlite".into(), e)
+        })?;
 
         Self::new_with_conn(conn)
     }
@@ -391,7 +392,7 @@ fn smoke_test() {
 fn empty_pool() {
     let mut p = Pool::new_in_memory().expect("Failed to create in memory pools");
     /* Deliberately don't add any addresses, so we'll fail when we try and allocate something */
-    let mut addrpool: PoolAddresses = Default::default();
+    let addrpool: PoolAddresses = Default::default();
     assert_eq!(
         p.allocate_address(b"client", None, &addrpool)
             .expect_err("Got allocated an address from an empty pool!"),
