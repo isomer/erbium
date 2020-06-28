@@ -389,24 +389,29 @@ fn log_options(req: &dhcppkt::DHCP) {
     );
 }
 
-async fn log_pkt(req: &dhcppkt::DHCP, intf: u32, netinfo: &crate::net::netinfo::SharedNetInfo) {
+async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNetInfo) {
     println!(
-        "{}: {} on {}",
-        format_client(&req),
-        req.options
+        "{}: {} on {} ({})",
+        format_client(&request.pkt),
+        request
+            .pkt
+            .options
             .get_messagetype()
             .map(|x| x.to_string())
             .unwrap_or_else(|| "[unknown]".into()),
         netinfo
-            .get_name_by_ifidx(intf)
+            .get_name_by_ifidx(request.ifindex)
             .await
-            .unwrap_or_else(|| "<unknown>".into())
+            .unwrap_or_else(|| "<unknown>".into()),
+        request.serverip,
     );
-    log_options(req);
+    log_options(&request.pkt);
     println!(
         "{}: Requested: {}",
-        format_client(&req),
-        req.options
+        format_client(&request.pkt),
+        request
+            .pkt
+            .options
             .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
             .map(|v| v
                 .iter()
@@ -495,12 +500,12 @@ async fn recvdhcp(
     };
 
     /* Log what we've got */
-    log_pkt(&req, intf, &netinfo).await;
     let request = DHCPRequest {
         pkt: req,
         serverip: optional_dst.unwrap(),
         ifindex: intf,
     };
+    log_pkt(&request, &netinfo).await;
 
     /* Now, lets process the packet we've found */
     let reply;
@@ -516,7 +521,11 @@ async fn recvdhcp(
             &lockedconf,
         ) {
             Err(e) => {
-                println!("Failed to handle packet: {}", e);
+                println!(
+                    "{}: Failed to handle packet: {}",
+                    format_client(&request.pkt),
+                    e
+                );
                 return;
             }
             Ok(r) => r,
