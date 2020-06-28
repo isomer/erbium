@@ -439,18 +439,18 @@ type U8Str = Vec<u8>;
 
 impl DhcpOptionType {
     pub fn decode(&self, v: &[u8]) -> Option<DhcpOptionTypeValue> {
-        match self {
-            &DhcpOptionType::String => U8Str::parse_into(v)
+        match *self {
+            DhcpOptionType::String => U8Str::parse_into(v)
                 .map(|x| DhcpOptionTypeValue::String(String::from_utf8_lossy(&x).to_string())),
-            &DhcpOptionType::Ip => std::net::Ipv4Addr::parse_into(v).map(DhcpOptionTypeValue::Ip),
-            &DhcpOptionType::IpList => IpList::parse_into(v).map(DhcpOptionTypeValue::IpList),
-            &DhcpOptionType::I32 => i32::parse_into(v).map(DhcpOptionTypeValue::I32),
-            &DhcpOptionType::U8 => u8::parse_into(v).map(DhcpOptionTypeValue::U8),
-            &DhcpOptionType::U16 => u16::parse_into(v).map(DhcpOptionTypeValue::U16),
-            &DhcpOptionType::U32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32),
-            &DhcpOptionType::Bool => u8::parse_into(v).map(DhcpOptionTypeValue::U8), // ?
-            &DhcpOptionType::Seconds16 => u16::parse_into(v).map(DhcpOptionTypeValue::U16), // ?
-            &DhcpOptionType::Seconds32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32), // ?
+            DhcpOptionType::Ip => std::net::Ipv4Addr::parse_into(v).map(DhcpOptionTypeValue::Ip),
+            DhcpOptionType::IpList => IpList::parse_into(v).map(DhcpOptionTypeValue::IpList),
+            DhcpOptionType::I32 => i32::parse_into(v).map(DhcpOptionTypeValue::I32),
+            DhcpOptionType::U8 => u8::parse_into(v).map(DhcpOptionTypeValue::U8),
+            DhcpOptionType::U16 => u16::parse_into(v).map(DhcpOptionTypeValue::U16),
+            DhcpOptionType::U32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32),
+            DhcpOptionType::Bool => u8::parse_into(v).map(DhcpOptionTypeValue::U8), // ?
+            DhcpOptionType::Seconds16 => u16::parse_into(v).map(DhcpOptionTypeValue::U16), // ?
+            DhcpOptionType::Seconds32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32), // ?
         }
     }
 }
@@ -582,16 +582,7 @@ impl DhcpParse for Vec<std::net::Ipv4Addr> {
             let o2 = it.next();
             let o3 = it.next();
             let o4 = it.next();
-            /* did we not get 4 octets? */
-            if o4.is_none() {
-                return None;
-            }
-            ret.push(std::net::Ipv4Addr::new(
-                o1,
-                o2.unwrap(),
-                o3.unwrap(),
-                o4.unwrap(),
-            ));
+            ret.push(std::net::Ipv4Addr::new(o1, o2?, o3?, o4?));
         }
         Some(ret)
     }

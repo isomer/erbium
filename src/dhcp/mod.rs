@@ -361,7 +361,7 @@ fn format_client(req: &dhcppkt::DHCP) -> String {
         String::from_utf8_lossy(
             &req.options
                 .get_option::<Vec<u8>>(&dhcppkt::OPTION_HOSTNAME)
-                .unwrap_or(vec![])
+                .unwrap_or_default()
         ),
     )
 }
@@ -382,7 +382,7 @@ fn log_options(req: &dhcppkt::DHCP) {
                 k.get_type()
                     .and_then(|x| x.decode(v))
                     .map(|x| format!("{}", x))
-                    .unwrap_or("<decode-failed>".into())
+                    .unwrap_or_else(|| "<decode-failed>".into())
             ))
             .collect::<Vec<String>>()
             .join(" "),
@@ -396,11 +396,11 @@ async fn log_pkt(req: &dhcppkt::DHCP, intf: u32, netinfo: &crate::net::netinfo::
         req.options
             .get_messagetype()
             .map(|x| x.to_string())
-            .unwrap_or("[unknown]".into()),
+            .unwrap_or_else(|| "[unknown]".into()),
         netinfo
             .get_name_by_ifidx(intf)
             .await
-            .unwrap_or("<unknown>".into())
+            .unwrap_or_else(|| "<unknown>".into())
     );
     log_options(req);
     println!(
@@ -414,7 +414,7 @@ async fn log_pkt(req: &dhcppkt::DHCP, intf: u32, netinfo: &crate::net::netinfo::
                 .map(|o| o.to_string())
                 .collect::<Vec<String>>()
                 .join(" "))
-            .unwrap_or("<none>".into())
+            .unwrap_or_else(|| "<none>".into())
     );
 }
 
@@ -539,11 +539,11 @@ async fn recvdhcp(
             .options
             .get_messagetype()
             .map(|x| x.to_string())
-            .unwrap_or("[unknown]".into()),
+            .unwrap_or_else(|| "[unknown]".into()),
         netinfo
             .get_name_by_ifidx(intf)
             .await
-            .unwrap_or("<unknown if>".into()),
+            .unwrap_or_else(|| "<unknown if>".into()),
         reply.yiaddr,
         reply
             .options

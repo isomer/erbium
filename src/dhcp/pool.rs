@@ -199,13 +199,7 @@ impl Pool {
                     return Ok(Lease {
                         ip,
                         expire: std::time::Duration::from_secs(
-                            (lease
-                                .1
-                                .checked_sub(ts as u32)
-                                .unwrap_or(0)
-                                .checked_mul(2)
-                                .unwrap_or(0))
-                            .into(),
+                            (lease.1.saturating_sub(ts as u32).saturating_mul(2)).into(),
                         ),
                     });
                 }
