@@ -445,7 +445,7 @@ impl Config {
                             .map_err(|e| e.annotate(&format!("Failed to parse {}", x)))?;
                         policy.apply_other.insert(opt, value);
                     }
-                    Some("Policies") => {
+                    Some("policies") => {
                         policy.policies = Config::parse_policies(v)?;
                     }
                     Some(x) => {
@@ -482,7 +482,7 @@ impl Config {
             Ok(policies)
         } else {
             Err(Error::InvalidConfig(
-                "Policies should be a list of policies".into(),
+                "policies should be a list of policies".into(),
             ))
         }
     }
@@ -492,7 +492,7 @@ impl Config {
             let mut policies = Vec::new();
             for (k, v) in h {
                 match k.as_str() {
-                    Some("Policies") => policies = Config::parse_policies(v)?,
+                    Some("policies") => policies = Config::parse_policies(v)?,
                     Some(x) => {
                         return Err(Error::InvalidConfig(format!(
                             "Unexpected item {} in dhcp fragment",
