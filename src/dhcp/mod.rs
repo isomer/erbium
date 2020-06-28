@@ -104,7 +104,6 @@ impl std::default::Default for DHCPRequest {
                 chaddr: vec![
                     0x00, 0x00, 0x5E, 0x00, 0x53,
                     0x00, /* Reserved for documentation, per RFC7042 */
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 ],
                 sname: vec![],
                 file: vec![],
