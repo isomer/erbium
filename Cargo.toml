@@ -18,7 +18,7 @@ hostname = { version = "0.3.0" }
 mio = { version = "0.6.20" }
 netlink-packet-route = ""
 netlink-sys = { version="", features=["tokio_socket"] }
-nix = { version = "0.17", path="/home/perry/build/nix" }
+nix = { version = "0.17" } # We're gonna need 0.18 when it comes out
 rand = ""
 rusqlite = { version = "0.23.0" }
 tokio-util = { version="", features= ["codec"] }
@@ -31,3 +31,8 @@ path = "src/lib.rs"
 
 [profile.release]
 lto = "fat"
+
+
+# We need https://github.com/nix-rust/nix/pull/1222 to build.
+[patch.crates-io]
+nix = {git = "https://github.com/nix-rust/nix" }
