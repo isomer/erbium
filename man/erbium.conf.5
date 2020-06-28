@@ -1,0 +1,207 @@
+.192.168.0.\"   Copyright 2020 Perry Lorier
+.\"
+.\"  Licensed under the Apache License, Version 2.0 (the "License");
+.\"  you may not use this file except in compliance with the License.
+.\"  You may obtain a copy of the License at
+.\"
+.\"      http://www.apache.org/licenses/LICENSE-2.0
+.\"
+.\"  Unless required by applicable law or agreed to in writing, software
+.\"  distributed under the License is distributed on an "AS IS" BASIS,
+.\"  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+.\"  See the License for the specific language governing permissions and
+.\"  limitations under the License.
+.\"
+.\"  SPDX-License-Identifier: Apache-2.0
+.TH erbium.conf 5 2020-06-28 Linux "File formats and configuration files"
+.SH NAME
+erbium.conf \- Configuration for erbium
+.SH DESCRIPTION
+erbium is a daemon that provides network services for small/home networks.  erbium.conf provides configuration for
+erbium.
+.PP
+erbium.conf is in YAML format, and involves multiple sections.
+
+.SS Executable Configuration
+If erbium.conf is not executable, then erbium will read the file directly for
+configuration.
+
+If erbium.conf is executable, then erbium will execute the configuration file,
+and expect a valid erbium configuration on standard output.  This allows for
+generating erbium configurations at runtime via whatever custom tooling is
+appropriate for your environment (eg shellscript, python script, ELF binary
+etc).  This tooling could provide templating or whatever functionality is
+needed for the local environment.
+
+.SS DHCP Configuration
+
+DHCP configuration for erbium is under a \fBdhcp\fP heading.
+The only subheading of dhcp is currently \fBpolicies\fP.
+Under the \fBpolicies\fP section is a list of policies to apply to incoming DHCP packets.
+Each policy is concidered in turn, with the first policy that successfully matches being the policy that is applied.
+.PP
+A policy section contains 0 or more \fBmatch\-\fP\fIcondition\fP fields, and 0 or more \fBapply\-\fP\fIoption\fP fields.
+.SS DHCP Matches
+All match conditions in a policy must match (the conditions are AND'd together).
+A policy section that contains no matches only matches if one of it's
+subpolicies matches.  (See below for information about subpolicies).
+.\"
+.IP "\fBmatch\-subnet:\fP \fIcidr\-prefix/len\fP"
+\fBmatch\-subnet\fP is how the DHCP standards expect you to match incoming
+packets.  When a DHCP packet from a client is received, then the IP address of
+the interface where it is received is noted, and can be matched with
+\fBmatch-subnet\fP.  This works even for packets that are relayed, in which
+case the IP address of the relay is used.
+
+An example is: \fBmatch-subnet: 192.168.0.0/24\fP.
+.IP "\fBmatch\-hardware\-address:\fP \fIhardware\-address\fP"
+Clients send a "client hardware address" (chaddr) in DHCP request packets.  This allows matching on that address.
+This is most useful when matching on individual hosts to assign them a static address.
+.\"
+.IP "\fBmatch\-\fP\fIdhcpoption\fP\fB:\fP \fIoption\-value\fP"
+For every DHCP option supported by erbium, you can match on it by prefixing
+it's name with \fBmatch-\fP.  Note that most DHCP clients do not send many
+options, so in practise there isn't much you can match on here.  Some obvious
+and useful options for matching on are \fBmatch-host-name\fP and
+\fBmatch-class-id\fP.
+
+erbium will log options received from each client to make finding useful
+options to match on easier.
+.SS Applying DHCP Options
+Each policy contains a list of option values to apply to a client (assuming the
+client requested the option).  For nested subpolicies (see below), options
+are applied for the outer policies first, then the subpolicies can choose to
+override those values.
+.IP "\fBapply\-address:\fP \fIipaddr\fP
+This adds one IP address to the pool for the policy.  This can be provided
+multiple times to add multiple individual IP addresses to a pool, and then the
+client will be assigned one.
+.IP "\fBapply\-subnet:\fP \fIcidr/len\fP
+This adds an entire subnet worth of addresses to the address pool for the
+policy.  This can be provided multiple times to add multiple subnets.  The
+first and last addresses of the subnet are not applied, as these are the
+network and broadcast addresses respectively.
+.IP "\fBapply\-range: { start:\fP \fIstart-ip\fP\fB, end:\fP \fIlast-ip\fP\fB}\fR"
+This applies a range of IP addresses, from \fIstart-ip\fP to \fIlast-ip\fP inclusive.
+This is a YAML hash type, with the keys "start" and "end".  The text above shows this using YAML's single
+line syntax, but it can be in any of YAML's formats for a hash.
+.IP "\fBapply\-\fP\fIoption\fP\fB:\fP \fIvalue\fP"
+This lets you apply an arbitrary value for a DHCP option.
+The syntax for the values varies based on the option.  (See a full list of options and their types below).
+.\"
+.SS Subpolicies
+As well as having match and apply rules for each policy, a policy can also contain subpolicies.
+A subpolicy is only attempted to be matched if all the enclosing policies
+matched.
+Sub\-policies have their own DHCP IP pools.
+If you add an IP address to a policy then it will be excluded from all parent
+pools.
+Thus you can have an outer policy that contains a "apply\-subnet:
+192.0.2.0/24", then have a subpolicy for
+that matches an individual host that contains only "apply\-address: 192.0.2.53",
+and that address will only be given to the individual host.  (See the example below).
+A policy that does not specify an new addresses will continue to use the
+addresses for it's parent pool. (Again, see example below).
+Sub\-policies are introduced by adding a \fBpolicies:\fP section to a policy.
+.\"
+.SH DHCP Options
+.TS
+allbox tab(,);
+nllll.
+Num,Option name,Type,Specification,Description
+1,netmask,ip4,RFC2131,The netmask for this network.
+2,time-offset,seconds,RFC2131,The current timezone offset in seconds.
+3,routers,ip4 list,RFC2131,List of default gateways.
+4,time-servers,ip4 list,RFC2131,List of time servers.
+5,name-servers,ip4 list,RFC2131,List of IEN-116 name servers.
+6,dns-servers,ip4 list,RFC2131,List of DNS servers for recursive resolution.
+7,log-servers,ip4 list,RFC2131,List of MIT-LCS UDP log servers (obsolete).
+8,quote-servers,ip4 list,RFC2131,List of quote of the day servers (RFC865).
+9,lpr-servers,ip4 list,RFC2131,List of LPR print servers.
+xx,hostnname,string,RFC2131,Hostname of the client.
+xx,domain-name,string,RFC2131,Domain name of the client.
+19,forward,boolean,RFC2131,If the client should enable IP forwarding.
+22,max-reassembly,seconds,RFC2131,How long to wait for IP fragment reassembly.
+23,default-ttl,integer,RFC2131,The default TTL.
+24,mtu-timeout,integer,RFC2131,How long to cache MTU path discovery for.
+26,mtu,integer,RFC2131,The MTU the client should use.
+27,mtu-subnet,integer,RFC2131,The MTU for the local subnet.
+28,broadcast,ip4,RFC2131,The broadcast address of the local subnet.
+43,ntp-servers,ip4 list,RFC2131,A list of NTP servers to use.
+69,smtp-servers,ip4 list,RFC2131,A list of SMTP servers to use.
+70,pop3-servers,ip4 list,RFC2131,A list of POP3 servers to use.
+xx,user-class,string,RFC2131,A user configurable class.
+80,fqdn,string,RFC2131,The fully qualified domain name of the client.
+100,tz-rule,string,?,The POSIX complaint timezone rule specification.
+101,tz-name,string,?,A tzdata timezone name.
+xx,captive-portal,string,?,The URL for a captive portal.
+.TE
+.PP
+(Note more options than this exist, but I ran out of time writing these docs.
+Patches updating and extending this list based on src/dhcp/dhcppkt.rs
+appreciated)
+.PP
+The different types are expected to be:
+.IP \fIstring\fP
+A simple string in any of YAMLs string formats.
+.IP \fIinteger\fP
+An integer, in any of YAMLs integer formats.
+.IP \fIip4\fP
+An IPv4 address.  eg: 192.0.2.0
+.IP "\fIip4 list\fP"
+A YAML list of IPv4 addresses.  eg: [192.0.2.1, 192.0.2.2].
+.IP \fIseconds\fP
+This can be an integer number of seconds (in any of YAMLs integer formats), or it can be a string with numbers
+suffixed with "s" (for seconds), "m" (for minutes), "h" (for hours), or "d" (for days).  Multiple units can be
+combined, and if the unit is left off it is assumed to be seconds.  For example "4h20m5" is considered to be
+4 hours, 20 minutes, and 5 seconds (which is the same as the number 15605).
+.IP "\fIhardware address\fP"
+This is specified as a colon (:) separated list of hexadecimal octets.  For example: 00:00:5E:00:53:00.
+.SH EXAMPLE
+.EX
+dhcp:
+ policies:
+  - apply-dns-servers: [192.0.2.53]
+    apply-ntp-servers: [192.0.2.123]
+
+    policies:
+     - match-subnet: 192.0.2.0/24
+       apply-subnet: 192.0.2.0/24
+       policies:
+        - { match-hardware-address: 00:00:5E:00:53:01, apply-address: 192.0.2.1 }
+        - { match-hardware-address: 00:00:5E:00:53:02, apply-address: 192.0.2.2 }
+
+     - apply-subnet: 198.51.100.0/24
+       policies:
+        - { match-hardware-address: 00:00:5E:00:53:F0 }
+        - { match-hardware-address: 00:00:5E:00:53:F1 }
+.EE
+.PP
+A client with the mac address 00:00:5E:00:53:01 on an interface with an address
+in 192.0.2.0/24 will get given the IP address 192.0.2.1 (and no other).  It
+will get given the DNS server 192.0.2.53 and the NTP server 192.0.2.123 as
+these are both DHCP options and will be inherited from the top level
+configuration.
+.PP
+A client with the mac address 00:00:5E:00:53:03 on an interface with an address
+in 192.0.2.0/24 will get assigned some IP address between 192.0.2.3 and
+192.0.2.254 inclusive.  It will also get assigned the default DNS and NTP
+servers.
+.PP
+A client with the mac address 00:00:5E:00:53:F0 on any interface will be
+assigned an IP address between 198.51.100.1 and 198.51.100.254 (inclusive).
+.PP
+Any other client that sends a query that is received on an interface that is
+not a member of 192.0.2.0/24 will not get a reply.  (This is what ISC DHCP
+server called "non-authoritative mode")
+.SH FILES
+erbium.conf
+.SH BUGS
+erbium is currently under active development, and many important features and protocols are not yet complete, or even
+implemented yet.
+.SH SEE ALSO
+.BR erbium.conf (5),
+.BR erbium-dns (8),
+.BR erbium-dhcp (8),
+.BR erbium-conftest (8)
+
