@@ -58,10 +58,11 @@ impl Error {
     }
 }
 
-fn calculate_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
+fn calculate_hash<S: Hash, T: Hash>(s: &S, t: &T) -> u64 {
+    let mut h = DefaultHasher::new();
+    s.hash(&mut h);
+    t.hash(&mut h);
+    h.finish()
 }
 
 impl Pool {
@@ -147,11 +148,10 @@ impl Pool {
         /* This performs a consistent hash of the clientid and the IP addresses
          * then orders by the distance from the hash of the clientid
          */
-        let clienthash = calculate_hash(&clientid);
+        let clienthash = calculate_hash(&0, &clientid);
         let mut addresses = addresses
             .iter()
-            .map(|ip| (calculate_hash(ip), ip))
-            .map(|(h, ip)| (h ^ clienthash, ip))
+            .map(|ip| (calculate_hash(&clienthash, ip), ip))
             .collect::<Vec<_>>();
         addresses.sort_unstable();
         let addresses = addresses
@@ -205,7 +205,8 @@ impl Pool {
             .query_row(
                 "SELECT
                address,
-               expiry
+               expiry,
+               start
              FROM
                leases
              WHERE clientid = ?1
@@ -215,6 +216,7 @@ impl Pool {
                     Ok(Some((
                         row.get::<usize, String>(0)?,
                         row.get::<usize, u32>(1)?,
+                        row.get::<usize, u32>(2)?,
                     )))
                 },
             )
@@ -223,11 +225,12 @@ impl Pool {
             if let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>() {
                 if addresses.contains(&ip) {
                     println!("Reusing existing lease: {:?}", lease);
+                    // We want to double the time of the leases.  So if this lease was
+                    // allocated 2 minutes ago, then we should renew it for 4 minutes.
+                    let expiry = (ts as u32).saturating_sub(lease.2).saturating_mul(2);
                     return Ok(Lease {
                         ip,
-                        expire: std::time::Duration::from_secs(
-                            (lease.1.saturating_sub(ts as u32).saturating_mul(2)).into(),
-                        ),
+                        expire: std::time::Duration::from_secs(expiry.into()),
                     });
                 }
             }
