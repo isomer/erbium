@@ -692,7 +692,7 @@ impl DhcpOptions {
     }
 
     pub fn get_address_request(&self) -> Option<net::Ipv4Addr> {
-        self.get_option::<std::net::Ipv4Addr>(&OPTION_LEASETIME)
+        self.get_option::<std::net::Ipv4Addr>(&OPTION_ADDRESSREQUEST)
     }
 
     pub fn get_messagetype(&self) -> Option<MessageType> {
