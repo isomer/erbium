@@ -307,7 +307,11 @@ fn handle_request(
     } else if let Some(addresses) = response.address {
         match pools.allocate_address(
             &req.pkt.get_client_id(),
-            req.pkt.options.get_address_request(),
+            if !req.pkt.giaddr.is_unspecified() {
+                Some(req.pkt.giaddr)
+            } else {
+                req.pkt.options.get_address_request()
+            },
             &addresses,
         ) {
             Ok(lease) => Ok(dhcppkt::DHCP {
