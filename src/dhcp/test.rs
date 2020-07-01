@@ -416,6 +416,84 @@ fn client_identifier_or_chaddr() {
  * Server identifier         MUST         MUST               MUST
  * Maximum message size      MUST NOT     MUST NOT           MUST NOT
  * All others                MAY          MAY                MUST NOT
- *
- * TODO: Implement tests for all of these.
  */
+
+#[test]
+fn offer_required() {
+    let mut request = mk_dhcp_request();
+    request.pkt.options = request
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_LEASETIME, &321u32)
+        .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP)
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPDISCOVER);
+
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
+    let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
+    serverids.insert(SERVER_IP);
+    let conf = mk_default_config();
+    let reply =
+        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
+    assert_eq!(reply.options.get_messagetype().unwrap(), dhcppkt::DHCPOFFER);
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_ADDRESSREQUEST)
+        .is_none());
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+        .is_none());
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_SERVERID)
+        .is_some());
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_MAXMSGSIZE)
+        .is_none());
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_CLIENTID)
+        .is_none());
+}
+
+#[test]
+fn ack_required() {
+    let mut request = mk_dhcp_request();
+    request.pkt.options = request
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_LEASETIME, &321u32)
+        .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP)
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST);
+
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
+    let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
+    serverids.insert(SERVER_IP);
+    let conf = mk_default_config();
+    let reply =
+        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
+    assert_eq!(reply.options.get_messagetype().unwrap(), dhcppkt::DHCPACK);
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_ADDRESSREQUEST)
+        .is_none());
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+        .is_none());
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_SERVERID)
+        .is_some());
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_MAXMSGSIZE)
+        .is_none());
+    assert!(reply
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_CLIENTID)
+        .is_none());
+}

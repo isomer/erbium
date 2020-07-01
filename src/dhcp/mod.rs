@@ -236,11 +236,7 @@ fn handle_discover<'l>(
             other: collections::HashMap::new(),
         }
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
-        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
-        .maybe_set_option(
-            &dhcppkt::OPTION_CLIENTID,
-            req.pkt.options.get_clientid().as_ref(),
-        ),
+        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
         ..Default::default()
     };
     if !apply_policies(req, &conf.dhcp.policies, &mut response) {
@@ -295,11 +291,7 @@ fn handle_request(
             other: collections::HashMap::new(),
         }
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
-        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
-        .maybe_set_option(
-            &dhcppkt::OPTION_CLIENTID,
-            req.pkt.options.get_clientid().as_ref(),
-        ),
+        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
         ..Default::default()
     };
     if !apply_policies(req, &conf.dhcp.policies, &mut response) {
@@ -335,10 +327,6 @@ fn handle_request(
                     .set_option(
                         &dhcppkt::OPTION_SERVERID,
                         &req.pkt.options.get_serverid().unwrap_or(req.serverip),
-                    )
-                    .maybe_set_option(
-                        &dhcppkt::OPTION_CLIENTID,
-                        req.pkt.options.get_clientid().as_ref(),
                     )
                     .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32)),
             }),
