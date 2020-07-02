@@ -22,6 +22,7 @@
 use crate::dhcp;
 use crate::dhcp::dhcppkt;
 use crate::dhcp::pool;
+use rand::Rng;
 use std::collections;
 use std::net;
 use tokio::sync;
@@ -41,7 +42,7 @@ fn mk_dhcp_request_pkt() -> dhcppkt::DHCP {
         htype: dhcppkt::HWTYPE_ETHERNET,
         hlen: 6,
         hops: 0,
-        xid: 0,
+        xid: rand::thread_rng().gen(),
         secs: 0,
         flags: 0,
         ciaddr: net::Ipv4Addr::UNSPECIFIED,
@@ -404,6 +405,33 @@ fn client_identifier_or_chaddr() {
 /* RFC2131 Section 4.3.1:
  * Option                    DHCPOFFER    DHCPACK            DHCPNAK
  * ------                    ---------    -------            -------
+ * 'op'       BOOTREPLY            BOOTREPLY           BOOTREPLY
+ * 'htype'    (From "Assigned Numbers" RFC)
+ * 'hlen'     (Hardware address length in octets)
+ * 'hops'     0                    0                   0
+ * 'xid'      'xid' from client    'xid' from client   'xid' from client
+ *            DHCPDISCOVER         DHCPREQUEST         DHCPREQUEST
+ *            message              message             message
+ * 'secs'     0                    0                   0
+ * 'ciaddr'   0                    'ciaddr' from       0
+ *                                 DHCPREQUEST or 0
+ * 'yiaddr'   IP address offered   IP address          0
+ *            to client            assigned to client
+ * 'siaddr'   IP address of next   IP address of next  0
+ *            bootstrap server     bootstrap server
+ * 'flags'    'flags' from         'flags' from        'flags' from
+ *            client DHCPDISCOVER  client DHCPREQUEST  client DHCPREQUEST
+ *            message              message             message
+ * 'giaddr'   'giaddr' from        'giaddr' from       'giaddr' from
+ *            client DHCPDISCOVER  client DHCPREQUEST  client DHCPREQUEST
+ *            message              message             message
+ * 'chaddr'   'chaddr' from        'chaddr' from       'chaddr' from
+ *            client DHCPDISCOVER  client DHCPREQUEST  client DHCPREQUEST
+ *            message              message             message
+ * 'sname'    Server host name     Server host name    (unused)
+ *            or options           or options
+ * 'file'     Client boot file     Client boot file    (unused)
+ *            name or options      name or options
  * Requested IP address      MUST NOT     MUST NOT           MUST NOT
  * IP address lease time     MUST         MUST (DHCPREQUEST) MUST NOT
  *                                        MUST NOT (DHCPINFORM)
@@ -435,6 +463,18 @@ fn offer_required() {
     let conf = mk_default_config();
     let reply =
         dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
+    assert_eq!(reply.op, dhcppkt::OP_BOOTREPLY);
+    assert_eq!(reply.htype, dhcppkt::HWTYPE_ETHERNET);
+    assert_eq!(reply.hlen, 6);
+    assert_eq!(reply.hops, 0);
+    assert_eq!(reply.xid, request.pkt.xid);
+    assert_eq!(reply.secs, 0);
+    assert_eq!(reply.ciaddr, std::net::Ipv4Addr::UNSPECIFIED);
+    assert_ne!(reply.yiaddr, std::net::Ipv4Addr::UNSPECIFIED);
+    assert_eq!(reply.siaddr, std::net::Ipv4Addr::UNSPECIFIED);
+    assert_eq!(reply.flags, request.pkt.flags);
+    assert_eq!(reply.giaddr, request.pkt.giaddr);
+    assert_eq!(reply.chaddr, request.pkt.chaddr);
     assert_eq!(reply.options.get_messagetype().unwrap(), dhcppkt::DHCPOFFER);
     assert!(reply
         .options
@@ -475,6 +515,20 @@ fn ack_required() {
     let conf = mk_default_config();
     let reply =
         dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
+    assert_eq!(reply.op, dhcppkt::OP_BOOTREPLY);
+    assert_eq!(reply.htype, dhcppkt::HWTYPE_ETHERNET);
+    assert_eq!(reply.hlen, 6);
+    assert_eq!(reply.hops, 0);
+    assert_eq!(reply.xid, request.pkt.xid);
+    assert_eq!(reply.secs, 0);
+    assert!(
+        (reply.ciaddr == std::net::Ipv4Addr::UNSPECIFIED) || (reply.ciaddr == request.pkt.ciaddr)
+    );
+    assert_ne!(reply.yiaddr, std::net::Ipv4Addr::UNSPECIFIED);
+    assert_eq!(reply.siaddr, std::net::Ipv4Addr::UNSPECIFIED);
+    assert_eq!(reply.flags, request.pkt.flags);
+    assert_eq!(reply.giaddr, request.pkt.giaddr);
+    assert_eq!(reply.chaddr, request.pkt.chaddr);
     assert_eq!(reply.options.get_messagetype().unwrap(), dhcppkt::DHCPACK);
     assert!(reply
         .options
