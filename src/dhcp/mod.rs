@@ -299,8 +299,8 @@ fn handle_request(
     } else if let Some(addresses) = response.address {
         match pools.allocate_address(
             &req.pkt.get_client_id(),
-            if !req.pkt.giaddr.is_unspecified() {
-                Some(req.pkt.giaddr)
+            if !req.pkt.ciaddr.is_unspecified() {
+                Some(req.pkt.ciaddr)
             } else {
                 req.pkt.options.get_address_request()
             },

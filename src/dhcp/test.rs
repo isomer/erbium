@@ -72,7 +72,7 @@ fn mk_dhcp_request() -> dhcp::DHCPRequest {
 
 fn mk_default_config() -> crate::config::Config {
     let mut apply_address: pool::PoolAddresses = Default::default();
-    for i in 0..256 {
+    for i in 1..255 {
         apply_address
             .insert((u32::from("192.0.2.0".parse::<std::net::Ipv4Addr>().unwrap()) + i).into());
     }
@@ -551,3 +551,108 @@ fn ack_required() {
         .get_option::<Vec<u8>>(&dhcppkt::OPTION_CLIENTID)
         .is_none());
 }
+
+#[test]
+fn test_renew_unknown() {
+    /* If the server is started and there is a client that tries to renew a lease we've not heard
+     * about.  If the lease is available, we should update our database and give it to them!
+     */
+    let mut request = mk_dhcp_request();
+    request.pkt.options = request
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST);
+    request.pkt.ciaddr = EXAMPLE_IP2;
+
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
+    let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
+    serverids.insert(SERVER_IP);
+    let conf = mk_default_config();
+    let reply =
+        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
+    assert_eq!(reply.yiaddr, EXAMPLE_IP2);
+}
+
+#[test]
+fn test_full() {
+    /* This is an end to end test, testing a sequence of packets that a client should send and
+     * making sure that we handle them correctly.
+     */
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
+    let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
+    let conf = mk_default_config();
+    let clientid = "Client Identifier".as_bytes();
+    let xid = rand::thread_rng().gen();
+    let secs = 0;
+
+    /* Send DISCOVER */
+    let mut request = mk_dhcp_request();
+    request.pkt.xid = xid;
+    request.pkt.secs = secs;
+    request.pkt.options = request
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &clientid)
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPDISCOVER);
+
+    let offer = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
+        .expect("Failed to handle request");
+
+    serverids.insert(offer.options.get_serverid().unwrap());
+
+    assert_eq!(offer.options.get_messagetype(), Some(dhcppkt::DHCPOFFER));
+
+    /* Send REQUEST */
+    let mut request = mk_dhcp_request();
+    request.pkt.xid = xid;
+    request.pkt.secs = secs;
+    request.pkt.options = request
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &clientid)
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST)
+        .set_option(&dhcppkt::OPTION_ADDRESSREQUEST, &offer.yiaddr);
+
+    let ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
+        .expect("Failed to handle request");
+
+    assert_eq!(ack.options.get_messagetype(), Some(dhcppkt::DHCPACK));
+    assert_eq!(ack.yiaddr, offer.yiaddr); /* make sure we don't needlessly change our mind */
+
+    /* Time passes and now we want to renew */
+    let mut request = mk_dhcp_request();
+    /* xid and seconds are not copied from the previous requests */
+    request.pkt.secs = 0;
+    request.pkt.ciaddr = offer.yiaddr;
+    request.pkt.options = request
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &clientid)
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST);
+    /* no server id */
+    let ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
+        .expect("Failed to handle request");
+    assert_eq!(ack.options.get_messagetype(), Some(dhcppkt::DHCPACK));
+    assert_eq!(ack.yiaddr, offer.yiaddr); /* Did we get back the same address? */
+
+    /* Okay, now it's time to RELEASE the address */
+    let mut request = mk_dhcp_request();
+    /* xid and seconds are not copied from the previous requests */
+    request.pkt.secs = 0;
+    request.pkt.options = request
+        .pkt
+        .options
+        .set_option(&dhcppkt::OPTION_CLIENTID, &clientid)
+        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPRELEASE);
+    /* no server id */
+    /* release is not supported, so we expect an error here.  But we shouldn't crash */
+    let ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
+        .expect_err("Failed to handle request");
+}
+
+/* TODO:
+ * 4. The servers receive the DHCPREQUEST broadcast from the client.  Those servers not selected by
+ *    the DHCPREQUEST message use the message as notification that the client has declined that
+ *    server's offer.
+*/
