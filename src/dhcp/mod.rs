@@ -520,7 +520,7 @@ async fn recvdhcp(
                         .options
                         .get_messagetype()
                         .map(|x| x.to_string())
-                        .unwrap_or("packet".into()),
+                        .unwrap_or_else(|| "packet".into()),
                     e
                 );
                 return;

@@ -37,8 +37,6 @@ async fn go() -> Result<(), Box<dyn Error>> {
     let conf = erbium::config::load_config_from_path(config_file).await?;
     let mut services = futures::stream::FuturesUnordered::new();
 
-    println!("Configuration: {:?}", *conf.lock().await);
-
     services.push(tokio::spawn(dhcp::run(netinfo, conf)));
     services.push(tokio::spawn(dns::run()));
 
