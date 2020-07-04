@@ -228,9 +228,12 @@ impl Pool {
             if let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>() {
                 if addresses.contains(&ip) {
                     println!("Reusing existing lease: {:?}", lease);
-                    // We want to double the time of the leases.  So if this lease was
-                    // allocated 2 minutes ago, then we should renew it for 4 minutes.
-                    let expiry = (ts as u32).saturating_sub(lease.2).saturating_mul(2);
+                    // We want leases to double in size.  But normally you renew your
+                    // lease at ½ the duration.  We don't want to always just double
+                    // the lease, because you can accidentally end up with a ridiculously
+                    // long lease if you renew rapidly.
+                    // So instead we just use 3*renew.
+                    let expiry = (ts as u32).saturating_sub(lease.2).saturating_mul(3);
                     return Ok(Lease {
                         ip,
                         expire: std::time::Duration::from_secs(expiry.into()),
