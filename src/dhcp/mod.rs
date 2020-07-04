@@ -513,8 +513,14 @@ async fn recvdhcp(
         ) {
             Err(e) => {
                 println!(
-                    "{}: Failed to handle packet: {}",
+                    "{}: Failed to handle {}: {}",
                     format_client(&request.pkt),
+                    request
+                        .pkt
+                        .options
+                        .get_messagetype()
+                        .map(|x| x.to_string())
+                        .unwrap_or("packet".into()),
                     e
                 );
                 return;
