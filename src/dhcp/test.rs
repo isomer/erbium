@@ -23,7 +23,6 @@ use crate::dhcp;
 use crate::dhcp::dhcppkt;
 use crate::dhcp::pool;
 use rand::Rng;
-use std::collections;
 use std::net;
 use tokio::sync;
 
@@ -647,7 +646,7 @@ fn test_full() {
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPRELEASE);
     /* no server id */
     /* release is not supported, so we expect an error here.  But we shouldn't crash */
-    let ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
+    let _ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
         .expect_err("Failed to handle request");
 }
 

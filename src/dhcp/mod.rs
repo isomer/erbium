@@ -246,6 +246,8 @@ fn handle_discover<'l>(
             &req.pkt.get_client_id(),
             req.pkt.options.get_address_request(),
             &addresses,
+            response.minlease.unwrap_or(pool::DEFAULT_MIN_LEASE),
+            response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
         ) {
             Ok(lease) => Ok(dhcppkt::DHCP {
                 op: dhcppkt::OP_BOOTREPLY,
@@ -305,6 +307,8 @@ fn handle_request(
                 req.pkt.options.get_address_request()
             },
             &addresses,
+            response.minlease.unwrap_or(pool::DEFAULT_MIN_LEASE),
+            response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
         ) {
             Ok(lease) => Ok(dhcppkt::DHCP {
                 op: dhcppkt::OP_BOOTREPLY,
@@ -412,7 +416,7 @@ async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNet
             request.pkt.hops, request.pkt.giaddr
         );
     }
-    println!("");
+    println!();
     log_options(&request.pkt);
     println!(
         "{}: Requested: {}",

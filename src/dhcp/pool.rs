@@ -21,6 +21,9 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
 
+pub const DEFAULT_MIN_LEASE: std::time::Duration = std::time::Duration::from_secs(300);
+pub const DEFAULT_MAX_LEASE: std::time::Duration = std::time::Duration::from_secs(86400);
+
 pub type PoolAddresses = std::collections::HashSet<std::net::Ipv4Addr>;
 
 #[derive(Debug)]
@@ -300,11 +303,10 @@ impl Pool {
         clientid: &[u8],
         requested: Option<std::net::Ipv4Addr>,
         addresses: &PoolAddresses,
+        min_expire_time: std::time::Duration,
+        max_expire_time: std::time::Duration,
     ) -> Result<Lease, Error> {
         let lease = self.select_address(clientid, requested, addresses)?;
-
-        let min_expire_time = std::time::Duration::from_secs(300);
-        let max_expire_time = std::time::Duration::from_secs(86400);
 
         let lease = Lease {
             expire: std::cmp::min(
@@ -387,8 +389,14 @@ fn smoke_test() {
     addrpool.insert("192.168.0.100".parse().unwrap());
     addrpool.insert("192.168.0.101".parse().unwrap());
     addrpool.insert("192.168.0.102".parse().unwrap());
-    p.allocate_address(b"client", None, &addrpool)
-        .expect("Didn't get allocated an address?!");
+    p.allocate_address(
+        b"client",
+        None,
+        &addrpool,
+        DEFAULT_MIN_LEASE,
+        DEFAULT_MAX_LEASE,
+    )
+    .expect("Didn't get allocated an address?!");
 }
 
 #[test]
@@ -397,8 +405,14 @@ fn empty_pool() {
     /* Deliberately don't add any addresses, so we'll fail when we try and allocate something */
     let addrpool: PoolAddresses = Default::default();
     assert_eq!(
-        p.allocate_address(b"client", None, &addrpool)
-            .expect_err("Got allocated an address from an empty pool!"),
+        p.allocate_address(
+            b"client",
+            None,
+            &addrpool,
+            DEFAULT_MIN_LEASE,
+            DEFAULT_MAX_LEASE,
+        )
+        .expect_err("Got allocated an address from an empty pool!"),
         Error::NoAssignableAddress
     );
 }
@@ -414,7 +428,13 @@ fn reacquire_lease() {
     addrpool.insert("192.168.0.101".parse().unwrap());
     addrpool.insert("192.168.0.102".parse().unwrap());
     let lease = p
-        .allocate_address(b"client", Some(requested), &addrpool)
+        .allocate_address(
+            b"client",
+            Some(requested),
+            &addrpool,
+            DEFAULT_MIN_LEASE,
+            DEFAULT_MAX_LEASE,
+        )
         .expect("Failed to allocate address");
 
     assert_eq!(lease.ip, requested);
@@ -435,7 +455,13 @@ fn reacquire_expired_lease() {
     addrpool.insert("192.168.0.102".parse().unwrap());
     p.reserve_expired_address(b"client", requested);
     let lease = p
-        .allocate_address(b"client", Some(requested), &addrpool)
+        .allocate_address(
+            b"client",
+            Some(requested),
+            &addrpool,
+            DEFAULT_MIN_LEASE,
+            DEFAULT_MAX_LEASE,
+        )
         .expect("Failed to allocate address");
 
     assert_eq!(lease.ip, requested);
@@ -456,7 +482,13 @@ fn acquire_requested_address_success() {
     addrpool.insert("192.168.0.102".parse().unwrap());
 
     let lease = p
-        .allocate_address(b"client", Some(requested), &addrpool)
+        .allocate_address(
+            b"client",
+            Some(requested),
+            &addrpool,
+            DEFAULT_MIN_LEASE,
+            DEFAULT_MAX_LEASE,
+        )
         .expect("Failed to allocate address");
 
     assert_eq!(lease.ip, requested);
@@ -475,7 +507,13 @@ fn acquire_requested_address_in_use() {
     addrpool.insert("192.168.0.1".parse().unwrap());
 
     let lease = p
-        .allocate_address(b"client", Some(requested), &addrpool)
+        .allocate_address(
+            b"client",
+            Some(requested),
+            &addrpool,
+            DEFAULT_MIN_LEASE,
+            DEFAULT_MAX_LEASE,
+        )
         .expect("Failed to allocate address");
 
     /* Do not assigned the reserved address! */
