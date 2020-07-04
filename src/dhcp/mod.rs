@@ -381,21 +381,38 @@ fn log_options(req: &dhcppkt::DHCP) {
 }
 
 async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNetInfo) {
-    println!(
-        "{}: {} on {} ({})",
-        format_client(&request.pkt),
+    print!("{}", format_client(&request.pkt));
+    print!(": ");
+    print!(
+        "{}",
         request
             .pkt
             .options
             .get_messagetype()
             .map(|x| x.to_string())
             .unwrap_or_else(|| "[unknown]".into()),
-        netinfo
-            .get_name_by_ifidx(request.ifindex)
-            .await
-            .unwrap_or_else(|| "<unknown>".into()),
-        request.serverip,
     );
+    match netinfo.get_name_by_ifidx(request.ifindex).await {
+        Some(ifname) => {
+            print!(" on {}", ifname);
+        }
+        None => {
+            print!(" on #{}", request.ifindex);
+        }
+    }
+    if !request.serverip.is_unspecified() {
+        print!(" ({})", request.serverip);
+    }
+    if !request.pkt.ciaddr.is_unspecified() {
+        print!(", using {}", request.pkt.ciaddr);
+    }
+    if !request.pkt.giaddr.is_unspecified() {
+        print!(
+            ", relayed via {} hops from {}",
+            request.pkt.hops, request.pkt.giaddr
+        );
+    }
+    println!("");
     log_options(&request.pkt);
     println!(
         "{}: Requested: {}",
