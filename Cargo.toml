@@ -35,4 +35,4 @@ lto = "fat"
 
 # We need https://github.com/nix-rust/nix/pull/1222 to build.
 [patch.crates-io]
-nix = {git = "https://github.com/nix-rust/nix" }
+nix = { git = "https://github.com/nix-rust/nix" }
