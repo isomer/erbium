@@ -35,6 +35,8 @@ const SERVER_IP: net::Ipv4Addr = EXAMPLE_IP1;
 const SERVER_IP2: net::Ipv4Addr = EXAMPLE_IP2;
 const NOT_SERVER_IP: net::Ipv4Addr = EXAMPLE_IP3;
 
+const CLIENTID: &[u8] = b"Client Identifier";
+
 fn mk_dhcp_request_pkt() -> dhcppkt::DHCP {
     dhcppkt::DHCP {
         op: dhcppkt::OP_BOOTREQUEST,
@@ -96,7 +98,7 @@ fn test_parsing_inverse_serialising() {
         .options
         .set_option(&dhcppkt::OPTION_LEASETIME, &(321 as u32))
         .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP)
-        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_NTPSERVERS, &EXAMPLE_IP4);
     let bytes = orig_pkt.pkt.serialise();
     let new_pkt = dhcppkt::parse(bytes.as_slice()).expect("Failed to parse DHCP packet");
@@ -121,7 +123,7 @@ fn test_handle_pkt() {
     request.pkt.options = request
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_LEASETIME, &321u32)
         .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP);
 
@@ -136,11 +138,10 @@ fn test_handle_pkt() {
 fn truncated_pkt() {
     /* Check that truncated packets don't cause panics or other problems */
     let mut orig_pkt = mk_dhcp_request();
-    Some(String::from("Client Identifier").as_bytes().to_vec());
     orig_pkt.pkt.options = orig_pkt
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_LEASETIME, &(321u32))
         .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP);
     let bytes = orig_pkt.pkt.serialise();
@@ -451,7 +452,7 @@ fn offer_required() {
     request.pkt.options = request
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_LEASETIME, &321u32)
         .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP)
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPDISCOVER);
@@ -503,7 +504,7 @@ fn ack_required() {
     request.pkt.options = request
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_LEASETIME, &321u32)
         .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP)
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST);
@@ -560,7 +561,7 @@ fn test_renew_unknown() {
     request.pkt.options = request
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_CLIENTID, &"Client Identifier".as_bytes())
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST);
     request.pkt.ciaddr = EXAMPLE_IP2;
 
@@ -581,7 +582,6 @@ fn test_full() {
     let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
-    let clientid = "Client Identifier".as_bytes();
     let xid = rand::thread_rng().gen();
     let secs = 0;
 
@@ -592,7 +592,7 @@ fn test_full() {
     request.pkt.options = request
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_CLIENTID, &clientid)
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPDISCOVER);
 
     let offer = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
@@ -609,7 +609,7 @@ fn test_full() {
     request.pkt.options = request
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_CLIENTID, &clientid)
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST)
         .set_option(&dhcppkt::OPTION_ADDRESSREQUEST, &offer.yiaddr);
 
@@ -627,7 +627,7 @@ fn test_full() {
     request.pkt.options = request
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_CLIENTID, &clientid)
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST);
     /* no server id */
     let ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
@@ -642,12 +642,12 @@ fn test_full() {
     request.pkt.options = request
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_CLIENTID, &clientid)
+        .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPRELEASE);
     /* no server id */
     /* release is not supported, so we expect an error here.  But we shouldn't crash */
-    let _ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
-        .expect_err("Failed to handle request");
+    let _ack =
+        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect_err("Failed to handle request");
 }
 
 /* TODO:

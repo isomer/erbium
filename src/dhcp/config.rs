@@ -540,6 +540,6 @@ fn test_duration() {
     );
     assert_eq!(
         Config::parse_duration(&yaml::Yaml::String("1w2d3h4m5s".into())).unwrap(),
-        std::time::Duration::from_secs(1 * 7 * 86400 + 2 * 86400 + 3 * 3600 + 4 * 60 + 5)
+        std::time::Duration::from_secs(7 * 86400 + 2 * 86400 + 3 * 3600 + 4 * 60 + 5)
     );
 }

@@ -203,5 +203,5 @@ fn test_udp_packet() {
 fn test_checksum() {
     let data = vec![8, 0, 0, 0, 0x12, 0x34, 0x00, 0x01];
 
-    assert_eq!(finish_netsum(partial_netsum(0, &data)), 0xE5Ca);
+    assert_eq!(finish_netsum(partial_netsum(0, &data)), 0xE5CA);
 }
