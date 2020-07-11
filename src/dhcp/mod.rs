@@ -580,9 +580,8 @@ async fn recvdhcp(
     log_options(&reply);
 
     /* Collect metadata ready to send */
-    let srcll = if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) = netinfo
-        .get_linkaddr_by_ifidx(intf.try_into().unwrap())
-        .await
+    let srcll = if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) =
+        netinfo.get_linkaddr_by_ifidx(intf).await
     {
         srcll
     } else {

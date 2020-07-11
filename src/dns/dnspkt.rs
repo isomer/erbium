@@ -464,7 +464,7 @@ impl DNSPkt {
             .chain(self.additional.iter())
             .map(|rr| std::time::Duration::from_secs(rr.ttl as u64))
             .min()
-            .unwrap_or(std::time::Duration::from_secs(0))
+            .unwrap_or_else(|| std::time::Duration::from_secs(0))
     }
 
     pub fn clone_with_ttl_decrement(&self, decrement: u32) -> DNSPkt {
