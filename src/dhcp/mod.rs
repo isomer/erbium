@@ -396,14 +396,10 @@ async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNet
             .map(|x| x.to_string())
             .unwrap_or_else(|| "[unknown]".into()),
     );
-    match netinfo.get_name_by_ifidx(request.ifindex).await {
-        Some(ifname) => {
-            print!(" on {}", ifname);
-        }
-        None => {
-            print!(" on #{}", request.ifindex);
-        }
-    }
+    print!(
+        " on {}",
+        netinfo.get_safe_name_by_ifidx(request.ifindex).await
+    );
     if !request.serverip.is_unspecified() {
         print!(" ({})", request.serverip);
     }
@@ -498,7 +494,10 @@ async fn recvdhcp(
     };
     let optional_dst = netinfo.get_ipv4_by_ifidx(intf).await;
     if optional_dst.is_none() {
-        println!("No IPv4 found on interface {}", intf);
+        println!(
+            "No IPv4 found on interface {}",
+            netinfo.get_safe_name_by_ifidx(intf).await
+        );
         return;
     }
 

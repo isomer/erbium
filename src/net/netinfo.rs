@@ -95,7 +95,12 @@ impl SharedNetInfo {
         let ifaddr = self.parse_addr(addr);
         let mut ni = self.0.write().await;
         let ii = ni.intf.get_mut(&ifindex).unwrap(); // TODO: Error?
-        ii.addresses.push(ifaddr)
+        ii.addresses.push(ifaddr);
+        let (ip, prefixlen) = ifaddr;
+        println!(
+            "Found addr {}/{} for if#{}, now {:?}",
+            ip, prefixlen, ifindex, ii.addresses
+        );
     }
     async fn process_deladdr(&self, addr: AddressMessage) {
         let ifindex = addr.header.index;
@@ -103,6 +108,11 @@ impl SharedNetInfo {
         let mut ni = self.0.write().await;
         let ii = ni.intf.get_mut(&ifindex).unwrap(); // TODO: Error?
         ii.addresses.retain(|&x| x != ifaddr);
+        let (ip, prefixlen) = ifaddr;
+        println!(
+            "Lost addr {}/{} for if#{}, now {:?}",
+            ip, prefixlen, ifindex, ii.addresses
+        );
     }
     fn decode_linklayer(&self, linktype: u16, addr: &[u8]) -> LinkLayer {
         match linktype {
@@ -149,6 +159,7 @@ impl SharedNetInfo {
 
         let mut netinfo = self.0.write().await;
         netinfo.name2idx.insert(ifinfo.name.clone(), ifidx);
+        println!("Found new interface {:?}", ifinfo);
         netinfo.intf.insert(ifidx, ifinfo);
     }
 
@@ -318,5 +329,11 @@ impl SharedNetInfo {
     }
     pub async fn get_name_by_ifidx(&self, ifidx: u32) -> Option<String> {
         self.0.read().await.intf.get(&ifidx).map(|x| x.name.clone())
+    }
+    pub async fn get_safe_name_by_ifidx(&self, ifidx: u32) -> String {
+        match self.get_name_by_ifidx(ifidx).await {
+            Some(ifname) => format!("{}", ifname),
+            None => format!("if#{}", ifidx),
+        }
     }
 }
