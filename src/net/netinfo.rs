@@ -154,15 +154,24 @@ impl SharedNetInfo {
         let ifbrd = ifbrd.map_or(LinkLayer::None, |x| {
             self.decode_linklayer(link.header.link_layer_type, &x)
         });
+
+        let mut netinfo = self.0.write().await;
+        /* This might be an update to an existing interface.
+         * (eg the interface might be changing it's oper state from down/up etc.
+         * So preserve some information.
+         */
+        let old_ifinfo = netinfo.intf.remove(&ifidx);
+        let (old_name, old_addresses, old_mtu) = old_ifinfo
+            .map(|x| (Some(x.name), Some(x.addresses), Some(x.mtu)))
+            .unwrap_or((None, None, None));
         let ifinfo = IfInfo {
-            name: ifname.unwrap(),
-            mtu: ifmtu.unwrap(),
-            addresses: vec![],
+            name: ifname.or(old_name).expect("Interface with unknown name"),
+            mtu: ifmtu.or(old_mtu).expect("Interface missing MTU"),
+            addresses: old_addresses.unwrap_or_else(Vec::new),
             lladdr: ifaddr,
             llbroadcast: ifbrd,
         };
 
-        let mut netinfo = self.0.write().await;
         netinfo.name2idx.insert(ifinfo.name.clone(), ifidx);
         println!("Found new interface {:?}", ifinfo);
         netinfo.intf.insert(ifidx, ifinfo);
