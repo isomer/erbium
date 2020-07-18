@@ -95,12 +95,17 @@ impl SharedNetInfo {
         let ifaddr = self.parse_addr(addr);
         let mut ni = self.0.write().await;
         let ii = ni.intf.get_mut(&ifindex).unwrap(); // TODO: Error?
-        ii.addresses.push(ifaddr);
-        let (ip, prefixlen) = ifaddr;
-        println!(
-            "Found addr {}/{} for if#{}, now {:?}",
-            ip, prefixlen, ifindex, ii.addresses
-        );
+        if !ii.addresses.contains(&ifaddr) {
+            /* It's common to renew IPv6 addresses, don't treat them as new if
+             * the address already exists.
+             */
+            ii.addresses.push(ifaddr);
+            let (ip, prefixlen) = ifaddr;
+            println!(
+                "Found addr {}/{} for if#{}, now {:?}",
+                ip, prefixlen, ifindex, ii.addresses
+            );
+        }
     }
     async fn process_deladdr(&self, addr: AddressMessage) {
         let ifindex = addr.header.index;
