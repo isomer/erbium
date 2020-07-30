@@ -346,7 +346,7 @@ impl SharedNetInfo {
     }
     pub async fn get_safe_name_by_ifidx(&self, ifidx: u32) -> String {
         match self.get_name_by_ifidx(ifidx).await {
-            Some(ifname) => format!("{}", ifname),
+            Some(ifname) => ifname,
             None => format!("if#{}", ifidx),
         }
     }
