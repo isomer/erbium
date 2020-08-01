@@ -18,7 +18,7 @@ hostname = { version = "0.3" }
 mio = { version = "0.6.20" }
 netlink-packet-route = "0.3"
 netlink-sys = { version="0.3", features=["tokio_socket"] }
-nix = { version = ">=0.17, <1.0" } # We're gonna need 0.18 when it comes out
+nix = { version = "0.18" }
 rand = "0.7.3"
 rusqlite = { version = "0.23" }
 tokio-util = { version="", features= ["codec"] }
