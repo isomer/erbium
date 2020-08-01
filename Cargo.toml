@@ -9,18 +9,18 @@ license = "Apache-2.0"
 repository = "https://github.com/isomer/erbium.git"
 
 [dependencies]
-async-std = { version = "", features = ["tokio02"] }
-bytes = ""
-futures = ""
-futures-core = ""
-futures-sink = ""
-hostname = { version = "0.3.0" }
+async-std = { version = "1.6.2", features = ["tokio02"] }
+bytes = "0.5.6"
+futures = "0.3.5"
+futures-core = "0.3.5"
+futures-sink = "0.3.5"
+hostname = { version = "0.3" }
 mio = { version = "0.6.20" }
 netlink-packet-route = ""
 netlink-sys = { version="", features=["tokio_socket"] }
 nix = { version = ">=0.17, <1.0" } # We're gonna need 0.18 when it comes out
-rand = ""
-rusqlite = { version = "0.23.0" }
+rand = "0.7.3"
+rusqlite = { version = "0.23" }
 tokio-util = { version="", features= ["codec"] }
 tokio = { version = "0.2", features = ["full"] }
 yaml-rust = { version = "0.4" }
