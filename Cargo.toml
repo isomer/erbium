@@ -21,7 +21,7 @@ netlink-sys = { version="0.3", features=["tokio_socket"] }
 nix = { version = "0.18" }
 rand = "0.7.3"
 rusqlite = { version = "0.23" }
-tokio-util = { version="", features= ["codec"] }
+tokio-util = { version="0.3.1", features= ["codec"] }
 tokio = { version = "0.2", features = ["full"] }
 yaml-rust = { version = "0.4" }
 
