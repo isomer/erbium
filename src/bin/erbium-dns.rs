@@ -48,6 +48,9 @@ async fn go() -> Result<(), Box<dyn Error>> {
 async fn main() {
     match go().await {
         Ok(()) => (),
-        Err(x) => println!("Error: {}", x),
+        Err(x) => {
+            println!("Error: {}", x);
+            std::process::exit(1);
+        }
     }
 }
