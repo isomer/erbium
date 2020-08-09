@@ -1017,3 +1017,128 @@ impl DHCP {
             .unwrap_or_else(|| self.chaddr.clone())
     }
 }
+
+#[cfg(test)]
+fn serialise_one_for_test(opt: DhcpOptionTypeValue) -> Vec<u8> {
+    let mut v = vec![];
+    opt.serialise(&mut v);
+    v
+}
+
+#[test]
+fn test_type_serialisation() {
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::String("test".into())),
+        vec![116, 101, 115, 116]
+    );
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::Ip("192.0.2.0".parse().unwrap())),
+        vec![192, 0, 2, 0]
+    );
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::I32(16909060i32)),
+        vec![1, 2, 3, 4]
+    );
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::U8(42)),
+        vec![42]
+    );
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::U16(258)),
+        vec![1, 2],
+    );
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::U32(16909060)),
+        vec![1, 2, 3, 4]
+    );
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::HwAddr(vec![1, 2, 3, 4, 5, 6])),
+        vec![1, 2, 3, 4, 5, 6]
+    );
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::IpList(vec![
+            "192.0.2.0".parse().unwrap(),
+            "192.0.2.1".parse().unwrap(),
+            "192.0.2.2".parse().unwrap(),
+        ])),
+        vec![192, 0, 2, 0, 192, 0, 2, 1, 192, 0, 2, 2]
+    );
+}
+
+#[test]
+fn test_parse() {
+    assert_eq!(
+        format!(
+            "{}",
+            DhcpOptionType::String
+                .decode(&vec![116, 101, 115, 116])
+                .unwrap()
+        ),
+        "test"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            DhcpOptionType::Ip.decode(&vec![192, 0, 2, 42]).unwrap()
+        ),
+        "192.0.2.42"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            DhcpOptionType::IpList
+                .decode(&vec![192, 0, 2, 12, 192, 0, 2, 17])
+                .unwrap()
+        ),
+        "192.0.2.12,192.0.2.17"
+    );
+    assert_eq!(
+        format!("{}", DhcpOptionType::I32.decode(&vec![1, 2, 3, 4]).unwrap()),
+        "16909060",
+    );
+    assert_eq!(
+        format!("{}", DhcpOptionType::U8.decode(&vec![251]).unwrap()),
+        "251",
+    );
+    assert_eq!(
+        format!("{}", DhcpOptionType::U16.decode(&vec![1, 2]).unwrap()),
+        "258",
+    );
+    assert_eq!(
+        format!("{}", DhcpOptionType::U32.decode(&vec![1, 2, 3, 4]).unwrap()),
+        "16909060",
+    );
+    assert_eq!(
+        format!("{}", DhcpOptionType::Bool.decode(&vec![0]).unwrap()),
+        "0",
+    );
+    assert_eq!(
+        format!("{}", DhcpOptionType::Bool.decode(&vec![1]).unwrap()),
+        "1",
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            DhcpOptionType::Seconds16.decode(&vec![1, 0x2c]).unwrap()
+        ),
+        "300",
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            DhcpOptionType::Seconds32
+                .decode(&vec![0, 1, 0x51, 0x80])
+                .unwrap()
+        ),
+        "86400",
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            DhcpOptionType::HwAddr
+                .decode(&vec![0, 1, 2, 3, 4, 5])
+                .unwrap()
+        ),
+        "00:01:02:03:04:05"
+    );
+}
