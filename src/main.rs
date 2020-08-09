@@ -17,12 +17,28 @@
  *  Thin wrapper to start all services.
  */
 
-use std::error::Error;
 use tokio::stream::StreamExt;
 
 use erbium::*;
 
-async fn go() -> Result<(), Box<dyn Error>> {
+enum Error {
+    ConfigError(std::path::PathBuf, erbium::config::Error),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::ConfigError(path, e) => write!(
+                f,
+                "Failed to load config from {}: {}",
+                path.to_string_lossy(),
+                e
+            ),
+        }
+    }
+}
+
+async fn go() -> Result<(), Error> {
     let args: Vec<_> = std::env::args_os().collect();
     if args.len() > 2 {
         println!("Usage: {} <configfile>", args[0].to_string_lossy());
@@ -34,7 +50,9 @@ async fn go() -> Result<(), Box<dyn Error>> {
     } else {
         std::path::Path::new(&args[1])
     };
-    let conf = erbium::config::load_config_from_path(config_file).await?;
+    let conf = erbium::config::load_config_from_path(config_file)
+        .await
+        .map_err(|e| Error::ConfigError(config_file.to_path_buf(), e))?;
     let mut services = futures::stream::FuturesUnordered::new();
 
     services.push(tokio::spawn(dhcp::run(netinfo, conf)));

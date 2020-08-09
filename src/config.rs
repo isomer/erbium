@@ -34,7 +34,7 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::IoError(e) => write!(f, "I/O Error reading configuration file: {}", e),
+            Error::IoError(e) => write!(f, "{}", e),
             Error::Utf8Error(e) => {
                 write!(f, "UTF8 Decoding error reading configuration file: {}", e)
             }

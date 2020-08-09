@@ -17,14 +17,30 @@
  *  Thin wrapper to start DHCP services only.
  */
 
-use std::error::Error;
 use tokio::stream::StreamExt;
 
 extern crate erbium;
 
 use erbium::dhcp;
 
-async fn go() -> Result<(), Box<dyn Error>> {
+enum Error {
+    ConfigError(std::path::PathBuf, erbium::config::Error),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::ConfigError(path, e) => write!(
+                f,
+                "Failed to load config from {}: {}",
+                path.to_string_lossy(),
+                e
+            ),
+        }
+    }
+}
+
+async fn go() -> Result<(), Error> {
     let args: Vec<_> = std::env::args_os().collect();
     let config_file = match args.len() {
         1 => std::path::Path::new("erbium.conf"),
@@ -35,7 +51,9 @@ async fn go() -> Result<(), Box<dyn Error>> {
         }
     };
     let netinfo = erbium::net::netinfo::SharedNetInfo::new().await;
-    let conf = erbium::config::load_config_from_path(config_file).await?;
+    let conf = erbium::config::load_config_from_path(config_file)
+        .await
+        .map_err(|e| Error::ConfigError(config_file.to_path_buf(), e))?;
     let mut services = futures::stream::FuturesUnordered::new();
 
     services.push(tokio::spawn(dhcp::run(netinfo, conf)));
