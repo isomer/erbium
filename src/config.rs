@@ -39,7 +39,7 @@ impl std::fmt::Display for Error {
                 write!(f, "UTF8 Decoding error reading configuration file: {}", e)
             }
             Error::DhcpError(e) => write!(f, "DHCP Config loading error: {}", e),
-            Error::YamlError(e) => write!(f, "Yaml parse erorr while reading configuration: {}", e),
+            Error::YamlError(e) => write!(f, "Yaml parse error while reading configuration: {}", e),
             Error::MissingConfig => write!(f, "Configuration is empty/missing"),
             Error::MultipleConfigs => {
                 write!(f, "Configuration file contains multiple configurations")
