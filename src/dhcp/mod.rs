@@ -139,16 +139,20 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
     }
 
     for (k, m) in policy.match_other.iter() {
-        if let Some(v) = req.pkt.options.other.get(k) {
+        if match (m, req.pkt.options.other.get(k)) {
+            (None, None) => true, /* Required that option doesn't exist, option doesn't exist */
+            (None, Some(_)) => false, /* Required that option doesn't exist, option exists */
+            (Some(mat), Some(opt)) if &mat.as_bytes() == opt => true, /* Required it has value, and matches */
+            (Some(_), Some(_)) => false, /* Required it has a value, option has some other value */
+            (Some(_), None) => false, /* Required that option has a value, option doesn't exist */
+        } {
+            /* If at least one thing matches, then this is a MatchSucceded */
             outcome = PolicyMatch::MatchSucceeded;
-            if &m.as_bytes() != v {
-                return PolicyMatch::MatchFailed;
-            }
         } else {
+            /* If any fail, then fail everything */
             return PolicyMatch::MatchFailed;
         }
     }
-
     outcome
 }
 
@@ -182,12 +186,27 @@ fn apply_policy(req: &DHCPRequest, policy: &config::Policy, response: &mut Respo
 
     for (k, v) in &policy.apply_other {
         if pl.contains(k) {
-            response.options.mutate_option(k, v);
+            response.options.mutate_option(k, v.as_ref());
         }
     }
 
     /* And check to see if a subpolicy also matches */
     apply_policies(req, &policy.policies, response);
+
+    /* Automatically apply some defaults */
+    if let Some(subnet) = &policy.match_subnet {
+        if pl.contains(&dhcppkt::OPTION_NETMASK) {
+            response
+                .options
+                .mutate_option_default(&dhcppkt::OPTION_NETMASK, &subnet.netmask());
+        }
+        if pl.contains(&dhcppkt::OPTION_BROADCAST) {
+            response
+                .options
+                .mutate_option_default(&dhcppkt::OPTION_BROADCAST, &subnet.broadcast());
+        }
+    }
+
     true
 }
 
@@ -217,9 +236,69 @@ fn apply_policies(req: &DHCPRequest, policies: &[config::Policy], response: &mut
     false
 }
 
+#[derive(Default, Clone)]
+struct ResponseOptions {
+    /* Options can be unset (not specified), set to "None" (do not send), or set to a specific
+     * value.
+     */
+    option: collections::HashMap<dhcppkt::DhcpOption, Option<Vec<u8>>>,
+}
+
+impl ResponseOptions {
+    fn set_raw_option(mut self, option: &dhcppkt::DhcpOption, value: &[u8]) -> Self {
+        self.option.insert(*option, Some(value.to_vec()));
+        self
+    }
+
+    fn set_option<T: dhcppkt::Serialise>(self, option: &dhcppkt::DhcpOption, value: &T) -> Self {
+        let mut v = Vec::new();
+        value.serialise(&mut v);
+        self.set_raw_option(option, &v)
+    }
+
+    pub fn mutate_option<T: dhcppkt::Serialise>(
+        &mut self,
+        option: &dhcppkt::DhcpOption,
+        maybe_value: Option<&T>,
+    ) {
+        match maybe_value {
+            Some(value) => {
+                let mut v = Vec::new();
+                value.serialise(&mut v);
+                self.option.insert(*option, Some(v));
+            }
+            None => {
+                self.option.insert(*option, None);
+            }
+        }
+    }
+
+    pub fn mutate_option_default<T: dhcppkt::Serialise>(
+        &mut self,
+        option: &dhcppkt::DhcpOption,
+        value: &T,
+    ) {
+        if self.option.get(option).is_none() {
+            self.mutate_option(option, Some(value));
+        }
+    }
+
+    pub fn to_options(&self) -> dhcppkt::DhcpOptions {
+        let mut opt = dhcppkt::DhcpOptions {
+            ..Default::default()
+        };
+        for (k, v) in &self.option {
+            if let Some(d) = v {
+                opt.other.insert(*k, d.to_vec());
+            }
+        }
+        opt
+    }
+}
+
 #[derive(Default)]
 struct Response {
-    options: dhcppkt::DhcpOptions,
+    options: ResponseOptions,
     address: Option<pool::PoolAddresses>,
     minlease: Option<std::time::Duration>,
     maxlease: Option<std::time::Duration>,
@@ -232,8 +311,8 @@ fn handle_discover<'l>(
     conf: &'l super::config::Config,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     let mut response: Response = Response {
-        options: dhcppkt::DhcpOptions {
-            other: collections::HashMap::new(),
+        options: ResponseOptions {
+            ..Default::default()
         }
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
         .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
@@ -267,7 +346,8 @@ fn handle_discover<'l>(
                 options: response
                     .options
                     .clone()
-                    .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
+                    .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
+                    .to_options(),
             }),
             Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
             Err(e) => Err(DhcpError::InternalError(e.to_string())),
@@ -289,8 +369,8 @@ fn handle_request(
         }
     }
     let mut response: Response = Response {
-        options: dhcppkt::DhcpOptions {
-            other: collections::HashMap::new(),
+        options: ResponseOptions {
+            ..Default::default()
         }
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
         .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
@@ -332,7 +412,8 @@ fn handle_request(
                         &dhcppkt::OPTION_SERVERID,
                         &req.pkt.options.get_serverid().unwrap_or(req.serverip),
                     )
-                    .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32)),
+                    .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32))
+                    .to_options(),
             }),
             Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
             Err(e) => Err(DhcpError::InternalError(e.to_string())),
@@ -785,4 +866,28 @@ dhcp:
     );
 
     Ok(())
+}
+
+#[test]
+fn test_format_client() {
+    let req = dhcppkt::DHCP {
+        op: dhcppkt::OP_BOOTREQUEST,
+        htype: dhcppkt::HWTYPE_ETHERNET,
+        hlen: 6,
+        hops: 0,
+        xid: 0,
+        secs: 0,
+        flags: 0,
+        ciaddr: net::Ipv4Addr::UNSPECIFIED,
+        yiaddr: net::Ipv4Addr::UNSPECIFIED,
+        siaddr: net::Ipv4Addr::UNSPECIFIED,
+        giaddr: net::Ipv4Addr::UNSPECIFIED,
+        chaddr: vec![0, 1, 2, 3, 4, 5],
+        sname: vec![],
+        file: vec![],
+        options: dhcppkt::DhcpOptions {
+            ..Default::default()
+        },
+    };
+    assert_eq!(format_client(&req), "00:01:02:03:04:05 ()");
 }

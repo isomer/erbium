@@ -59,7 +59,11 @@ fn mk_dhcp_request_pkt() -> dhcppkt::DHCP {
             ..Default::default()
         }
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST)
-        .set_option(&dhcppkt::OPTION_HOSTNAME, &vec![dhcppkt::OPTION_HOSTNAME]),
+        .set_option(&dhcppkt::OPTION_HOSTNAME, &vec![dhcppkt::OPTION_HOSTNAME]) // TODO: is this correct?
+        .set_option(
+            &dhcppkt::OPTION_PARAMLIST,
+            &vec![1u8, 3u8, 6u8, 15, 26, 28, 51, 58, 59, 43],
+        ),
     }
 }
 
@@ -648,6 +652,40 @@ fn test_full() {
     /* release is not supported, so we expect an error here.  But we shouldn't crash */
     let _ack =
         dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect_err("Failed to handle request");
+}
+
+#[tokio::test]
+async fn test_defaults() {
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
+    let pkt = mk_dhcp_request();
+    let conf = crate::config::load_config_from_string_for_test(
+        "
+dhcp:
+ policies:
+  - match-subnet: 192.0.2.0/24
+    apply-address: 192.0.2.1
+    apply-netmask: null
+",
+    )
+    .expect("Failed to parse test config");
+    let lockedconf = conf.lock().await;
+    let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
+    let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &lockedconf)
+        .expect("Failed to handle request");
+    /* We've asked that netmask doesn't get set, so check it's not set */
+    assert_eq!(
+        reply
+            .options
+            .get_option::<std::net::Ipv4Addr>(&dhcppkt::OPTION_NETMASK),
+        None
+    );
+    /* We've not specified what happens to the broadcast, so check it was defaulted correctly. */
+    assert_eq!(
+        reply
+            .options
+            .get_option::<std::net::Ipv4Addr>(&dhcppkt::OPTION_BROADCAST),
+        Some("192.0.2.255".parse().expect("Failed to parse IP"))
+    );
 }
 
 /* TODO:

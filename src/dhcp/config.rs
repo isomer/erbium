@@ -85,14 +85,16 @@ fn hexstring(s: &[u8]) -> Result<Vec<u8>, HexError> {
 
 #[derive(Clone, Debug, Default)]
 pub struct Policy {
-    pub match_interface: Option<String>,
+    pub match_interface: Option<Option<String>>,
     pub match_chaddr: Option<Vec<u8>>,
     pub match_subnet: Option<crate::net::Ipv4Subnet>,
-    pub match_other: std::collections::HashMap<dhcppkt::DhcpOption, dhcppkt::DhcpOptionTypeValue>,
+    pub match_other:
+        std::collections::HashMap<dhcppkt::DhcpOption, Option<dhcppkt::DhcpOptionTypeValue>>,
     pub apply_address: Option<super::pool::PoolAddresses>,
     pub apply_default_lease: Option<std::time::Duration>,
     pub apply_max_lease: Option<std::time::Duration>,
-    pub apply_other: std::collections::HashMap<dhcppkt::DhcpOption, dhcppkt::DhcpOptionTypeValue>,
+    pub apply_other:
+        std::collections::HashMap<dhcppkt::DhcpOption, Option<dhcppkt::DhcpOptionTypeValue>>,
     pub policies: Vec<Policy>,
 }
 
@@ -116,153 +118,196 @@ pub struct Config {
 }
 
 impl Config {
-    fn parse_string(fragment: &yaml::Yaml) -> Result<String, Error> {
-        Ok(fragment
-            .as_str()
-            .ok_or_else(|| Error::InvalidConfig(format!("Expected String, got '{:?}'", fragment)))?
-            .into())
+    fn parse_string(fragment: &yaml::Yaml) -> Result<Option<String>, Error> {
+        match fragment {
+            yaml::Yaml::Null => Ok(None),
+            yaml::Yaml::String(s) => Ok(Some(s.into())),
+            e => Err(Error::InvalidConfig(format!(
+                "Expected String, got '{:?}'",
+                e
+            ))),
+        }
     }
 
-    fn parse_mac(fragment: &yaml::Yaml) -> Result<Vec<u8>, Error> {
-        Ok(fragment
-            .as_str()
-            .ok_or_else(|| Error::InvalidConfig("hardware addresses should be a string".into()))?
-            .split(':')
-            .map(|x| hexstring(x.as_bytes()))
-            .flatten()
-            .flatten()
-            .collect())
+    fn parse_mac(fragment: &yaml::Yaml) -> Result<Option<Vec<u8>>, Error> {
+        match fragment {
+            yaml::Yaml::Null => Ok(None),
+            yaml::Yaml::String(s) => Ok(Some(
+                s.split(':')
+                    .map(|b| hexstring(b.as_bytes()))
+                    .flatten()
+                    .flatten()
+                    .collect(),
+            )),
+            e => Err(Error::InvalidConfig(format!(
+                "Hardware addresses should be a string, not {:?}",
+                e
+            ))),
+        }
     }
 
-    fn parse_ip(fragment: &yaml::Yaml) -> Result<std::net::Ipv4Addr, Error> {
-        fragment
-            .as_str()
-            .ok_or_else(|| Error::InvalidConfig(format!("Expected String, got '{:?}'", fragment)))?
-            .parse()
-            .map_err(|x| Error::InvalidConfig(format!("Expected IP address: {}", x)))
-    }
-
-    fn parse_iplist(fragment: &yaml::Yaml) -> Result<Vec<std::net::Ipv4Addr>, Error> {
-        if let Some(yiplist) = fragment.as_vec() {
-            let mut iplist = Vec::new();
-            for ip in yiplist {
-                iplist.push(
-                    ip.as_str()
-                        .ok_or_else(|| {
-                            Error::InvalidConfig(format!(
-                                "iplist member is not a string, got '{:?}'",
-                                ip
-                            ))
-                        })?
-                        .parse()
-                        .map_err(|_| {
-                            Error::InvalidConfig(format!("iplist contains an invalid IP: {:?}", ip))
-                        })?,
-                )
+    fn parse_ip(fragment: &yaml::Yaml) -> Result<Option<std::net::Ipv4Addr>, Error> {
+        match fragment {
+            yaml::Yaml::Null => Ok(None),
+            yaml::Yaml::String(s) => {
+                Ok(Some(s.parse().map_err(|x| {
+                    Error::InvalidConfig(format!("Expected IP address: {}", x))
+                })?))
             }
-            Ok(iplist)
-        } else {
-            Err(Error::InvalidConfig(format!(
+            e => Err(Error::InvalidConfig(format!(
+                "IP Addresses should be a string, not {:?}",
+                e
+            ))),
+        }
+    }
+
+    fn parse_iplist(fragment: &yaml::Yaml) -> Result<Option<Vec<std::net::Ipv4Addr>>, Error> {
+        match fragment {
+            yaml::Yaml::Null => Ok(None),
+            yaml::Yaml::Array(yiplist) => {
+                let mut iplist = Vec::new();
+                for ip in yiplist {
+                    iplist.push(
+                        ip.as_str()
+                            .ok_or_else(|| {
+                                Error::InvalidConfig(format!(
+                                    "iplist member is not a string, got '{:?}'",
+                                    ip
+                                ))
+                            })?
+                            .parse()
+                            .map_err(|_| {
+                                Error::InvalidConfig(format!(
+                                    "iplist contains an invalid IP: {:?}",
+                                    ip
+                                ))
+                            })?,
+                    )
+                }
+                Ok(Some(iplist))
+            }
+            e => Err(Error::InvalidConfig(format!(
                 "Expected IP list, got {:?}",
-                fragment
-            )))
+                e
+            ))),
         }
     }
 
-    fn parse_subnet(fragment: &yaml::Yaml) -> Result<crate::net::Ipv4Subnet, Error> {
-        let s: String = fragment
-            .as_str()
-            .ok_or_else(|| Error::InvalidConfig(format!("Expected String, got '{:?}'", fragment)))?
-            .into();
-        let sections: Vec<&str> = s.split('/').collect();
-        if sections.len() != 2 {
-            Err(Error::InvalidConfig(format!(
-                "Expected IP prefix, but '{}'",
-                s
-            )))
-        } else {
-            Ok(crate::net::Ipv4Subnet::new(
-                sections[0]
-                    .parse()
-                    .map_err(|x| Error::InvalidConfig(format!("{}", x)))?,
-                sections[1]
-                    .parse()
-                    .map_err(|x| Error::InvalidConfig(format!("{}", x)))?,
-            )
-            .map_err(|_| Error::InvalidConfig(format!("Prefix length too short {:?}", sections)))?)
-        }
-    }
-
-    fn parse_duration(value: &yaml::Yaml) -> Result<std::time::Duration, Error> {
-        if let Some(v) = value.as_str() {
-            let mut num = None;
-            let mut ret = Default::default();
-            for c in v.chars() {
-                match c {
-                    '0'..='9' => {
-                        if let Some(n) = num {
-                            num = Some(n * 10 + c as u64 - '0' as u64);
-                        } else {
-                            num = Some(c as u64 - '0' as u64);
-                        }
-                    }
-                    's' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap());
-                    }
-                    'm' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap() * 60);
-                    }
-                    'h' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap() * 3600);
-                    }
-                    'd' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap() * 86400);
-                    }
-                    'w' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap() * 7 * 86400);
-                    }
-                    x if x.is_whitespace() => (),
-                    '_' => (),
-                    _ => {
-                        return Err(Error::InvalidConfig(format!(
-                            "Unexpected {} in duration",
-                            c
-                        )))
-                    }
+    fn parse_subnet(fragment: &yaml::Yaml) -> Result<Option<crate::net::Ipv4Subnet>, Error> {
+        match fragment {
+            yaml::Yaml::Null => Ok(None),
+            yaml::Yaml::String(s) => {
+                let sections: Vec<&str> = s.split('/').collect();
+                if sections.len() != 2 {
+                    Err(Error::InvalidConfig(format!(
+                        "Expected IP prefix, but '{}'",
+                        s
+                    )))
+                } else {
+                    Ok(Some(
+                        crate::net::Ipv4Subnet::new(
+                            sections[0]
+                                .parse()
+                                .map_err(|x| Error::InvalidConfig(format!("{}", x)))?,
+                            sections[1]
+                                .parse()
+                                .map_err(|x| Error::InvalidConfig(format!("{}", x)))?,
+                        )
+                        .map_err(|_| {
+                            Error::InvalidConfig(format!("Prefix length too short {:?}", sections))
+                        })?,
+                    ))
                 }
             }
-            if let Some(n) = num {
-                ret += std::time::Duration::from_secs(n);
-            }
-            Ok(ret)
-        } else if let Some(s) = value.as_i64() {
-            Ok(std::time::Duration::from_secs(u64::try_from(s).map_err(
-                |_| Error::InvalidConfig("Durations cannot be negative".into()),
-            )?))
-        } else {
-            Err(Error::InvalidConfig(format!(
-                "Expected duration, got {:?}",
-                value
-            )))
+            e => Err(Error::InvalidConfig(format!(
+                "Expected IP prefix as string, got {:?}",
+                e
+            ))),
         }
     }
 
-    fn parse_number(value: &yaml::Yaml) -> Result<i64, Error> {
-        value
-            .as_i64()
-            .ok_or_else(|| Error::InvalidConfig(format!("Expected Number, got '{:?}'", value)))
+    fn parse_duration(value: &yaml::Yaml) -> Result<Option<std::time::Duration>, Error> {
+        match value {
+            yaml::Yaml::Null => Ok(None),
+            yaml::Yaml::String(v) => {
+                let mut num = None;
+                let mut ret = Default::default();
+                for c in v.chars() {
+                    match c {
+                        '0'..='9' => {
+                            if let Some(n) = num {
+                                num = Some(n * 10 + c as u64 - '0' as u64);
+                            } else {
+                                num = Some(c as u64 - '0' as u64);
+                            }
+                        }
+                        's' => {
+                            ret += std::time::Duration::from_secs(num.take().unwrap());
+                        }
+                        'm' => {
+                            ret += std::time::Duration::from_secs(num.take().unwrap() * 60);
+                        }
+                        'h' => {
+                            ret += std::time::Duration::from_secs(num.take().unwrap() * 3600);
+                        }
+                        'd' => {
+                            ret += std::time::Duration::from_secs(num.take().unwrap() * 86400);
+                        }
+                        'w' => {
+                            ret += std::time::Duration::from_secs(num.take().unwrap() * 7 * 86400);
+                        }
+                        x if x.is_whitespace() => (),
+                        '_' => (),
+                        _ => {
+                            return Err(Error::InvalidConfig(format!(
+                                "Unexpected {} in duration",
+                                c
+                            )))
+                        }
+                    }
+                }
+                if let Some(n) = num {
+                    ret += std::time::Duration::from_secs(n);
+                }
+                Ok(Some(ret))
+            }
+            yaml::Yaml::Integer(s) => Ok(Some(std::time::Duration::from_secs(
+                u64::try_from(*s)
+                    .map_err(|_| Error::InvalidConfig("Durations cannot be negative".into()))?,
+            ))),
+            e => Err(Error::InvalidConfig(format!(
+                "Expected duration, got {:?}",
+                e,
+            ))),
+        }
     }
 
-    fn parse_bool(value: &yaml::Yaml) -> Result<bool, Error> {
-        value
-            .as_bool()
-            .ok_or_else(|| Error::InvalidConfig(format!("Expected Boolean, got '{:?}'", value)))
+    fn parse_number(value: &yaml::Yaml) -> Result<Option<i64>, Error> {
+        match value {
+            yaml::Yaml::Null => Ok(None),
+            yaml::Yaml::Integer(i) => Ok(Some(*i)),
+            e => Err(Error::InvalidConfig(format!(
+                "Expected Number, got '{:?}'",
+                e
+            ))),
+        }
+    }
+
+    fn parse_bool(value: &yaml::Yaml) -> Result<Option<bool>, Error> {
+        match value {
+            yaml::Yaml::Null => Ok(None),
+            yaml::Yaml::Boolean(b) => Ok(Some(*b)),
+            e => Err(Error::InvalidConfig(format!(
+                "Expected Boolean, got '{:?}'",
+                e
+            ))),
+        }
     }
 
     fn parse_generic(
         name: &str,
         value: &yaml::Yaml,
-    ) -> Result<(dhcppkt::DhcpOption, dhcppkt::DhcpOptionTypeValue), Error> {
+    ) -> Result<(dhcppkt::DhcpOption, Option<dhcppkt::DhcpOptionTypeValue>), Error> {
         let maybe_opt = dhcppkt::name_to_option(name);
         if let Some(opt) = maybe_opt {
             use dhcppkt::*;
@@ -270,41 +315,73 @@ impl Config {
                 opt,
                 match opt.get_type() {
                     Some(DhcpOptionType::String) => {
-                        DhcpOptionTypeValue::String(Config::parse_string(value)?)
+                        Config::parse_string(value)?.map(DhcpOptionTypeValue::String)
                     }
                     Some(DhcpOptionType::IpList) => {
-                        DhcpOptionTypeValue::IpList(Config::parse_iplist(value)?)
+                        Config::parse_iplist(value)?.map(DhcpOptionTypeValue::IpList)
                     }
-                    Some(DhcpOptionType::Ip) => DhcpOptionTypeValue::Ip(Config::parse_ip(value)?),
-                    Some(DhcpOptionType::I32) => DhcpOptionTypeValue::I32(
-                        i32::try_from(Config::parse_number(value)?)
-                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
-                    ),
-                    Some(DhcpOptionType::U8) => DhcpOptionTypeValue::U8(
-                        u8::try_from(Config::parse_number(value)?)
-                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
-                    ),
-                    Some(DhcpOptionType::U16) => DhcpOptionTypeValue::U16(
-                        u16::try_from(Config::parse_number(value)?)
-                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
-                    ),
-                    Some(DhcpOptionType::U32) => DhcpOptionTypeValue::U32(
-                        u32::try_from(Config::parse_number(value)?)
-                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
-                    ),
-                    Some(DhcpOptionType::Seconds16) => DhcpOptionTypeValue::U16(
-                        u16::try_from(Config::parse_duration(value)?.as_secs())
-                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
-                    ),
-                    Some(DhcpOptionType::Seconds32) => DhcpOptionTypeValue::U32(
-                        u32::try_from(Config::parse_duration(value)?.as_secs())
-                            .map_err(|_| Error::InvalidConfig("Integer out of range".into()))?,
-                    ),
+                    Some(DhcpOptionType::Ip) => {
+                        Config::parse_ip(value)?.map(DhcpOptionTypeValue::Ip)
+                    }
+                    Some(DhcpOptionType::I32) => Config::parse_number(value)?
+                        .map(|i| {
+                            i32::try_from(i).map_err(|_| {
+                                Error::InvalidConfig(format!("Integer {} out of range", i))
+                            })
+                        })
+                        .transpose()?
+                        .map(DhcpOptionTypeValue::I32),
+                    Some(DhcpOptionType::U8) => Config::parse_number(value)?
+                        .map(|i| {
+                            u8::try_from(i).map_err(|_| {
+                                Error::InvalidConfig(format!("Integer {} out of range", i))
+                            })
+                        })
+                        .transpose()?
+                        .map(DhcpOptionTypeValue::U8),
+                    Some(DhcpOptionType::U16) => Config::parse_number(value)?
+                        .map(|i| {
+                            u16::try_from(i).map_err(|_| {
+                                Error::InvalidConfig(format!("Integer {} out of range", i))
+                            })
+                        })
+                        .transpose()?
+                        .map(DhcpOptionTypeValue::U16),
+                    Some(DhcpOptionType::U32) => Config::parse_number(value)?
+                        .map(|i| {
+                            u32::try_from(i).map_err(|_| {
+                                Error::InvalidConfig(format!("Integer {} out of range", i))
+                            })
+                        })
+                        .transpose()?
+                        .map(DhcpOptionTypeValue::U32),
+                    Some(DhcpOptionType::Seconds16) => Config::parse_duration(value)?
+                        .map(|i| {
+                            u16::try_from(i.as_secs()).map_err(|_| {
+                                Error::InvalidConfig(format!(
+                                    "Duration {}s out of range",
+                                    i.as_secs()
+                                ))
+                            })
+                        })
+                        .transpose()?
+                        .map(DhcpOptionTypeValue::U16),
+                    Some(DhcpOptionType::Seconds32) => Config::parse_duration(value)?
+                        .map(|i| {
+                            u32::try_from(i.as_secs()).map_err(|_| {
+                                Error::InvalidConfig(format!(
+                                    "Duration {}s out of range",
+                                    i.as_secs()
+                                ))
+                            })
+                        })
+                        .transpose()?
+                        .map(DhcpOptionTypeValue::U32),
                     Some(DhcpOptionType::Bool) => {
-                        DhcpOptionTypeValue::U8(Config::parse_bool(value)? as u8)
+                        Config::parse_bool(value)?.map(|b| DhcpOptionTypeValue::U8(b as u8))
                     }
                     Some(DhcpOptionType::HwAddr) => {
-                        DhcpOptionTypeValue::HwAddr(Config::parse_mac(value)?)
+                        Config::parse_mac(value)?.map(DhcpOptionTypeValue::HwAddr)
                     }
                     None => {
                         return Err(Error::InvalidConfig(format!(
@@ -337,10 +414,8 @@ impl Config {
                                 "match-hardware-address specified twice".into(),
                             ));
                         }
-                        policy.match_chaddr =
-                            Some(Config::parse_mac(v).map_err(|x| {
-                                x.annotate("Failed to parse match-hardware-address")
-                            })?);
+                        policy.match_chaddr = Config::parse_mac(v)
+                            .map_err(|x| x.annotate("Failed to parse match-hardware-address"))?;
                     }
                     Some("match-subnet") => {
                         if policy.match_subnet.is_some() {
@@ -350,7 +425,10 @@ impl Config {
                         }
                         policy.match_subnet = Some(
                             Config::parse_subnet(v)
-                                .map_err(|x| x.annotate("Failed to parse match-subnet"))?,
+                                .map_err(|x| x.annotate("Failed to parse match-subnet"))?
+                                .ok_or_else(|| {
+                                    Error::InvalidConfig("match-subnet cannot be nil".into())
+                                })?,
                         );
                     }
                     Some(x) if x.starts_with("match-") => {
@@ -363,19 +441,28 @@ impl Config {
                         let addresses = addresses.get_or_insert_with(Vec::new);
                         addresses.push(
                             Config::parse_ip(v)
-                                .map_err(|x| x.annotate("Failed to parse apply-address"))?,
+                                .map_err(|x| x.annotate("Failed to parse apply-address"))?
+                                .ok_or_else(|| {
+                                    Error::InvalidConfig("apply-address cannot be nil".into())
+                                })?,
                         );
                     }
                     Some("apply-default-lease") => {
                         policy.apply_default_lease = Some(
                             Config::parse_duration(v)
-                                .map_err(|x| x.annotate("Failed to parse apply-default-lease"))?,
+                                .map_err(|x| x.annotate("Failed to parse apply-default-lease"))?
+                                .ok_or_else(|| {
+                                    Error::InvalidConfig("apply-default-lease cannot be nil".into())
+                                })?,
                         );
                     }
                     Some("apply-max-lease") => {
                         policy.apply_default_lease = Some(
                             Config::parse_duration(v)
-                                .map_err(|x| x.annotate("Failed to parse apply-max-lease"))?,
+                                .map_err(|x| x.annotate("Failed to parse apply-max-lease"))?
+                                .ok_or_else(|| {
+                                    Error::InvalidConfig("apply-max-lease cannot be nil".into())
+                                })?,
                         );
                     }
                     Some("apply-range") => {
@@ -385,15 +472,30 @@ impl Config {
                             for (rangek, rangev) in range {
                                 match rangek.as_str() {
                                     Some("start") => {
-                                        start = Some(Config::parse_ip(rangev).map_err(|x| {
-                                            x.annotate("Failed to parse range start")
-                                        })?)
+                                        start = Some(
+                                            Config::parse_ip(rangev)
+                                                .map_err(|x| {
+                                                    x.annotate("Failed to parse range start")
+                                                })?
+                                                .ok_or_else(|| {
+                                                    Error::InvalidConfig(
+                                                        "range start cannot be nil".into(),
+                                                    )
+                                                })?,
+                                        )
                                     }
                                     Some("end") => {
-                                        end =
-                                            Some(Config::parse_ip(rangev).map_err(|x| {
-                                                x.annotate("Failed to parse range end")
-                                            })?)
+                                        end = Some(
+                                            Config::parse_ip(rangev)
+                                                .map_err(|x| {
+                                                    x.annotate("Failed to parse range end")
+                                                })?
+                                                .ok_or_else(|| {
+                                                    Error::InvalidConfig(
+                                                        "range end cannot be nil".into(),
+                                                    )
+                                                })?,
+                                        )
                                     }
                                     Some(e) => {
                                         return Err(Error::InvalidConfig(format!(
@@ -428,7 +530,10 @@ impl Config {
                     }
                     Some("apply-subnet") => {
                         let subnet = Config::parse_subnet(v)
-                            .map_err(|x| x.annotate("Failed to parse apply-subnet"))?;
+                            .map_err(|x| x.annotate("Failed to parse apply-subnet"))?
+                            .ok_or_else(|| {
+                                Error::InvalidConfig("apply-subnet cannot be nil".into())
+                            })?;
                         let base: u32 = subnet.network().into();
                         let addresses = addresses.get_or_insert_with(Vec::new);
                         for i in 1..(((1 << (32 - subnet.prefixlen)) - 1) - 1) {
@@ -536,10 +641,12 @@ impl Config {
 fn test_duration() {
     assert_eq!(
         Config::parse_duration(&yaml::Yaml::String("5s".into())).unwrap(),
-        std::time::Duration::from_secs(5)
+        Some(std::time::Duration::from_secs(5))
     );
     assert_eq!(
         Config::parse_duration(&yaml::Yaml::String("1w2d3h4m5s".into())).unwrap(),
-        std::time::Duration::from_secs(7 * 86400 + 2 * 86400 + 3 * 3600 + 4 * 60 + 5)
+        Some(std::time::Duration::from_secs(
+            7 * 86400 + 2 * 86400 + 3 * 3600 + 4 * 60 + 5
+        ))
     );
 }
