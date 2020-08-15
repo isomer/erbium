@@ -124,6 +124,9 @@ dhcp:
         apply-rebind-time: 120
         apply-renewal-time: 90s
         apply-arp-timeout: 1w
+        apply-routes:
+         - prefix: 192.0.2.0/24
+           next-hop: 192.0.2.254
 
 
         policies:

@@ -146,18 +146,24 @@ impl Config {
         }
     }
 
-    fn parse_ip(fragment: &yaml::Yaml) -> Result<Option<std::net::Ipv4Addr>, Error> {
+    fn parse_required_ip(fragment: &yaml::Yaml) -> Result<std::net::Ipv4Addr, Error> {
         match fragment {
-            yaml::Yaml::Null => Ok(None),
-            yaml::Yaml::String(s) => {
-                Ok(Some(s.parse().map_err(|x| {
-                    Error::InvalidConfig(format!("Expected IP address: {}", x))
-                })?))
-            }
+            yaml::Yaml::Null => Err(Error::InvalidConfig("IP address cannot be null".into())),
+            yaml::Yaml::String(s) => Ok(s.parse().map_err(|_| {
+                Error::InvalidConfig(format!("iplist contains an invalid IP: {:?}", s))
+            })?),
             e => Err(Error::InvalidConfig(format!(
-                "IP Addresses should be a string, not {:?}",
+                "Expected a string, got {:?}",
                 e
             ))),
+        }
+    }
+
+    fn parse_ip(fragment: &yaml::Yaml) -> Result<Option<std::net::Ipv4Addr>, Error> {
+        if yaml::Yaml::Null == *fragment {
+            Ok(None)
+        } else {
+            Ok(Some(Self::parse_required_ip(fragment)?))
         }
     }
 
@@ -167,27 +173,98 @@ impl Config {
             yaml::Yaml::Array(yiplist) => {
                 let mut iplist = Vec::new();
                 for ip in yiplist {
-                    iplist.push(
-                        ip.as_str()
-                            .ok_or_else(|| {
-                                Error::InvalidConfig(format!(
-                                    "iplist member is not a string, got '{:?}'",
-                                    ip
-                                ))
-                            })?
-                            .parse()
-                            .map_err(|_| {
-                                Error::InvalidConfig(format!(
-                                    "iplist contains an invalid IP: {:?}",
-                                    ip
-                                ))
-                            })?,
-                    )
+                    iplist.push(Self::parse_required_ip(ip)?)
                 }
                 Ok(Some(iplist))
             }
             e => Err(Error::InvalidConfig(format!(
                 "Expected IP list, got {:?}",
+                e
+            ))),
+        }
+    }
+
+    fn parse_routes(fragment: &yaml::Yaml) -> Result<Option<Vec<dhcppkt::Route>>, Error> {
+        match fragment {
+            yaml::Yaml::Null => Ok(None),
+            yaml::Yaml::Array(yroutes) => {
+                let mut routes = Vec::new();
+                for route in yroutes {
+                    let mut prefix = None;
+                    let mut nexthop = None;
+                    if let Some(h) = route.as_hash() {
+                        for (k, v) in h {
+                            match k {
+                                yaml::Yaml::Null => {
+                                    return Err(Error::InvalidConfig(
+                                        "Routes cannot have null keys".into(),
+                                    ))
+                                }
+                                yaml::Yaml::String(s) if s == "next-hop" => {
+                                    nexthop = Some(Self::parse_required_ip(v)?);
+                                }
+                                yaml::Yaml::String(s) if s == "prefix" => match v {
+                                    yaml::Yaml::Null => {
+                                        return Err(Error::InvalidConfig(
+                                            "prefix cannot be null".into(),
+                                        ))
+                                    }
+                                    yaml::Yaml::String(s) => {
+                                        let mut it = s.split('/');
+                                        let ip =
+                                            it.next().unwrap().parse().map_err(|e| {
+                                                Error::InvalidConfig(format!("{}", e))
+                                            })?; /* TODO: remove unwrap */
+                                        let prefixlen = it.next().unwrap().parse().unwrap();
+                                        prefix = Some(
+                                            crate::net::Ipv4Subnet::new(ip, prefixlen).map_err(
+                                                |e| Error::InvalidConfig(format!("{}", e)),
+                                            )?,
+                                        );
+                                    }
+                                    e => {
+                                        return Err(Error::InvalidConfig(format!(
+                                            "prefix has unexpected type {:?}",
+                                            e,
+                                        )))
+                                    }
+                                },
+                                yaml::Yaml::String(s) => {
+                                    return Err(Error::InvalidConfig(format!(
+                                        "Unexpected key in route: {:?}",
+                                        s
+                                    )));
+                                }
+                                e => {
+                                    return Err(Error::InvalidConfig(format!(
+                                        "Key has unexpected type: {:?}",
+                                        e
+                                    )))
+                                }
+                            }
+                        }
+                        if let Some(prefix) = prefix {
+                            if let Some(nexthop) = nexthop {
+                                routes.push(dhcppkt::Route { prefix, nexthop });
+                            } else {
+                                return Err(Error::InvalidConfig(
+                                    "Missing next-hop: in route".into(),
+                                ));
+                            }
+                        } else {
+                            return Err(Error::InvalidConfig("Missing prefix: in route".into()));
+                        }
+                    } else {
+                        return Err(Error::InvalidConfig(format!(
+                            "Expected hash, got '{:?}'",
+                            route
+                        )));
+                    }
+                }
+                Ok(Some(routes))
+            }
+            e => Err(Error::InvalidConfig(format!(
+                "Expected routes, got {:?}",
                 e
             ))),
         }
@@ -319,6 +396,9 @@ impl Config {
                     }
                     Some(DhcpOptionType::IpList) => {
                         Config::parse_iplist(value)?.map(DhcpOptionTypeValue::IpList)
+                    }
+                    Some(DhcpOptionType::Routes) => {
+                        Config::parse_routes(value)?.map(DhcpOptionTypeValue::Routes)
                     }
                     Some(DhcpOptionType::Ip) => {
                         Config::parse_ip(value)?.map(DhcpOptionTypeValue::Ip)

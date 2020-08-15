@@ -67,6 +67,8 @@ and useful options for matching on are \fBmatch-host-name\fP and
 
 erbium will log options received from each client to make finding useful
 options to match on easier.
+If you specify \fBnull\fP as the value to match on, then it will only match
+if the client \fIdoes not\fP provide that option.
 .SS Applying DHCP Options
 Each policy contains a list of option values to apply to a client (assuming the
 client requested the option).  For nested subpolicies (see below), options
@@ -87,7 +89,10 @@ This is a YAML hash type, with the keys "start" and "end".  The text above shows
 line syntax, but it can be in any of YAML's formats for a hash.
 .IP "\fBapply\-\fP\fIoption\fP\fB:\fP \fIvalue\fP"
 This lets you apply an arbitrary value for a DHCP option.
-The syntax for the values varies based on the option.  (See a full list of options and their types below).
+The syntax for the values varies based on the option.  (See a list of options and their types below).
+You can also set an option to \fBnull\fP to unset it (if, for example, the
+value was inherited in a sub policy, or to override erbium's internal defaults
+for a value).
 .\"
 .SS Subpolicies
 As well as having match and apply rules for each policy, a policy can also contain subpolicies.
@@ -134,6 +139,7 @@ xx,user-class,string,RFC2131,A user configurable class.
 80,fqdn,string,RFC2131,The fully qualified domain name of the client.
 100,tz-rule,string,?,The POSIX complaint timezone rule specification.
 101,tz-name,string,?,A tzdata timezone name.
+121,routes,routes,RFC3442,A list of static routes.
 xx,captive-portal,string,?,The URL for a captive portal.
 .TE
 .PP
@@ -157,6 +163,8 @@ combined, and if the unit is left off it is assumed to be seconds.  For example 
 4 hours, 20 minutes, and 5 seconds (which is the same as the number 15605).
 .IP "\fIhardware address\fP"
 This is specified as a colon (:) separated list of hexadecimal octets.  For example: 00:00:5E:00:53:00.
+.IP "\fIroutes\fP"
+Routes are specified with a prefix and nexthop. eg: { prefix: 192.0.2.0/24, next-hop: 192.0.2.254 }
 .SH EXAMPLE
 .EX
 dhcp:
@@ -167,6 +175,9 @@ dhcp:
     policies:
      - match-subnet: 192.0.2.0/24
        apply-subnet: 192.0.2.0/24
+       apply-routes:
+        - prefix: 198.51.100.0/24
+          next-hop: 192.0.2.254
        policies:
         - { match-hardware-address: 00:00:5E:00:53:01, apply-address: 192.0.2.1 }
         - { match-hardware-address: 00:00:5E:00:53:02, apply-address: 192.0.2.2 }

@@ -235,7 +235,7 @@ pub const OPTION_TCODE: DhcpOption = DhcpOption(101); /* RFC4833 */
 pub const OPTION_AUTOCONF: DhcpOption = DhcpOption(103);
 pub const OPTION_SUBNETSELECT: DhcpOption = DhcpOption(104);
 //pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
-//pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
+pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
 pub const OPTION_CAPTIVEPORTAL: DhcpOption = DhcpOption(160);
 
 const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
@@ -286,7 +286,7 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
         DhcpOptionType::Bool,
     ),
     ("router-request", OPTION_RTRREQ, DhcpOptionType::Ip),
-    //("static-route",  OPTION_STATICROUTE, DhcpOptionType::...), // Needs special handling.
+    //("static-route",  OPTION_STATICROUTE, DhcpOptionType::...), // Needs special handling. -- DNI
     ("trailers", OPTION_TRAILERS, DhcpOptionType::Bool),
     ("arp-timeout", OPTION_ARPTIMEOUT, DhcpOptionType::Seconds32),
     ("ethernet", OPTION_ETHERNET, DhcpOptionType::Bool),
@@ -402,7 +402,7 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     ("subnet-selection", OPTION_SUBNETSELECT, DhcpOptionType::Ip), // RFC3011 -- needs better support
     //("search-path", OPTION_DNSSEARCH, DhcpOptionType::...), // RFC3397
     //("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::...), // RFC3361
-    //121: classless routes, RFC3442 -- Don't intend to implement.
+    ("routes", OPTION_CIDRROUTE, DhcpOptionType::Routes),
     //122: Cablelabs Client configuration, RFC3495
     //123: GeoConf, RFC6225
     //124: Vendor Identifying Vendor Class -- needs special support, RFC3925
@@ -433,6 +433,7 @@ pub enum DhcpOptionType {
     Seconds16,
     Seconds32,
     HwAddr,
+    Routes,
 }
 
 type IpList = Vec<std::net::Ipv4Addr>;
@@ -453,6 +454,7 @@ impl DhcpOptionType {
             DhcpOptionType::Seconds16 => u16::parse_into(v).map(DhcpOptionTypeValue::U16), // ?
             DhcpOptionType::Seconds32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32), // ?
             DhcpOptionType::HwAddr => U8Str::parse_into(v).map(DhcpOptionTypeValue::HwAddr),
+            DhcpOptionType::Routes => Vec::<Route>::parse_into(v).map(DhcpOptionTypeValue::Routes),
         }
     }
 }
@@ -460,13 +462,14 @@ impl DhcpOptionType {
 #[derive(Debug, Clone)]
 pub enum DhcpOptionTypeValue {
     String(String),
-    IpList(Vec<std::net::Ipv4Addr>),
+    IpList(IpList),
     Ip(std::net::Ipv4Addr),
     I32(i32),
     U8(u8),
     U16(u16),
     U32(u32),
     HwAddr(Vec<u8>),
+    Routes(Vec<Route>),
 }
 
 impl DhcpOptionTypeValue {
@@ -485,6 +488,15 @@ impl DhcpOptionTypeValue {
             DhcpOptionTypeValue::U16(x) => x.to_be_bytes().to_vec(),
             DhcpOptionTypeValue::U32(x) => x.to_be_bytes().to_vec(),
             DhcpOptionTypeValue::HwAddr(x) => x.clone(),
+            DhcpOptionTypeValue::Routes(v) => {
+                let mut o = vec![];
+                for i in v {
+                    o.push(i.prefix.prefixlen);
+                    o.extend(i.prefix.addr.octets().iter());
+                    o.extend(i.nexthop.octets().iter());
+                }
+                o
+            }
         }
     }
 }
@@ -524,6 +536,14 @@ impl std::fmt::Display for DhcpOptionTypeValue {
                     .map(|b| format!("{:0>2x}", b))
                     .collect::<Vec<String>>()
                     .join(":")
+            ),
+            DhcpOptionTypeValue::Routes(l) => write!(
+                f,
+                "{}",
+                l.iter()
+                    .map(|i| format!("{}->{}", i.prefix, i.nexthop))
+                    .collect::<Vec<String>>()
+                    .join(",")
             ),
         }
     }
@@ -574,6 +594,38 @@ pub trait DhcpParse {
     fn parse_into(v: &[u8]) -> Option<Self::Item>;
 }
 
+#[derive(Clone, Debug)]
+pub struct Route {
+    pub prefix: crate::net::Ipv4Subnet,
+    pub nexthop: std::net::Ipv4Addr,
+}
+
+fn parse_ip_from_iter<I>(it: &mut I) -> Option<std::net::Ipv4Addr>
+where
+    I: std::iter::Iterator<Item = u8>,
+{
+    let ip1 = it.next()?;
+    let ip2 = it.next()?;
+    let ip3 = it.next()?;
+    let ip4 = it.next()?;
+    Some(net::Ipv4Addr::new(ip1, ip2, ip3, ip4))
+}
+
+impl DhcpParse for Vec<Route> {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self::Item> {
+        let mut it = v.iter().copied();
+        let mut ret = vec![];
+        while let Some(prefixlen) = it.next() {
+            let prefix =
+                crate::net::Ipv4Subnet::new(parse_ip_from_iter(&mut it)?, prefixlen).ok()?;
+            let nexthop = parse_ip_from_iter(&mut it)?;
+            ret.push(Route { prefix, nexthop });
+        }
+        Some(ret)
+    }
+}
+
 impl DhcpParse for std::net::Ipv4Addr {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self::Item> {
@@ -585,7 +637,7 @@ impl DhcpParse for std::net::Ipv4Addr {
     }
 }
 
-impl DhcpParse for Vec<std::net::Ipv4Addr> {
+impl DhcpParse for IpList {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self::Item> {
         let mut it = v.iter().copied();
@@ -940,16 +992,7 @@ impl Serialise for i32 {
 
 impl Serialise for DhcpOptionTypeValue {
     fn serialise(&self, v: &mut Vec<u8>) {
-        match self {
-            DhcpOptionTypeValue::String(x) => x.serialise(v),
-            DhcpOptionTypeValue::IpList(x) => x.serialise(v),
-            DhcpOptionTypeValue::Ip(x) => x.serialise(v),
-            DhcpOptionTypeValue::I32(x) => x.serialise(v),
-            DhcpOptionTypeValue::U8(x) => x.serialise(v),
-            DhcpOptionTypeValue::U16(x) => x.serialise(v),
-            DhcpOptionTypeValue::U32(x) => x.serialise(v),
-            DhcpOptionTypeValue::HwAddr(x) => x.serialise(v),
-        }
+        v.extend(self.as_bytes().iter());
     }
 }
 
@@ -1063,6 +1106,13 @@ fn test_type_serialisation() {
         ])),
         vec![192, 0, 2, 0, 192, 0, 2, 1, 192, 0, 2, 2]
     );
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::Routes(vec![Route {
+            prefix: crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
+            nexthop: "192.0.2.254".parse().unwrap(),
+        }])),
+        vec![24, 192, 0, 2, 0, 192, 0, 2, 254]
+    );
 }
 
 #[test]
@@ -1140,5 +1190,16 @@ fn test_parse() {
                 .unwrap()
         ),
         "00:01:02:03:04:05"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            DhcpOptionType::Routes
+                .decode(&vec![
+                    24, 192, 0, 2, 0, 192, 0, 2, 254, 24, 198, 51, 100, 0, 192, 0, 2, 254
+                ])
+                .unwrap()
+        ),
+        "192.0.2.0/24->192.0.2.254,198.51.100.0/24->192.0.2.254"
     );
 }

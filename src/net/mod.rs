@@ -31,6 +31,20 @@ pub enum Error {
     InvalidSubnet,
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::InvalidSubnet => write!(f, "Invalid Subnet"),
+        }
+    }
+}
+
+impl std::fmt::Display for Ipv4Subnet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.addr, self.prefixlen)
+    }
+}
+
 impl Ipv4Subnet {
     pub fn new(addr: std::net::Ipv4Addr, prefixlen: u8) -> Result<Self, Error> {
         let ret = Self { addr, prefixlen };
