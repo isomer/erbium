@@ -23,6 +23,7 @@ use erbium::*;
 
 enum Error {
     ConfigError(std::path::PathBuf, erbium::config::Error),
+    ServiceError(String),
 }
 
 impl std::fmt::Display for Error {
@@ -34,6 +35,7 @@ impl std::fmt::Display for Error {
                 path.to_string_lossy(),
                 e
             ),
+            Error::ServiceError(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -53,10 +55,16 @@ async fn go() -> Result<(), Error> {
     let conf = erbium::config::load_config_from_path(config_file)
         .await
         .map_err(|e| Error::ConfigError(config_file.to_path_buf(), e))?;
-    let mut services = futures::stream::FuturesUnordered::new();
 
+    let radv = std::sync::Arc::new(
+        radv::RaAdvService::new(netinfo.clone(), conf.clone())
+            .map_err(|x| Error::ServiceError(x.to_string()))?,
+    );
+
+    let mut services = futures::stream::FuturesUnordered::new();
     services.push(tokio::spawn(dhcp::run(netinfo, conf)));
     services.push(tokio::spawn(dns::run()));
+    services.push(tokio::spawn(async move { radv.run().await }));
 
     let x = services.next().await.unwrap();
     println!("Service complete: {:?}", x);

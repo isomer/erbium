@@ -21,3 +21,4 @@ pub mod config;
 pub mod dhcp;
 pub mod dns;
 pub mod net;
+pub mod radv;
