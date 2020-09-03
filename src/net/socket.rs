@@ -1,0 +1,331 @@
+/*   Copyright 2020 Perry Lorier
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ *  SPDX-License-Identifier: Apache-2.0
+ *
+ *  Common Socket Traits
+ */
+
+use futures::ready;
+use std::os::unix::io::RawFd;
+use std::task::Poll;
+
+pub type SockAddr = nix::sys::socket::SockAddr;
+pub type SocketAddr = std::net::SocketAddr;
+
+pub fn std_to_libc_in_addr(addr: std::net::Ipv4Addr) -> libc::in_addr {
+    libc::in_addr {
+        s_addr: addr
+            .octets()
+            .iter()
+            .fold(0, |acc, x| ((acc << 8) | (*x as u32))),
+    }
+}
+
+pub const fn std_to_libc_in6_addr(addr: std::net::Ipv6Addr) -> libc::in6_addr {
+    libc::in6_addr {
+        s6_addr: addr.octets(),
+    }
+}
+
+pub fn nix_to_std_sockaddr(n: SockAddr) -> std::net::SocketAddr {
+    match n {
+        nix::sys::socket::SockAddr::Inet(ia) => ia.to_std(),
+        _ => unimplemented!(),
+    }
+}
+
+pub fn std_to_nix_sockaddr(addr: &SocketAddr) -> SockAddr {
+    nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::from_std(addr))
+}
+
+pub fn nix_to_io_error(n: nix::Error) -> std::io::Error {
+    use nix::Error::*;
+    use std::io::{Error, ErrorKind};
+    match n {
+        Sys(_) => Error::new(ErrorKind::Other, n),
+        InvalidPath => Error::new(ErrorKind::InvalidData, n),
+        InvalidUtf8 => Error::new(ErrorKind::InvalidData, n),
+        UnsupportedOperation => Error::new(ErrorKind::InvalidData, n),
+    }
+}
+
+pub type MsgFlags = nix::sys::socket::MsgFlags;
+pub type IoVec<A> = nix::sys::uio::IoVec<A>;
+
+use nix::libc;
+
+#[derive(Debug)]
+pub struct ControlMessage {
+    pub send_from: Option<std::net::IpAddr>,
+    /* private, used to hold memory after conversions */
+    pktinfo4: libc::in_pktinfo,
+    pktinfo6: libc::in6_pktinfo,
+}
+
+impl ControlMessage {
+    pub fn new() -> Self {
+        Self {
+            send_from: None,
+            pktinfo4: libc::in_pktinfo {
+                ipi_ifindex: 0, /* Unspecified interface */
+                ipi_addr: std_to_libc_in_addr(std::net::Ipv4Addr::UNSPECIFIED),
+                ipi_spec_dst: std_to_libc_in_addr(std::net::Ipv4Addr::UNSPECIFIED),
+            },
+            pktinfo6: libc::in6_pktinfo {
+                ipi6_ifindex: 0, /* Unspecified interface */
+                ipi6_addr: std_to_libc_in6_addr(std::net::Ipv6Addr::UNSPECIFIED),
+            },
+        }
+    }
+    pub fn set_send_from(mut self, send_from: Option<std::net::IpAddr>) -> Self {
+        self.send_from = send_from;
+        self
+    }
+    pub fn convert_to_cmsg(&mut self) -> Vec<nix::sys::socket::ControlMessage> {
+        let mut cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
+
+        if let Some(addr) = self.send_from {
+            match addr {
+                std::net::IpAddr::V4(ip) => {
+                    self.pktinfo4.ipi_spec_dst = std_to_libc_in_addr(ip);
+                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv4PacketInfo(
+                        &self.pktinfo4,
+                    ))
+                }
+                std::net::IpAddr::V6(ip) => {
+                    self.pktinfo6.ipi6_addr = std_to_libc_in6_addr(ip);
+                    cmsgs.push(nix::sys::socket::ControlMessage::Ipv6PacketInfo(
+                        &self.pktinfo6,
+                    ))
+                }
+            }
+        }
+
+        cmsgs
+    }
+}
+
+impl Default for ControlMessage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug)]
+pub struct RecvMsg {
+    pub buffer: Vec<u8>,
+    pub address: Option<SocketAddr>,
+    /* TODO: These should probably return std types */
+    /* Or possibly have accessors that convert them for you */
+    /* either way, we shouldn't be exporting nix types here */
+    timestamp: Option<nix::sys::time::TimeVal>,
+    ipv4pktinfo: Option<libc::in_pktinfo>,
+    ipv6pktinfo: Option<libc::in6_pktinfo>,
+}
+
+impl RecvMsg {
+    fn new(m: nix::sys::socket::RecvMsg, buffer: Vec<u8>) -> RecvMsg {
+        let mut r = RecvMsg {
+            buffer,
+            address: m.address.map(nix_to_std_sockaddr),
+            timestamp: None,
+            ipv4pktinfo: None,
+            ipv6pktinfo: None,
+        };
+
+        for cmsg in m.cmsgs() {
+            use nix::sys::socket::ControlMessageOwned;
+            match cmsg {
+                ControlMessageOwned::ScmTimestamp(rtime) => {
+                    r.timestamp = Some(rtime);
+                }
+                ControlMessageOwned::Ipv4PacketInfo(pi) => {
+                    r.ipv4pktinfo = Some(pi);
+                }
+                ControlMessageOwned::Ipv6PacketInfo(pi) => {
+                    r.ipv6pktinfo = Some(pi);
+                }
+                x => println!("Unknown control message {:?}", x),
+            }
+        }
+
+        r
+    }
+
+    /// Returns the local address of the packet.
+    ///
+    /// This is primarily used by UDP sockets to tell you which address a packet arrived on when
+    /// the UDP socket is bound to INADDR_ANY or IN6ADDR_ANY.
+    pub fn local_addr(&self) -> Option<std::net::IpAddr> {
+        // This function can be overridden to provide different implementations for different
+        // platforms.
+        //
+        if let Some(pi) = self.ipv6pktinfo {
+            // Oh come on, this conversion is even more ridiculous than the last one!
+            Some(std::net::IpAddr::V6(std::net::Ipv6Addr::new(
+                (pi.ipi6_addr.s6_addr[0] as u16) << 8 | (pi.ipi6_addr.s6_addr[1] as u16),
+                (pi.ipi6_addr.s6_addr[2] as u16) << 8 | (pi.ipi6_addr.s6_addr[3] as u16),
+                (pi.ipi6_addr.s6_addr[4] as u16) << 8 | (pi.ipi6_addr.s6_addr[5] as u16),
+                (pi.ipi6_addr.s6_addr[6] as u16) << 8 | (pi.ipi6_addr.s6_addr[7] as u16),
+                (pi.ipi6_addr.s6_addr[8] as u16) << 8 | (pi.ipi6_addr.s6_addr[9] as u16),
+                (pi.ipi6_addr.s6_addr[10] as u16) << 8 | (pi.ipi6_addr.s6_addr[11] as u16),
+                (pi.ipi6_addr.s6_addr[12] as u16) << 8 | (pi.ipi6_addr.s6_addr[13] as u16),
+                (pi.ipi6_addr.s6_addr[14] as u16) << 8 | (pi.ipi6_addr.s6_addr[15] as u16),
+            )))
+        } else if let Some(pi) = self.ipv4pktinfo {
+            let ip = pi.ipi_addr.s_addr.to_ne_bytes(); // This is already in big endian form, don't try and perform a conversion.
+                                                       // It is a pity I haven't found a nicer way to do this conversion.
+            Some(std::net::IpAddr::V4(std::net::Ipv4Addr::new(
+                ip[0], ip[1], ip[2], ip[3],
+            )))
+        } else {
+            None
+        }
+    }
+
+    pub fn local_intf(&self) -> Option<i32> {
+        if let Some(pi) = self.ipv6pktinfo {
+            Some(pi.ipi6_ifindex as i32)
+        } else if let Some(pi) = self.ipv4pktinfo {
+            Some(pi.ipi_ifindex as i32)
+        } else {
+            None
+        }
+    }
+}
+
+pub fn new_socket(
+    domain: libc::c_int,
+    ty: libc::c_int,
+    protocol: libc::c_int,
+) -> Result<tokio::io::PollEvented<crate::net::raw::RawSocketEvented>, std::io::Error> {
+    // I would love to use the nix socket() wrapper, except, uh, it has a closed enum.
+    // See https://github.com/nix-rust/nix/issues/854
+    //
+    // So I have to use the libc version directly.
+    let fd = unsafe {
+        libc::socket(
+            domain,
+            ty | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
+            (protocol as u16).to_be() as i32,
+        )
+    };
+    if fd == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(tokio::io::PollEvented::new(crate::net::raw::RawSocketEvented::new(fd as RawFd)).unwrap())
+}
+
+fn poll_recv_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
+    sock: &tokio::io::PollEvented<E>,
+    cx: &mut std::task::Context<'_>,
+    bufsize: usize,
+    flags: MsgFlags,
+) -> std::task::Poll<Result<RecvMsg, std::io::Error>> {
+    ready!(sock.poll_read_ready(cx, mio::Ready::readable()))?;
+
+    let mut buf = Vec::new();
+    buf.resize_with(bufsize, Default::default);
+    let iov = &[IoVec::from_mut_slice(buf.as_mut_slice())];
+
+    let mut cmsg = Vec::new();
+    cmsg.resize_with(65536, Default::default); /* TODO: Calculate a more reasonable size */
+
+    let mut flags = flags;
+    flags.set(MsgFlags::MSG_DONTWAIT, true);
+
+    match nix::sys::socket::recvmsg(sock.get_ref().as_raw_fd(), iov, Some(&mut cmsg), flags) {
+        Ok(rm) => {
+            buf.truncate(rm.bytes);
+            Poll::Ready(Ok(RecvMsg::new(rm, buf)))
+        }
+        Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => Poll::Pending,
+        Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
+            sock.clear_read_ready(cx, mio::Ready::readable())?;
+            Poll::Pending
+        }
+        Err(e) => Poll::Ready(Err(nix_to_io_error(e))),
+    }
+}
+
+pub async fn recv_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
+    sock: &tokio::io::PollEvented<E>,
+    bufsize: usize,
+    flags: MsgFlags,
+) -> std::io::Result<RecvMsg> {
+    tokio::future::poll_fn(|cx| poll_recv_msg(sock, cx, bufsize, flags)).await
+}
+
+pub async fn send_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
+    sock: &tokio::io::PollEvented<E>,
+    buffer: &[u8],
+    cmsg: &ControlMessage,
+    flags: MsgFlags,
+    addr: Option<&SockAddr>,
+) -> std::io::Result<()> {
+    tokio::future::poll_fn(|cx| poll_send_msg(sock, cx, buffer, cmsg, flags, addr)).await
+}
+
+fn poll_send_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
+    sock: &tokio::io::PollEvented<E>,
+    cx: &mut std::task::Context<'_>,
+    buffer: &[u8],
+    cmsg: &ControlMessage,
+    flags: MsgFlags,
+    from: Option<&SockAddr>,
+) -> Poll<std::io::Result<()>> {
+    ready!(sock.poll_write_ready(cx))?;
+
+    let iov = &[IoVec::from_slice(buffer)];
+    let mut cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
+    let mut in_pktinfo = libc::in_pktinfo {
+        ipi_ifindex: 0, /* Unspecified interface */
+        ipi_addr: std_to_libc_in_addr(std::net::Ipv4Addr::UNSPECIFIED),
+        ipi_spec_dst: std_to_libc_in_addr(std::net::Ipv4Addr::UNSPECIFIED),
+    };
+    let mut in6_pktinfo = libc::in6_pktinfo {
+        ipi6_ifindex: 0, /* Unspecified interface */
+        ipi6_addr: std_to_libc_in6_addr(std::net::Ipv6Addr::UNSPECIFIED),
+    };
+
+    if let Some(addr) = cmsg.send_from {
+        match addr {
+            std::net::IpAddr::V4(ip) => {
+                in_pktinfo.ipi_spec_dst = std_to_libc_in_addr(ip);
+                cmsgs.push(nix::sys::socket::ControlMessage::Ipv4PacketInfo(
+                    &in_pktinfo,
+                ))
+            }
+            std::net::IpAddr::V6(ip) => {
+                in6_pktinfo.ipi6_addr = std_to_libc_in6_addr(ip);
+                cmsgs.push(nix::sys::socket::ControlMessage::Ipv6PacketInfo(
+                    &in6_pktinfo,
+                ))
+            }
+        }
+    }
+
+    println!("Send cmsg: {:?}", cmsgs);
+
+    match nix::sys::socket::sendmsg(sock.get_ref().as_raw_fd(), iov, &cmsgs, flags, from) {
+        Ok(_) => Poll::Ready(Ok(())),
+        Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => Poll::Pending,
+        Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
+            sock.clear_write_ready(cx)?;
+            Poll::Pending
+        }
+        Err(e) => Poll::Ready(Err(nix_to_io_error(e))),
+    }
+}

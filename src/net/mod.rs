@@ -17,6 +17,7 @@
 pub mod netinfo;
 pub mod packet;
 pub mod raw;
+pub mod socket;
 pub mod udp;
 
 // TODO: Write better Debug or to_string() method.

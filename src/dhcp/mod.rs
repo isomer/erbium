@@ -529,7 +529,7 @@ pub fn handle_pkt(
 async fn send_raw(raw: Arc<raw::RawSocket>, buf: &[u8], intf: i32) -> Result<(), std::io::Error> {
     raw.send_msg(
         buf,
-        &mut raw::ControlMessage::new(),
+        &raw::ControlMessage::new(),
         raw::MsgFlags::empty(),
         /* Wow this is ugly, some wrappers here might help */
         Some(&nix::sys::socket::SockAddr::Link(
@@ -715,7 +715,7 @@ async fn run_internal(
     conf: super::config::SharedConfig,
 ) -> Result<(), RunError> {
     println!("Starting DHCP service");
-    let rawsock = Arc::new(raw::RawSocket::new().map_err(RunError::Io)?);
+    let rawsock = Arc::new(raw::RawSocket::new(raw::EthProto::ALL).map_err(RunError::Io)?);
     let pools = Arc::new(sync::Mutex::new(
         pool::Pool::new().map_err(RunError::PoolError)?,
     ));
