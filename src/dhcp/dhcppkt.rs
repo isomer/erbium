@@ -17,6 +17,7 @@
  *  Parsing/Serialisation for a DHCP Packet.
  */
 
+use crate::pktparser;
 use std::collections;
 use std::fmt;
 use std::net;
@@ -42,43 +43,6 @@ impl std::fmt::Display for ParseError {
             ParseError::InvalidPacket => write!(f, "Invalid Packet"),
         }
     }
-}
-
-fn get_u8(it: &mut dyn std::iter::Iterator<Item = &u8>) -> Result<u8, ParseError> {
-    match it.next() {
-        Some(v) => Ok(*v),
-        None => Err(ParseError::UnexpectedEndOfInput),
-    }
-}
-
-fn get_be16(it: &mut dyn std::iter::Iterator<Item = &u8>) -> Result<u16, ParseError> {
-    Ok(get_u8(it)? as u16 * 256 + get_u8(it)? as u16)
-}
-
-fn get_be32(it: &mut dyn std::iter::Iterator<Item = &u8>) -> Result<u32, ParseError> {
-    Ok(get_u8(it)? as u32 * (256 * 256 * 256)
-        + get_u8(it)? as u32 * (256 * 256)
-        + get_u8(it)? as u32 * 256
-        + get_u8(it)? as u32)
-}
-
-fn get_bytes(
-    it: &mut dyn std::iter::Iterator<Item = &u8>,
-    l: usize,
-) -> Result<Vec<u8>, ParseError> {
-    let mut v = vec![];
-    for _ in 0..l {
-        v.push(get_u8(it)?);
-    }
-    Ok(v)
-}
-
-fn get_ipv4(it: &mut dyn std::iter::Iterator<Item = &u8>) -> Result<net::Ipv4Addr, ParseError> {
-    let a = get_u8(it)?;
-    let b = get_u8(it)?;
-    let c = get_u8(it)?;
-    let d = get_u8(it)?;
-    Ok(net::Ipv4Addr::new(a, b, c, d))
 }
 
 #[derive(PartialEq, Eq)]
@@ -855,44 +819,47 @@ fn null_terminated(mut v: Vec<u8>) -> Vec<u8> {
 }
 
 pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
-    let mut it = pkt.iter();
-    let op = get_u8(&mut it)?;
-    let htype = get_u8(&mut it)?;
-    let hlen = get_u8(&mut it)?;
-    let hops = get_u8(&mut it)?;
-    let xid = get_be32(&mut it)?;
-    let secs = get_be16(&mut it)?;
-    let flags = get_be16(&mut it)?;
-    let ciaddr = get_ipv4(&mut it)?;
-    let yiaddr = get_ipv4(&mut it)?;
-    let siaddr = get_ipv4(&mut it)?;
-    let giaddr = get_ipv4(&mut it)?;
-    let chaddr = get_bytes(&mut it, 16)?;
+    let mut buf = pktparser::Buffer::new(pkt);
+    let op = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let htype = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let hlen = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let hops = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let xid = buf.get_be32().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let secs = buf.get_be16().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let flags = buf.get_be16().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let ciaddr = buf.get_ipv4().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let yiaddr = buf.get_ipv4().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let siaddr = buf.get_ipv4().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let giaddr = buf.get_ipv4().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let chaddr = buf.get_vec(16).ok_or(ParseError::UnexpectedEndOfInput)?;
     if hlen as usize > chaddr.len() {
         return Err(ParseError::InvalidPacket);
     }
-    let sname = null_terminated(get_bytes(&mut it, 64)?);
-    let file = null_terminated(get_bytes(&mut it, 128)?);
+    let sname = null_terminated(buf.get_vec(64).ok_or(ParseError::UnexpectedEndOfInput)?);
+    let file = null_terminated(buf.get_vec(128).ok_or(ParseError::UnexpectedEndOfInput)?);
     let mut raw_options: collections::HashMap<DhcpOption, Vec<u8>> = collections::HashMap::new();
-    match get_be32(&mut it) {
-        Ok(0x6382_5363) => {
+    match buf.get_be32() {
+        Some(0x6382_5363) => {
             loop {
-                match get_u8(&mut it) {
-                    Ok(0) => (),      /* Pad byte */
-                    Ok(255) => break, /* End Field */
-                    Ok(x) => {
-                        let l = get_u8(&mut it)?;
+                match buf.get_u8() {
+                    Some(0) => (),      /* Pad byte */
+                    Some(255) => break, /* End Field */
+                    Some(x) => {
+                        let l = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
                         raw_options
                             .entry(DhcpOption(x))
                             .or_insert_with(Vec::new)
-                            .extend(get_bytes(&mut it, l as usize)?);
+                            .extend(
+                                buf.get_bytes(l as usize)
+                                    .ok_or(ParseError::UnexpectedEndOfInput)?,
+                            );
                     }
-                    Err(e) => return Err(e),
+                    None => return Err(ParseError::UnexpectedEndOfInput),
                 }
             }
         }
-        Ok(_) => return Err(ParseError::WrongMagic),
-        Err(x) => return Err(x),
+        Some(_) => return Err(ParseError::WrongMagic),
+        None => return Err(ParseError::UnexpectedEndOfInput),
     }
 
     let options = DhcpOptions { other: raw_options };
