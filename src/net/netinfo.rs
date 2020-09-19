@@ -35,8 +35,8 @@ pub enum LinkLayer {
 
 impl std::fmt::Debug for LinkLayer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            &LinkLayer::Ethernet(e) => write!(
+        match *self {
+            LinkLayer::Ethernet(e) => write!(
                 f,
                 "Ethernet({})",
                 e.iter()
@@ -44,7 +44,7 @@ impl std::fmt::Debug for LinkLayer {
                     .collect::<Vec<String>>()
                     .join(":")
             ),
-            &LinkLayer::None => write!(f, "None"),
+            LinkLayer::None => write!(f, "None"),
         }
     }
 }
