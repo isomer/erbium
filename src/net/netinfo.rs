@@ -27,10 +27,26 @@ use netlink_packet_route::{
 use netlink_sys::constants::*;
 use netlink_sys::{Protocol, Socket, SocketAddr};
 
-#[derive(Debug, Clone)]
+#[derive(Clone, PartialEq)]
 pub enum LinkLayer {
     Ethernet([u8; 6]),
     None,
+}
+
+impl std::fmt::Debug for LinkLayer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            &LinkLayer::Ethernet(e) => write!(
+                f,
+                "Ethernet({})",
+                e.iter()
+                    .map(|b| format!("{:0>2x}", b))
+                    .collect::<Vec<String>>()
+                    .join(":")
+            ),
+            &LinkLayer::None => write!(f, "None"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -78,19 +94,19 @@ fn convert_address(addr: &[u8], family: u16) -> std::net::IpAddr {
 }
 
 impl SharedNetInfo {
-    fn parse_addr(&self, addr: AddressMessage) -> (std::net::IpAddr, u8) {
+    fn parse_addr(&self, addr: &AddressMessage) -> (std::net::IpAddr, u8) {
         use netlink_packet_route::address::nlas::Nla::*;
         let mut ifaddr = None;
         let iffamily = addr.header.family;
         let ifprefixlen = addr.header.prefix_len;
-        for i in addr.nlas {
+        for i in &addr.nlas {
             if let Address(a) = i {
                 ifaddr = Some(convert_address(&a, iffamily.into()));
             }
         }
         (ifaddr.unwrap(), ifprefixlen)
     }
-    async fn process_newaddr(&self, addr: AddressMessage) {
+    async fn process_newaddr(&self, addr: &AddressMessage) {
         let ifindex = addr.header.index;
         let ifaddr = self.parse_addr(addr);
         let mut ni = self.0.write().await;
@@ -102,12 +118,12 @@ impl SharedNetInfo {
             ii.addresses.push(ifaddr);
             let (ip, prefixlen) = ifaddr;
             println!(
-                "Found addr {}/{} for if#{}, now {:?}",
-                ip, prefixlen, ifindex, ii.addresses
+                "Found addr {}/{} for {}(#{}), now {:?}",
+                ip, prefixlen, ii.name, ifindex, ii.addresses
             );
         }
     }
-    async fn process_deladdr(&self, addr: AddressMessage) {
+    async fn process_deladdr(&self, addr: &AddressMessage) {
         let ifindex = addr.header.index;
         let ifaddr = self.parse_addr(addr);
         let mut ni = self.0.write().await;
@@ -115,8 +131,8 @@ impl SharedNetInfo {
         ii.addresses.retain(|&x| x != ifaddr);
         let (ip, prefixlen) = ifaddr;
         println!(
-            "Lost addr {}/{} for if#{}, now {:?}",
-            ip, prefixlen, ifindex, ii.addresses
+            "Lost addr {}/{} for {}(#{}), now {:?}",
+            ip, prefixlen, ii.name, ifindex, ii.addresses
         );
     }
     fn decode_linklayer(&self, linktype: u16, addr: &[u8]) -> LinkLayer {
@@ -132,7 +148,8 @@ impl SharedNetInfo {
             }
         }
     }
-    async fn process_newlink(&self, link: LinkMessage) {
+
+    async fn process_newlink(&self, link: &LinkMessage) {
         use netlink_packet_route::link::nlas::Nla::*;
         let mut ifname: Option<String> = None;
         let mut ifmtu: Option<u32> = None;
@@ -173,7 +190,10 @@ impl SharedNetInfo {
         };
 
         netinfo.name2idx.insert(ifinfo.name.clone(), ifidx);
-        println!("Found new interface {:?}", ifinfo);
+        println!(
+            "Found new interface {}(#{}) {:?} ({:?})",
+            ifinfo.name, ifidx, ifinfo, link
+        );
         netinfo.intf.insert(ifidx, ifinfo);
     }
 
@@ -243,6 +263,28 @@ impl SharedNetInfo {
         }
     }
 
+    async fn process_message(&self, rx_packet: &NetlinkMessage<RtnlMessage>) -> bool {
+        match &rx_packet.payload {
+            InnerMessage(NewLink(link)) => {
+                self.process_newlink(link).await;
+                false
+            }
+            InnerMessage(NewAddress(addr)) => {
+                self.process_newaddr(addr).await;
+                false
+            }
+            InnerMessage(DelAddress(addr)) => {
+                self.process_deladdr(addr).await;
+                false
+            }
+            NetlinkPayload::Done => true,
+            e => {
+                println!("Unknown: {:?}", e);
+                false
+            }
+        }
+    }
+
     async fn run(self, mut chan: tokio::sync::mpsc::Sender<()>) {
         let mut socket = Socket::new(Protocol::Route).unwrap();
         let _port_number = socket.bind_auto().unwrap().port_number();
@@ -260,21 +302,15 @@ impl SharedNetInfo {
                 let bytes = &receive_buffer[offset..];
                 let rx_packet = <NetlinkMessage<RtnlMessage>>::deserialize(bytes).unwrap();
 
-                match rx_packet.payload {
-                    InnerMessage(NewLink(link)) => self.process_newlink(link).await,
-                    InnerMessage(NewAddress(addr)) => self.process_newaddr(addr).await,
-                    InnerMessage(DelAddress(addr)) => self.process_deladdr(addr).await,
-                    NetlinkPayload::Done => {
-                        if !sent_addrdump {
-                            self.send_addrdump(&mut socket, &mut seq).await;
-                            sent_addrdump = true;
-                        } else {
-                            // Try and inform anyone listening that we have completed.
-                            // But if it fails, don't worry, we'll send another one soonish.
-                            let _ = chan.try_send(());
-                        }
+                if self.process_message(&rx_packet).await {
+                    if !sent_addrdump {
+                        self.send_addrdump(&mut socket, &mut seq).await;
+                        sent_addrdump = true;
+                    } else {
+                        // Try and inform anyone listening that we have completed.
+                        // But if it fails, don't worry, we'll send another one soonish.
+                        let _ = chan.try_send(());
                     }
-                    e => println!("Unknown: {:?}", e),
                 }
 
                 offset += rx_packet.header.length as usize;
@@ -295,6 +331,13 @@ impl SharedNetInfo {
         // We want to block and wait until all the data is loaded, otherwise we'll cause confusion.
         c.recv().await;
         shared
+    }
+
+    #[cfg(test)]
+    pub fn new_for_test() -> Self {
+        SharedNetInfo(std::sync::Arc::new(
+            tokio::sync::RwLock::new(NetInfo::new()),
+        ))
     }
 
     #[allow(dead_code)]
@@ -350,4 +393,114 @@ impl SharedNetInfo {
             None => format!("if#{}", ifidx),
         }
     }
+}
+
+#[tokio::test]
+async fn test_interface() {
+    use netlink_packet_route::rtnl;
+    use netlink_packet_route::{AddressHeader, LinkHeader};
+    const IFIDX: u32 = 1;
+    let ni = SharedNetInfo::new_for_test();
+    ni.process_message(&NetlinkMessage {
+        header: NetlinkHeader {
+            sequence_number: 1,
+            ..Default::default()
+        },
+        payload: NetlinkPayload::from(RtnlMessage::NewLink(LinkMessage {
+            header: LinkHeader {
+                index: IFIDX,
+                link_layer_type: ARPHRD_ETHER,
+                ..Default::default()
+            },
+            nlas: vec![
+                rtnl::link::nlas::Nla::IfName("test1".into()),
+                rtnl::link::nlas::Nla::Mtu(1500),
+                rtnl::link::nlas::Nla::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x00]),
+                rtnl::link::nlas::Nla::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+            ],
+            ..Default::default()
+        })),
+    })
+    .await;
+    ni.process_message(&NetlinkMessage {
+        header: NetlinkHeader {
+            sequence_number: 2,
+            ..Default::default()
+        },
+        payload: NetlinkPayload::from(RtnlMessage::NewAddress(AddressMessage {
+            header: AddressHeader {
+                index: IFIDX,
+                family: AF_INET as u8,
+                prefix_len: 24,
+                ..Default::default()
+            },
+            nlas: vec![rtnl::address::nlas::Nla::Address(vec![192, 0, 2, 1])],
+            ..Default::default()
+        })),
+    })
+    .await;
+    ni.process_message(&NetlinkMessage {
+        header: NetlinkHeader {
+            sequence_number: 2,
+            ..Default::default()
+        },
+        payload: NetlinkPayload::from(RtnlMessage::NewAddress(AddressMessage {
+            header: AddressHeader {
+                index: IFIDX,
+                family: AF_INET6 as u8,
+                prefix_len: 24,
+                ..Default::default()
+            },
+            nlas: vec![rtnl::address::nlas::Nla::Address(vec![
+                0x20, 0x1, 0xd, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ])],
+            ..Default::default()
+        })),
+    })
+    .await;
+    assert_eq!(ni.get_interfaces().await, vec!["test1".to_string()]);
+    assert_eq!(
+        ni.get_ipv4_by_ifidx(IFIDX).await,
+        Some(std::net::Ipv4Addr::new(192, 0, 2, 1))
+    );
+    assert_eq!(ni.get_mtu_by_ifidx(IFIDX).await, Some(1500));
+    assert_eq!(ni.get_name_by_ifidx(IFIDX).await, Some("test1".to_string()));
+    assert_eq!(
+        ni.get_linkaddr_by_ifidx(IFIDX).await,
+        Some(LinkLayer::Ethernet([0x00, 0x53, 0x00, 0x00, 0x00, 0x00]))
+    );
+    /* It's common to get a second NewLink, make sure we preserve the addresses */
+    ni.process_message(&NetlinkMessage {
+        header: NetlinkHeader {
+            sequence_number: 1,
+            ..Default::default()
+        },
+        payload: NetlinkPayload::from(RtnlMessage::NewLink(LinkMessage {
+            header: LinkHeader {
+                index: IFIDX,
+                link_layer_type: ARPHRD_ETHER,
+                ..Default::default()
+            },
+            nlas: vec![
+                rtnl::link::nlas::Nla::IfName("test1".into()),
+                rtnl::link::nlas::Nla::Mtu(1501),
+                rtnl::link::nlas::Nla::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x01]),
+                rtnl::link::nlas::Nla::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE]),
+            ],
+            ..Default::default()
+        })),
+    })
+    .await;
+    /* Did this disturb the data that was already there? */
+    assert_eq!(ni.get_interfaces().await, vec!["test1".to_string()]);
+    assert_eq!(
+        ni.get_ipv4_by_ifidx(IFIDX).await,
+        Some(std::net::Ipv4Addr::new(192, 0, 2, 1))
+    );
+    assert_eq!(ni.get_mtu_by_ifidx(IFIDX).await, Some(1501));
+    assert_eq!(ni.get_name_by_ifidx(IFIDX).await, Some("test1".to_string()),);
+    assert_eq!(
+        ni.get_linkaddr_by_ifidx(IFIDX).await,
+        Some(LinkLayer::Ethernet([0x00, 0x53, 0x00, 0x00, 0x00, 0x01]))
+    );
 }
