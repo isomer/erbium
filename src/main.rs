@@ -55,7 +55,9 @@ async fn go() -> Result<(), Error> {
         .map_err(|e| Error::ConfigError(config_file.to_path_buf(), e))?;
     let mut services = futures::stream::FuturesUnordered::new();
 
+    #[cfg(feature = "dhcp")]
     services.push(tokio::spawn(dhcp::run(netinfo, conf)));
+    #[cfg(feature = "dns")]
     services.push(tokio::spawn(dns::run()));
 
     let x = services.next().await.unwrap();

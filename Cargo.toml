@@ -8,6 +8,11 @@ description = "Network services for small/home networks"
 license = "Apache-2.0"
 repository = "https://github.com/isomer/erbium.git"
 
+[features]
+default=["dhcp"]
+dhcp=[]
+dns=[]
+
 [dependencies]
 async-std = { version = "1.6.2", features = ["tokio02"] }
 bytes = "0.5.6"
@@ -24,6 +29,14 @@ rusqlite = { version = "0.23" }
 tokio-util = { version="0.3.1", features= ["codec"] }
 tokio = { version = "0.2", features = ["full"] }
 yaml-rust = { version = "0.4" }
+
+[[bin]]
+name="erbium-dns"
+required-features=["dns"]
+
+[[bin]]
+name="erbium-dhcp"
+required-features=["dhcp"]
 
 [lib]
 name = "erbium"
