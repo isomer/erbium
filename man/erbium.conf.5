@@ -1,4 +1,4 @@
-.192.168.0.\"   Copyright 2020 Perry Lorier
+.\"   Copyright 2020 Perry Lorier
 .\"
 .\"  Licensed under the Apache License, Version 2.0 (the "License");
 .\"  you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 .SH NAME
 erbium.conf \- Configuration for erbium
 .SH DESCRIPTION
-erbium is a daemon that provides network services for small/home networks.  erbium.conf provides configuration for
-erbium.
+erbium is a daemon that provides network services for small/home networks.
+erbium.conf provides configuration for \fBerbium\fP\fR(8)\fP.
 .PP
 erbium.conf is in YAML format, and involves multiple sections.
 
@@ -37,16 +37,19 @@ needed for the local environment.
 
 DHCP configuration for erbium is under a \fBdhcp\fP heading.
 The only subheading of dhcp is currently \fBpolicies\fP.
-Under the \fBpolicies\fP section is a list of policies to apply to incoming DHCP packets.
-Each policy is considered in turn, with the first policy that successfully matches being the policy that is applied.
+Under the \fBpolicies\fP section is a list of policies to apply to incoming
+DHCP packets.
+Each policy is considered in turn, with the first policy that successfully
+matches being the policy that is applied.
 .PP
-A policy section contains 0 or more \fBmatch\-\fP\fIcondition\fP fields, and 0 or more \fBapply\-\fP\fIoption\fP fields.
+A policy section contains 0 or more \fBmatch\-\fP\fIcondition\fP fields, and 0
+or more \fBapply\-\fP\fIoption\fP fields.
 .SS DHCP Matches
 All match conditions in a policy must match (the conditions are AND'd together).
 A policy section that contains no matches only matches if one of it's
 subpolicies matches.  (See below for information about subpolicies).
 .\"
-.IP "\fBmatch\-subnet:\fP \fIcidr\-prefix/len\fP"
+.IP "\fBmatch\-subnet:\fP \fIcidr4\-prefix/len\fP"
 \fBmatch\-subnet\fP is how the DHCP standards expect you to match incoming
 packets.  When a DHCP packet from a client is received, then the IP address of
 the interface where it is received is noted, and can be matched with
@@ -55,7 +58,8 @@ case the IP address of the relay is used.
 
 An example is: \fBmatch-subnet: 192.168.0.0/24\fP.
 .IP "\fBmatch\-hardware\-address:\fP \fIhardware\-address\fP"
-Clients send a "client hardware address" (chaddr) in DHCP request packets.  This allows matching on that address.
+Clients send a "client hardware address" (chaddr) in DHCP request packets.
+This allows matching on that address.
 This is most useful when matching on individual hosts to assign them a static address.
 .\"
 .IP "\fBmatch\-\fP\fIdhcpoption\fP\fB:\fP \fIoption\-value\fP"
@@ -74,28 +78,32 @@ Each policy contains a list of option values to apply to a client (assuming the
 client requested the option).  For nested subpolicies (see below), options
 are applied for the outer policies first, then the subpolicies can choose to
 override those values.
-.IP "\fBapply\-address:\fP \fIipaddr\fP
-This adds one IP address to the pool for the policy.  This can be provided
-multiple times to add multiple individual IP addresses to a pool, and then the
-client will be assigned one.
-.IP "\fBapply\-subnet:\fP \fIcidr/len\fP
+.IP "\fBapply\-address:\fP \fIip4addr\fP"
+This adds one IP address to the pool for the policy.
+This can be provided multiple times to add multiple individual IP addresses to
+a pool, and then the client will be assigned one.
+.IP "\fBapply\-subnet:\fP \fIcidr4\-prefix/len\fP"
 This adds an entire subnet worth of addresses to the address pool for the
-policy.  This can be provided multiple times to add multiple subnets.  The
-first and last addresses of the subnet are not applied, as these are the
+policy.
+This can be provided multiple times to add multiple subnets.
+The first and last addresses of the subnet are not applied, as these are the
 network and broadcast addresses respectively.
-.IP "\fBapply\-range: { start:\fP \fIstart-ip\fP\fB, end:\fP \fIlast-ip\fP\fB}\fR"
-This applies a range of IP addresses, from \fIstart-ip\fP to \fIlast-ip\fP inclusive.
-This is a YAML hash type, with the keys "start" and "end".  The text above shows this using YAML's single
-line syntax, but it can be in any of YAML's formats for a hash.
+.IP "\fBapply\-range: { start:\fP \fIstart-ip4\fP\fB, end:\fP \fIlast-ip4\fP\fB}\fR"
+This applies a range of IP addresses, from \fIstart-ip4\fP to \fIlast-ip4\fP inclusive.
+This is a YAML hash type, with the keys "start" and "end".
+The text above shows this using YAML's single line syntax, but it can be in any
+of YAML's formats for a hash.
 .IP "\fBapply\-\fP\fIoption\fP\fB:\fP \fIvalue\fP"
 This lets you apply an arbitrary value for a DHCP option.
-The syntax for the values varies based on the option.  (See a list of options and their types below).
+The syntax for the values varies based on the option.
+(See a list of options and their types below).
 You can also set an option to \fBnull\fP to unset it (if, for example, the
 value was inherited in a sub policy, or to override erbium's internal defaults
 for a value).
 .\"
 .SS Subpolicies
-As well as having match and apply rules for each policy, a policy can also contain subpolicies.
+As well as having match and apply rules for each policy, a policy can also
+contain subpolicies.
 A subpolicy is only attempted to be matched if all the enclosing policies
 matched.
 Sub\-policies have their own DHCP IP pools.
@@ -104,16 +112,18 @@ pools.
 Thus you can have an outer policy that contains a "apply\-subnet:
 192.0.2.0/24", then have a subpolicy for
 that matches an individual host that contains only "apply\-address: 192.0.2.53",
-and that address will only be given to the individual host.  (See the example below).
+and that address will only be given to the individual host.
+(See the example below).
 A policy that does not specify an new addresses will continue to use the
-addresses for it's parent pool. (Again, see example below).
+addresses for it's parent pool.
+(Again, see example below).
 Sub\-policies are introduced by adding a \fBpolicies:\fP section to a policy.
 .\"
 .SH DHCP Options
 .TS
 allbox tab(,);
 nllll.
-Num,Option name,Type,Specification,Description
+Num,Option name,Type,Ref,Description
 1,netmask,ip4,RFC2131,The netmask for this network.
 2,time-offset,seconds,RFC2131,The current timezone offset in seconds.
 3,routers,ip4 list,RFC2131,List of default gateways.
@@ -123,8 +133,8 @@ Num,Option name,Type,Specification,Description
 7,log-servers,ip4 list,RFC2131,List of MIT-LCS UDP log servers (obsolete).
 8,quote-servers,ip4 list,RFC2131,List of quote of the day servers (RFC865).
 9,lpr-servers,ip4 list,RFC2131,List of LPR print servers.
-xx,hostnname,string,RFC2131,Hostname of the client.
-xx,domain-name,string,RFC2131,Domain name of the client.
+12,hostname,string,RFC2131,Hostname of the client.
+15,domain-name,string,RFC2131,Domain name of the client.
 19,forward,boolean,RFC2131,If the client should enable IP forwarding.
 22,max-reassembly,seconds,RFC2131,How long to wait for IP fragment reassembly.
 23,default-ttl,integer,RFC2131,The default TTL.
@@ -132,15 +142,17 @@ xx,domain-name,string,RFC2131,Domain name of the client.
 26,mtu,integer,RFC2131,The MTU the client should use.
 27,mtu-subnet,integer,RFC2131,The MTU for the local subnet.
 28,broadcast,ip4,RFC2131,The broadcast address of the local subnet.
-43,ntp-servers,ip4 list,RFC2131,A list of NTP servers to use.
+35,arp-timeout,integer,RFC2131,ARP cache timeout.
+42,ntp-servers,ip4 list,RFC2131,A list of NTP servers to use.
 69,smtp-servers,ip4 list,RFC2131,A list of SMTP servers to use.
 70,pop3-servers,ip4 list,RFC2131,A list of POP3 servers to use.
-xx,user-class,string,RFC2131,A user configurable class.
+71,nntp-servers,ip4 list,RFC2131,A list of NNTP servers to use.
+77,user-class,string,RFC2131,A user configurable class.
 80,fqdn,string,RFC2131,The fully qualified domain name of the client.
-100,tz-rule,string,?,The POSIX complaint timezone rule specification.
-101,tz-name,string,?,A tzdata timezone name.
+100,tz-rule,string,RFC4833,The POSIX complaint timezone rule specification.
+101,tz-name,string,RFC4833,A tzdata timezone name.
+114,captive-portal,string,RFC8910,The URL for a captive portal.
 121,routes,routes,RFC3442,A list of static routes.
-xx,captive-portal,string,?,The URL for a captive portal.
 .TE
 .PP
 (Note more options than this exist, but I ran out of time writing these docs.
@@ -158,13 +170,119 @@ An IPv4 address.  eg: 192.0.2.0
 A YAML list of IPv4 addresses.  eg: [192.0.2.1, 192.0.2.2].
 .IP \fIseconds\fP
 This can be an integer number of seconds (in any of YAMLs integer formats), or it can be a string with numbers
-suffixed with "s" (for seconds), "m" (for minutes), "h" (for hours), or "d" (for days).  Multiple units can be
-combined, and if the unit is left off it is assumed to be seconds.  For example "4h20m5" is considered to be
-4 hours, 20 minutes, and 5 seconds (which is the same as the number 15605).
+suffixed with "s" (for seconds), "m" (for minutes), "h" (for hours), or "d" (for days).
+Multiple units can be combined, and if the unit is left off it is assumed to be
+seconds.
+For example "4h20m5" is considered to be 4 hours, 20 minutes, and 5 seconds
+(which is the same as the number 15605).
 .IP "\fIhardware address\fP"
 This is specified as a colon (:) separated list of hexadecimal octets.  For example: 00:00:5E:00:53:00.
 .IP "\fIroutes\fP"
 Routes are specified with a prefix and nexthop. eg: { prefix: 192.0.2.0/24, next-hop: 192.0.2.254 }
+.\"
+.SH Router Advertisement Configuration
+Router Advertisements can be configured in erbium under a \fBrouter-advertisements\fP section.
+This should be a yaml list of interfaces.
+Each interface is a yaml hash with some keywords configuring the announcements
+for an interface.
+.IP "\fBinterface:\fP \fIname\fP"
+(required) This is the name of interface to send the announcements.
+.IP "\fBhop-limit:\fP \fIinteger\fP"
+(default 0)
+Set the hop limit for hosts on this network.
+If set to 0 or null, then it will not set that information.
+.IP "\fBmanaged:\fP \fIboolean\fP"
+(default false)
+Configures the "Managed address configuration" bit, configuring
+if hosts on this network should use DHCPv6 to get an address.
+(Hosts ignore this if the "Other" bit is set)
+.IP "\fBother:\fP \fIboolean\fP"
+(default false)
+Configures the "Other configuration" bit.
+This tells the hosts on this network that there is more configuration available
+via DHCPv6.
+(Hosts ignore this if the "managed" bit is set)
+.IP "\fBlifetime:\fP \fIduration\fP"
+(default 0s)
+This configures the "Router Lifetime".
+This configures how long this host should be considered a default router.
+Setting this to 0 means that the erbium router is not a default router.
+.IP "\fBreachable:\fP \fIduration\fP"
+(default 0ms)
+This configures the "Reachable Time" for hosts on the network.
+This is how long a host on the local network should consider a host reachable
+after having confirmation of reachability.
+Setting this to 0 means that this is not specified by this router.
+.IP "\fBretransmit:\fP \fIduration\fP"
+(default 0ms)
+This configures the "Retrans Timer" for hosts on the network.
+The time between retransmitted Neighbor Solicitation messages.
+Setting this to 0 means that this is not specified by this router.
+.IP "\fBmtu:\fP \fImtu\fP"
+(defaults to the MTU of the interface)
+This configures the MTU of the link.
+This can be set to \fBnull\fP so that this router will not specify this.
+.IP "\fBcaptive-portal:\fP \fIurl\fP"
+(defaults to unset)
+This configures a URL to the captive portal (RFC7710).
+This can be set to \fBnull\fP so that this router will not specify this.
+.IP "\fBrdnss:\fP"
+(hash configuring the recusive DNS servers)
+.RS
+.IP "\fBaddresses:\fP \fIlist-of-ipv6-addresses\fP"
+(defaults to the empty list)
+This sets the IPv6 addresses for the router addresses.
+.IP "\fBlifetime:\fP \fIduration\fP"
+(defaults to the setting of the interface lifetime)
+This sets the amount of time that the recursive DNS servers addresses are
+valid.
+.RE
+.\"
+.IP "\fBdnssl:\fP"
+(hash configuring the DNS search list)
+.RS
+.IP "\fBdomains:\fP \fIlist-of-domain-suffixes\fP"
+(defaults to the empty list)
+This sets the ordered list of domain suffixes that should be tried.
+.IP "\fBlifetime:\fP \fIduration\fP"
+(defaults to the setting of the interface lifetime)
+This sets the amount of time that the DNS search list domain suffixes are
+valid.
+.RE
+.\"
+.IP "\fBpref64:\fP"
+(a hash configuring the NAT64 prefix range used by this network)
+.RS
+.IP "\fBprefix:\fP \fIip6-prefix\fP"
+(defaults to none)
+This configures the NAT64 prefix used by this network.
+.IP "\fBlifetime:\fP \fIduration\fP"
+(defaults to 10 minutes)
+This configures how long the NAT64 prefix is valid for.
+.RE
+.\"
+.IP "\fBprefixes:\fP"
+(list of hash configuring addresses)
+.RS
+.IP "\fBprefix:\fP \fIcidr6-prefix/len\fP"
+(defaults to no prefix)
+This configures a prefix to be announced in router advertisement.
+.IP "\fBon-link:\fP \fIboolean\fP"
+(defaults to true)
+This configures if all addresses in this prefix are considered "on link".
+.IP "\fBautonomous:\fP \fIboolean\fP"
+(defaults to true)
+This configures if hosts should autonomously configure one or more addresses
+from this prefix.
+.IP "\fBvalid:\fP \fIduration\fP"
+(defaults to 30 days)
+This configures how long this prefix is considered valid and usable.
+.IP "\fBpreferred:\fP \fIduration\fP"
+(defaults to 7 days)
+The duration that addresses generated from the prefix via stateless address
+autoconfiguration remain preferred, and should be used for new connections.
+.RE
+
 .SH EXAMPLE
 .EX
 dhcp:
@@ -186,6 +304,16 @@ dhcp:
        policies:
         - { match-hardware-address: 00:00:5E:00:53:F0 }
         - { match-hardware-address: 00:00:5E:00:53:F1 }
+
+router-advertisements:
+ - interface: eth0
+   lifetime: 30m
+   prefixes:
+    - prefix: 2001:db8::/64
+   rdnss:
+    addresses: [2001:db8::53]
+   dnssl:
+    domains: [example.net]
 .EE
 .PP
 A client with the mac address 00:00:5E:00:53:01 on an interface with an address
@@ -205,6 +333,10 @@ assigned an IP address between 198.51.100.1 and 198.51.100.254 (inclusive).
 Any other client that sends a query that is received on an interface that is
 not a member of 192.0.2.0/24 will not get a reply.  (This is what ISC DHCP
 server called "non-authoritative mode")
+.PP
+Clients with IPv6 on eth0 will allocate themselves address in 2001:db8::/64.
+They will use 2001:db8::53 as their DNS server, and will use example.net for
+the domain suffix.
 .SH FILES
 erbium.conf
 .SH BUGS

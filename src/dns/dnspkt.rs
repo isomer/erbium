@@ -17,23 +17,16 @@
  *  Datastructures and serialisation of DNS packets.
  */
 
-use std::cmp::Ordering;
 use std::fmt;
 use std::iter::FromIterator;
 use std::string::ToString;
 
 //#[derive(Debug)]
-#[derive(Eq, PartialOrd, PartialEq, Clone, Copy)]
+#[derive(Eq, Ord, PartialOrd, PartialEq, Clone, Copy)]
 pub struct Class(pub u16);
 
 pub const CLASS_IN: Class = Class(1); /* Internet */
 pub const CLASS_CH: Class = Class(3); /* ChaosNet */
-
-impl Ord for Class {
-    fn cmp(&self, other: &Class) -> Ordering {
-        self.0.cmp(&other.0)
-    }
-}
 
 impl ToString for Class {
     fn to_string(&self) -> String {
@@ -52,7 +45,7 @@ impl fmt::Debug for Class {
 }
 
 //#[derive(Debug)]
-#[derive(PartialOrd, PartialEq, Eq, Clone, Hash, Copy)]
+#[derive(Ord, PartialOrd, PartialEq, Eq, Clone, Hash, Copy)]
 pub struct Type(pub u16);
 
 pub const RR_A: Type = Type(1);
@@ -62,12 +55,6 @@ pub const RR_PTR: Type = Type(12);
 pub const RR_OPT: Type = Type(41);
 pub const RR_NSEC: Type = Type(47);
 pub const RR_NSEC3: Type = Type(50);
-
-impl Ord for Type {
-    fn cmp(&self, other: &Type) -> Ordering {
-        self.0.cmp(&other.0)
-    }
-}
 
 impl ToString for Type {
     fn to_string(&self) -> String {
@@ -90,17 +77,11 @@ impl fmt::Debug for Type {
     }
 }
 
-#[derive(PartialOrd, PartialEq, Eq, Clone, Copy)]
+#[derive(Ord, PartialOrd, PartialEq, Eq, Clone, Copy)]
 pub struct RCode(pub u16);
 pub const NOERROR: RCode = RCode(0);
 pub const FORMERR: RCode = RCode(1);
 pub const NXDOMAIN: RCode = RCode(3);
-
-impl Ord for RCode {
-    fn cmp(&self, other: &RCode) -> Ordering {
-        self.0.cmp(&other.0)
-    }
-}
 
 impl ToString for RCode {
     fn to_string(&self) -> String {
@@ -126,7 +107,7 @@ fn display_byte(b: u8) -> String {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Hash, Debug)]
+#[derive(Ord, Clone, PartialEq, Eq, PartialOrd, Hash, Debug)]
 pub struct Label(Vec<u8>);
 
 impl From<Vec<u8>> for Label {
@@ -134,12 +115,6 @@ impl From<Vec<u8>> for Label {
         Label(v)
     }
 }
-impl Ord for Label {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
-    }
-}
-
 impl ToString for Label {
     fn to_string(&self) -> String {
         String::from_iter((&self.0).iter().map(|&b| display_byte(b)))
@@ -152,12 +127,6 @@ pub struct Domain(Vec<Label>);
 impl From<Vec<Label>> for Domain {
     fn from(v: Vec<Label>) -> Self {
         Domain(v)
-    }
-}
-
-impl Ord for Domain {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
     }
 }
 
@@ -290,7 +259,7 @@ impl fmt::Debug for RR {
     }
 }
 
-#[derive(Eq, PartialOrd, PartialEq, Clone, Copy)]
+#[derive(Ord, Eq, PartialOrd, PartialEq, Clone, Copy)]
 pub struct Opcode(pub u8);
 
 pub const OPCODE_QUERY: Opcode = Opcode(0);
@@ -298,12 +267,6 @@ pub const OPCODE_IQUERY: Opcode = Opcode(1);
 pub const OPCODE_STATUS: Opcode = Opcode(2);
 pub const OPCODE_NOTIFY: Opcode = Opcode(4);
 pub const OPCODE_UPDATE: Opcode = Opcode(5);
-
-impl Ord for Opcode {
-    fn cmp(&self, other: &Opcode) -> Ordering {
-        self.0.cmp(&other.0)
-    }
-}
 
 impl ToString for Opcode {
     fn to_string(&self) -> String {

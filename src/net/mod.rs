@@ -20,6 +20,8 @@ pub mod raw;
 pub mod socket;
 pub mod udp;
 
+pub use nix::sys::socket::sockopt::*;
+
 // TODO: Write better Debug or to_string() method.
 #[derive(Clone, Debug)]
 pub struct Ipv4Subnet {

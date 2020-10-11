@@ -91,6 +91,7 @@ fn mk_default_config() -> crate::config::Config {
                 ..Default::default()
             }],
         },
+        ..Default::default()
     }
 }
 

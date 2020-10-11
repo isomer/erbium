@@ -131,6 +131,7 @@ fn test_get_u8() {
 
 #[test]
 fn test_get_bytes() {
+    use std::convert::TryFrom;
     let data = [1, 2, 3, 4];
     let mut buffer = Buffer::new(&data);
     assert_eq!(

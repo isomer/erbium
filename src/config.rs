@@ -16,19 +16,20 @@
  *
  *  Erbium Configuration parsing.
  */
+use std::convert::TryFrom;
 use std::os::unix::fs::PermissionsExt;
 use tokio::io::AsyncReadExt;
-use yaml_rust::yaml::YamlLoader;
+use yaml_rust::yaml;
 
 #[derive(Debug)]
 pub enum Error {
     IoError(std::io::Error),
     Utf8Error(std::string::FromUtf8Error),
-    DhcpError(crate::dhcp::config::Error),
     YamlError(yaml_rust::scanner::ScanError),
     MissingConfig,
     MultipleConfigs,
     ConfigProcessFailed,
+    InvalidConfig(String),
 }
 
 impl std::fmt::Display for Error {
@@ -38,37 +39,235 @@ impl std::fmt::Display for Error {
             Error::Utf8Error(e) => {
                 write!(f, "UTF8 Decoding error reading configuration file: {}", e)
             }
-            Error::DhcpError(e) => write!(f, "DHCP Config loading error: {}", e),
             Error::YamlError(e) => write!(f, "Yaml parse error while reading configuration: {}", e),
             Error::MissingConfig => write!(f, "Configuration is empty/missing"),
             Error::MultipleConfigs => {
                 write!(f, "Configuration file contains multiple configurations")
             }
             Error::ConfigProcessFailed => write!(f, "Configuration process failed"),
+            Error::InvalidConfig(e) => write!(f, "Invalid Configuration: {}", e),
         }
     }
 }
 
 impl std::error::Error for Error {}
 
-#[derive(Debug)]
+impl Error {
+    pub fn annotate(self, s: &str) -> Error {
+        Error::InvalidConfig(format!("{}: {}", self, s))
+    }
+}
+
+pub fn type_to_name(fragment: &yaml::Yaml) -> String {
+    match fragment {
+        yaml::Yaml::Real(_) => "Real".into(),
+        yaml::Yaml::Integer(_) => "Integer".into(),
+        yaml::Yaml::String(_) => "String".into(),
+        yaml::Yaml::Boolean(_) => "Boolean".into(),
+        yaml::Yaml::Array(a) => format!("Array of {}", type_to_name(&a[0])),
+        yaml::Yaml::Hash(_) => "Hash".into(),
+        yaml::Yaml::Alias(_) => "Alias".into(),
+        yaml::Yaml::Null => "Null".into(),
+        yaml::Yaml::BadValue => "Bad Value".into(),
+    }
+}
+
+pub fn parse_i64(name: &str, fragment: &yaml::Yaml) -> Result<Option<i64>, Error> {
+    match fragment {
+        yaml::Yaml::Null => Ok(None),
+        yaml::Yaml::Integer(i) => Ok(Some(*i)),
+        e => Err(Error::InvalidConfig(format!(
+            "{} should be of type Integer, not {}",
+            name,
+            type_to_name(e)
+        ))),
+    }
+}
+
+pub fn parse_num<N: TryFrom<i64>>(name: &str, fragment: &yaml::Yaml) -> Result<Option<N>, Error> {
+    match parse_i64(name, fragment) {
+        Ok(None) => Ok(None),
+        Err(e) => Err(e),
+        Ok(Some(v)) => Ok(Some(N::try_from(v).map_err(|_| {
+            Error::InvalidConfig(format!("{} out of range for {}", v, name))
+        })?)),
+    }
+}
+
+pub fn parse_string(name: &str, fragment: &yaml::Yaml) -> Result<Option<String>, Error> {
+    match fragment {
+        yaml::Yaml::Null => Ok(None),
+        yaml::Yaml::String(s) => Ok(Some(s.into())),
+        e => Err(Error::InvalidConfig(format!(
+            "{} should be of type String, not {}",
+            name,
+            type_to_name(e)
+        ))),
+    }
+}
+
+pub fn parse_boolean(name: &str, fragment: &yaml::Yaml) -> Result<Option<bool>, Error> {
+    match fragment {
+        yaml::Yaml::Null => Ok(None),
+        yaml::Yaml::Boolean(b) => Ok(Some(*b)),
+        e => Err(Error::InvalidConfig(format!(
+            "{} should be of type Boolean, not {}",
+            name,
+            type_to_name(e)
+        ))),
+    }
+}
+
+pub fn parse_array<T, F>(
+    name: &str,
+    fragment: &yaml::Yaml,
+    mut parser: F,
+) -> Result<Option<Vec<T>>, Error>
+where
+    F: FnMut(&str, &yaml::Yaml) -> Result<Option<T>, Error>,
+{
+    match fragment {
+        yaml::Yaml::Null => Ok(None),
+        yaml::Yaml::Array(a) => {
+            let v = a
+                .iter()
+                .map(|it| parser(name, it))
+                .collect::<Result<Vec<_>, _>>()?
+                .drain(..)
+                .map(|it| {
+                    it.ok_or_else(|| {
+                        Error::InvalidConfig(format!("Cannot have a Null value in array {}", name))
+                    })
+                })
+                .collect::<Result<Vec<T>, _>>()?;
+
+            Ok(Some(v))
+        }
+        e => Err(Error::InvalidConfig(format!(
+            "{} should be of type Array, not {}",
+            name,
+            type_to_name(e)
+        ))),
+    }
+}
+
+pub fn parse_string_as<T, F>(
+    name: &str,
+    fragment: &yaml::Yaml,
+    str_parser: F,
+) -> Result<Option<T>, Error>
+where
+    F: Fn(&str) -> Result<T, Error>,
+{
+    match parse_string(name, fragment) {
+        Ok(Some(s)) => Ok(Some(str_parser(&s)?)),
+        Ok(None) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+pub fn parse_duration(value: &yaml::Yaml) -> Result<Option<std::time::Duration>, Error> {
+    match value {
+        yaml::Yaml::Null => Ok(None),
+        yaml::Yaml::String(v) => {
+            let mut num = None;
+            let mut ret = Default::default();
+            for c in v.chars() {
+                match c {
+                    '0'..='9' => {
+                        if let Some(n) = num {
+                            num = Some(n * 10 + c as u64 - '0' as u64);
+                        } else {
+                            num = Some(c as u64 - '0' as u64);
+                        }
+                    }
+                    's' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap());
+                    }
+                    'm' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap() * 60);
+                    }
+                    'h' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap() * 3600);
+                    }
+                    'd' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap() * 86400);
+                    }
+                    'w' => {
+                        ret += std::time::Duration::from_secs(num.take().unwrap() * 7 * 86400);
+                    }
+                    x if x.is_whitespace() => (),
+                    '_' => (),
+                    _ => {
+                        return Err(Error::InvalidConfig(format!(
+                            "Unexpected {} in duration",
+                            c
+                        )))
+                    }
+                }
+            }
+            if let Some(n) = num {
+                ret += std::time::Duration::from_secs(n);
+            }
+            Ok(Some(ret))
+        }
+        yaml::Yaml::Integer(s) => Ok(Some(std::time::Duration::from_secs(
+            u64::try_from(*s)
+                .map_err(|_| Error::InvalidConfig("Durations cannot be negative".into()))?,
+        ))),
+        e => Err(Error::InvalidConfig(format!(
+            "Expected duration, got {:?}",
+            e,
+        ))),
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct Config {
     pub dhcp: crate::dhcp::config::Config,
+    pub ra: crate::radv::config::Config,
 }
 
 pub type SharedConfig = std::sync::Arc<tokio::sync::Mutex<Config>>;
 
 fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
-    let mut y = YamlLoader::load_from_str(cfg).map_err(Error::YamlError)?;
+    let y = yaml::YamlLoader::load_from_str(cfg).map_err(Error::YamlError)?;
     match y.len() {
         0 => return Err(Error::MissingConfig),
         1 => (),
         _ => return Err(Error::MultipleConfigs),
     }
-    let conf = Config {
-        dhcp: crate::dhcp::config::Config::new(&mut y[0]).map_err(Error::DhcpError)?,
-    };
-    Ok(std::sync::Arc::new(tokio::sync::Mutex::new(conf)))
+    if let Some(fragment) = y[0].as_hash() {
+        let mut ra = None;
+        let mut dhcp = None;
+        for (k, v) in fragment {
+            match (k.as_str(), v) {
+                (Some("dhcp"), d) => dhcp = crate::dhcp::config::Config::new(d)?,
+                (Some("router-advertisements"), r) => ra = crate::radv::config::parse(r)?,
+                (Some(x), _) => {
+                    return Err(Error::InvalidConfig(format!(
+                        "Unknown configuration option {}",
+                        x
+                    )))
+                }
+                (None, _) => {
+                    return Err(Error::InvalidConfig(format!(
+                        "Config should be keyed by String, not {}",
+                        type_to_name(k)
+                    )))
+                }
+            }
+        }
+        let conf = Config {
+            dhcp: dhcp.unwrap_or_else(crate::dhcp::config::Config::default),
+            ra: ra.unwrap_or_else(crate::radv::config::Config::default),
+        };
+        Ok(std::sync::Arc::new(tokio::sync::Mutex::new(conf)))
+    } else {
+        Err(Error::InvalidConfig(
+            "Top level configuration should be a Hash".into(),
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -148,7 +347,24 @@ dhcp:
           # Reserve space for VPN endpoints
           - match-user-class: VPN
             apply-subnet: 192.0.2.128/25
-        ",
+
+router-advertisements:
+    - interface: eth0
+",
     )?;
     Ok(())
+}
+
+#[test]
+fn test_duration() {
+    assert_eq!(
+        parse_duration(&yaml::Yaml::String("5s".into())).unwrap(),
+        Some(std::time::Duration::from_secs(5))
+    );
+    assert_eq!(
+        parse_duration(&yaml::Yaml::String("1w2d3h4m5s".into())).unwrap(),
+        Some(std::time::Duration::from_secs(
+            7 * 86400 + 2 * 86400 + 3 * 3600 + 4 * 60 + 5
+        ))
+    );
 }

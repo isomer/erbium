@@ -46,6 +46,18 @@ impl IpProto {
     pub const ICMP6: IpProto = IpProto(58);
 }
 
+impl From<IpProto> for u8 {
+    fn from(ipp: IpProto) -> Self {
+        ipp.0
+    }
+}
+
+impl From<IpProto> for u16 {
+    fn from(ipp: IpProto) -> Self {
+        ipp.0 as u16
+    }
+}
+
 pub struct EthProto(u16);
 impl EthProto {
     pub const IP4: EthProto = EthProto(0x0800);
@@ -127,6 +139,15 @@ impl RawSocket {
     ) -> io::Result<()> {
         crate::net::socket::send_msg(&self.io, buffer, cmsg, flags, addr).await
     }
+
+    pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
+        &self,
+        opt: O,
+        val: &O::Val,
+    ) -> Result<()> {
+        nix::sys::socket::setsockopt(self.io.get_ref().as_raw_fd(), opt, val)
+            .map_err(udp::nix_to_io_error)
+    }
 }
 
 #[derive(Debug)]
@@ -172,6 +193,15 @@ impl CookedRawSocket {
         addr: Option<&SockAddr>,
     ) -> io::Result<()> {
         crate::net::socket::send_msg(&self.io, buffer, cmsg, flags, addr).await
+    }
+
+    pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
+        &self,
+        opt: O,
+        val: &O::Val,
+    ) -> Result<()> {
+        nix::sys::socket::setsockopt(self.io.get_ref().as_raw_fd(), opt, val)
+            .map_err(udp::nix_to_io_error)
     }
 }
 
@@ -219,6 +249,15 @@ impl Raw6Socket {
     ) -> io::Result<()> {
         crate::net::socket::send_msg(&self.io, buffer, cmsg, flags, addr).await
     }
+
+    pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
+        &self,
+        opt: O,
+        val: &O::Val,
+    ) -> Result<()> {
+        nix::sys::socket::setsockopt(self.io.get_ref().as_raw_fd(), opt, val)
+            .map_err(udp::nix_to_io_error)
+    }
 }
 
 #[derive(Debug)]
@@ -264,5 +303,13 @@ impl Raw4Socket {
         addr: Option<&SockAddr>,
     ) -> io::Result<()> {
         crate::net::socket::send_msg(&self.io, buffer, cmsg, flags, addr).await
+    }
+
+    pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
+        fd: RawFd,
+        opt: O,
+        val: &O::Val,
+    ) -> Result<()> {
+        nix::sys::socket::setsockopt(fd, opt, val).map_err(udp::nix_to_io_error)
     }
 }

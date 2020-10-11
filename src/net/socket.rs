@@ -93,6 +93,14 @@ impl ControlMessage {
         self.send_from = send_from;
         self
     }
+    pub fn set_src4_intf(mut self, intf: u32) -> Self {
+        self.pktinfo4.ipi_ifindex = intf as i32;
+        self
+    }
+    pub fn set_src6_intf(mut self, intf: u32) -> Self {
+        self.pktinfo6.ipi6_ifindex = intf;
+        self
+    }
     pub fn convert_to_cmsg(&mut self) -> Vec<nix::sys::socket::ControlMessage> {
         let mut cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
 
@@ -219,7 +227,7 @@ pub fn new_socket(
         libc::socket(
             domain,
             ty | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
-            (protocol as u16).to_be() as i32,
+            protocol as i32,
         )
     };
     if fd == -1 {
@@ -290,15 +298,8 @@ fn poll_send_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
 
     let iov = &[IoVec::from_slice(buffer)];
     let mut cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
-    let mut in_pktinfo = libc::in_pktinfo {
-        ipi_ifindex: 0, /* Unspecified interface */
-        ipi_addr: std_to_libc_in_addr(std::net::Ipv4Addr::UNSPECIFIED),
-        ipi_spec_dst: std_to_libc_in_addr(std::net::Ipv4Addr::UNSPECIFIED),
-    };
-    let mut in6_pktinfo = libc::in6_pktinfo {
-        ipi6_ifindex: 0, /* Unspecified interface */
-        ipi6_addr: std_to_libc_in6_addr(std::net::Ipv6Addr::UNSPECIFIED),
-    };
+    let mut in_pktinfo = cmsg.pktinfo4;
+    let mut in6_pktinfo = cmsg.pktinfo6;
 
     if let Some(addr) = cmsg.send_from {
         match addr {
@@ -315,9 +316,15 @@ fn poll_send_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
                 ))
             }
         }
+    } else if in6_pktinfo.ipi6_ifindex != 0 {
+        cmsgs.push(nix::sys::socket::ControlMessage::Ipv6PacketInfo(
+            &in6_pktinfo,
+        ));
+    } else if in_pktinfo.ipi_ifindex != 0 {
+        cmsgs.push(nix::sys::socket::ControlMessage::Ipv4PacketInfo(
+            &in_pktinfo,
+        ));
     }
-
-    println!("Send cmsg: {:?}", cmsgs);
 
     match nix::sys::socket::sendmsg(sock.get_ref().as_raw_fd(), iov, &cmsgs, flags, from) {
         Ok(_) => Poll::Ready(Ok(())),
@@ -327,5 +334,31 @@ fn poll_send_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
             Poll::Pending
         }
         Err(e) => Poll::Ready(Err(nix_to_io_error(e))),
+    }
+}
+
+pub fn set_ipv6_unicast_hoplimit(fd: RawFd, val: i32) -> Result<(), nix::Error> {
+    unsafe {
+        let res = libc::setsockopt(
+            fd,
+            libc::IPPROTO_IPV6,
+            libc::IPV6_UNICAST_HOPS,
+            &val as *const i32 as *const libc::c_void,
+            std::mem::size_of::<i32>() as libc::socklen_t,
+        );
+        nix::errno::Errno::result(res).map(drop)
+    }
+}
+
+pub fn set_ipv6_multicast_hoplimit(fd: RawFd, val: i32) -> Result<(), nix::Error> {
+    unsafe {
+        let res = libc::setsockopt(
+            fd,
+            libc::IPPROTO_IPV6,
+            libc::IPV6_MULTICAST_HOPS,
+            &val as *const i32 as *const libc::c_void,
+            std::mem::size_of::<i32>() as libc::socklen_t,
+        );
+        nix::errno::Errno::result(res).map(drop)
     }
 }

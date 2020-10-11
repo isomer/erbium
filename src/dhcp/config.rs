@@ -21,24 +21,7 @@ use std::convert::TryFrom;
 use std::ops::Sub;
 use yaml_rust::yaml;
 
-#[derive(Debug)]
-pub enum Error {
-    InvalidConfig(String),
-}
-
-impl Error {
-    fn annotate(&self, prefix: &str) -> Error {
-        Error::InvalidConfig(format!("{}: {}", prefix, self))
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::InvalidConfig(x) => write!(f, "{}", x),
-        }
-    }
-}
+use crate::config::Error;
 
 #[derive(Debug)]
 pub enum HexError {
@@ -112,7 +95,7 @@ impl Policy {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Config {
     pub policies: Vec<Policy>,
 }
@@ -303,62 +286,6 @@ impl Config {
         }
     }
 
-    fn parse_duration(value: &yaml::Yaml) -> Result<Option<std::time::Duration>, Error> {
-        match value {
-            yaml::Yaml::Null => Ok(None),
-            yaml::Yaml::String(v) => {
-                let mut num = None;
-                let mut ret = Default::default();
-                for c in v.chars() {
-                    match c {
-                        '0'..='9' => {
-                            if let Some(n) = num {
-                                num = Some(n * 10 + c as u64 - '0' as u64);
-                            } else {
-                                num = Some(c as u64 - '0' as u64);
-                            }
-                        }
-                        's' => {
-                            ret += std::time::Duration::from_secs(num.take().unwrap());
-                        }
-                        'm' => {
-                            ret += std::time::Duration::from_secs(num.take().unwrap() * 60);
-                        }
-                        'h' => {
-                            ret += std::time::Duration::from_secs(num.take().unwrap() * 3600);
-                        }
-                        'd' => {
-                            ret += std::time::Duration::from_secs(num.take().unwrap() * 86400);
-                        }
-                        'w' => {
-                            ret += std::time::Duration::from_secs(num.take().unwrap() * 7 * 86400);
-                        }
-                        x if x.is_whitespace() => (),
-                        '_' => (),
-                        _ => {
-                            return Err(Error::InvalidConfig(format!(
-                                "Unexpected {} in duration",
-                                c
-                            )))
-                        }
-                    }
-                }
-                if let Some(n) = num {
-                    ret += std::time::Duration::from_secs(n);
-                }
-                Ok(Some(ret))
-            }
-            yaml::Yaml::Integer(s) => Ok(Some(std::time::Duration::from_secs(
-                u64::try_from(*s)
-                    .map_err(|_| Error::InvalidConfig("Durations cannot be negative".into()))?,
-            ))),
-            e => Err(Error::InvalidConfig(format!(
-                "Expected duration, got {:?}",
-                e,
-            ))),
-        }
-    }
-
     fn parse_number(value: &yaml::Yaml) -> Result<Option<i64>, Error> {
         match value {
             yaml::Yaml::Null => Ok(None),
@@ -435,7 +362,7 @@ impl Config {
                         })
                         .transpose()?
                         .map(DhcpOptionTypeValue::U32),
-                    Some(DhcpOptionType::Seconds16) => Config::parse_duration(value)?
+                    Some(DhcpOptionType::Seconds16) => crate::config::parse_duration(value)?
                         .map(|i| {
                             u16::try_from(i.as_secs()).map_err(|_| {
                                 Error::InvalidConfig(format!(
@@ -446,7 +373,7 @@ impl Config {
                         })
                         .transpose()?
                         .map(DhcpOptionTypeValue::U16),
-                    Some(DhcpOptionType::Seconds32) => Config::parse_duration(value)?
+                    Some(DhcpOptionType::Seconds32) => crate::config::parse_duration(value)?
                         .map(|i| {
                             u32::try_from(i.as_secs()).map_err(|_| {
                                 Error::InvalidConfig(format!(
@@ -529,7 +456,7 @@ impl Config {
                     }
                     Some("apply-default-lease") => {
                         policy.apply_default_lease = Some(
-                            Config::parse_duration(v)
+                            crate::config::parse_duration(v)
                                 .map_err(|x| x.annotate("Failed to parse apply-default-lease"))?
                                 .ok_or_else(|| {
                                     Error::InvalidConfig("apply-default-lease cannot be nil".into())
@@ -538,7 +465,7 @@ impl Config {
                     }
                     Some("apply-max-lease") => {
                         policy.apply_default_lease = Some(
-                            Config::parse_duration(v)
+                            crate::config::parse_duration(v)
                                 .map_err(|x| x.annotate("Failed to parse apply-max-lease"))?
                                 .ok_or_else(|| {
                                     Error::InvalidConfig("apply-max-lease cannot be nil".into())
@@ -704,29 +631,9 @@ impl Config {
         }
     }
 
-    pub fn new(y: &mut yaml::Yaml) -> Result<Self, Error> {
-        if let Some(dhcpconf) = y
-            .as_hash()
-            .and_then(|h| h.get(&yaml::Yaml::from_str("dhcp")))
-        {
-            let policies = Config::parse_dhcp(dhcpconf)?;
-            Ok(Config { policies })
-        } else {
-            Err(Error::InvalidConfig("Missing dhcp section".into()))
-        }
+    pub fn new(y: &yaml::Yaml) -> Result<Option<Self>, Error> {
+        Ok(Some(Config {
+            policies: Config::parse_dhcp(y)?,
+        }))
     }
-}
-
-#[test]
-fn test_duration() {
-    assert_eq!(
-        Config::parse_duration(&yaml::Yaml::String("5s".into())).unwrap(),
-        Some(std::time::Duration::from_secs(5))
-    );
-    assert_eq!(
-        Config::parse_duration(&yaml::Yaml::String("1w2d3h4m5s".into())).unwrap(),
-        Some(std::time::Duration::from_secs(
-            7 * 86400 + 2 * 86400 + 3 * 3600 + 4 * 60 + 5
-        ))
-    );
 }

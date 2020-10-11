@@ -17,14 +17,38 @@
  *  IPv6 Router Advertisement Code
  */
 
+use rand::Rng;
+use std::convert::TryInto;
+
+pub(crate) mod config;
+mod icmppkt;
+
+// RFC4861 Section 6.2.1
+const DEFAULT_MAX_RTR_ADV_INTERVAL: std::time::Duration = std::time::Duration::from_secs(600);
+const DEFAULT_MIN_RTR_ADV_INTERVAL: std::time::Duration =
+    std::time::Duration::from_micros((DEFAULT_MAX_RTR_ADV_INTERVAL.as_micros() / 3) as u64);
+
+const ALL_NODES: std::net::Ipv6Addr = std::net::Ipv6Addr::new(
+    0xff02, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0001,
+);
+// Ipv6Addr::new() isn't const (at 0.18)
+const ALL_ROUTERS: nix::sys::socket::Ipv6Addr = nix::sys::socket::Ipv6Addr(nix::libc::in6_addr {
+    s6_addr: [
+        0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x02,
+    ],
+});
+
 pub enum Error {
     Io(std::io::Error),
+    Message(String),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Io(e) => write!(f, "I/O Error: {:?}", e),
+            Error::Message(e) => write!(f, "{}", e),
         }
     }
 }
@@ -40,33 +64,322 @@ impl RaAdvService {
         netinfo: crate::net::netinfo::SharedNetInfo,
         conf: super::config::SharedConfig,
     ) -> Result<Self, Error> {
+        let rawsock = std::sync::Arc::new(
+            crate::net::raw::Raw6Socket::new(crate::net::raw::IpProto::ICMP6).map_err(Error::Io)?,
+        );
+
+        rawsock
+            .set_socket_option(crate::net::Ipv6RecvPacketInfo, &true)
+            .map_err(Error::Io)?;
+        //TODO
+        //rawsock
+        //    .set_socket_option(crate::net::Ipv6UnicastHops, &255)
+        //    .map_err(Error::Io)?;
+        use std::os::unix::io::AsRawFd;
+        crate::net::socket::set_ipv6_unicast_hoplimit(rawsock.as_raw_fd(), 255)
+            .map_err(crate::net::socket::nix_to_io_error)
+            .map_err(Error::Io)?;
+        //rawsock
+        //    .set_socket_option(crate::net::Ipv6MulticastHops, &255)
+        //    .map_err(Error::Io)?;
+        crate::net::socket::set_ipv6_multicast_hoplimit(rawsock.as_raw_fd(), 255)
+            .map_err(crate::net::socket::nix_to_io_error)
+            .map_err(Error::Io)?;
+        //rawsock
+        //    .set_socket_option(crate::net::Ipv6RecvHopLimit, &true)
+        //    .map_err(Error::Io)?;
+        //rawsock
+        //    .set_socket_option(crate::net::Ipv6ImcpFilter, ...)?;
+        //    .map_err(Error::Io)?;
+        rawsock
+            .set_socket_option(
+                crate::net::Ipv6AddMembership,
+                &nix::sys::socket::Ipv6MembershipRequest::new(ALL_ROUTERS),
+            )
+            .map_err(Error::Io)?;
+
         Ok(Self {
             netinfo,
             conf,
-            rawsock: std::sync::Arc::new(
-                crate::net::raw::Raw6Socket::new(crate::net::raw::IpProto::ICMP6)
-                    .map_err(Error::Io)?,
-            ),
+            rawsock,
         })
     }
 
-    async fn run_internal(&self) -> Result<(), Error> {
-        println!("Starting Router Advertisement service");
+    fn build_announcement_pure(
+        intf: &config::Interface,
+        ll: Option<[u8; 6]>, /* TODO: This only works for ethernet */
+        mtu: Option<u32>,
+    ) -> icmppkt::RtrAdvertisement {
+        let mut options = icmppkt::NDOptions::default();
+        /* Add the LL address of the interface, if it exists. */
+        if let Some(lladdr) = ll {
+            options.add_option(icmppkt::NDOptionValue::SourceLLAddr(lladdr.to_vec()));
+        }
 
+        if let Some(mtu) = mtu {
+            options.add_option(icmppkt::NDOptionValue::MTU(mtu));
+        }
+
+        for prefix in &intf.prefixes {
+            options.add_option(icmppkt::NDOptionValue::Prefix(icmppkt::AdvPrefix {
+                prefixlen: prefix.prefixlen,
+                onlink: prefix.onlink,
+                autonomous: prefix.autonomous,
+                valid: prefix.valid,
+                preferred: prefix.preferred,
+                prefix: prefix.addr,
+            }));
+        }
+
+        if !intf.rdnss.1.is_empty() {
+            options.add_option(icmppkt::NDOptionValue::RDNSS(intf.rdnss.clone()))
+        }
+
+        if !intf.dnssl.1.is_empty() {
+            options.add_option(icmppkt::NDOptionValue::DNSSL(intf.dnssl.clone()))
+        }
+
+        if let Some(pref64) = &intf.pref64 {
+            options.add_option(icmppkt::NDOptionValue::Pref64((
+                pref64.lifetime,
+                pref64.prefixlen,
+                pref64.prefix,
+            )))
+        }
+
+        if let Some(url) = &intf.captive_portal {
+            options.add_option(icmppkt::NDOptionValue::CaptivePortal(url.into()))
+        }
+
+        icmppkt::RtrAdvertisement {
+            hop_limit: intf.hoplimit,
+            flag_managed: intf.managed,
+            flag_other: intf.other,
+            lifetime: intf.lifetime,
+            reachable: intf.reachable,
+            retrans: intf.retrans,
+            options,
+        }
+    }
+
+    async fn build_announcement(
+        &self,
+        ifidx: u32,
+        intf: &config::Interface,
+    ) -> icmppkt::RtrAdvertisement {
+        /* Add the LL address of the interface, if it exists. */
+        let ll = match self.netinfo.get_linkaddr_by_ifidx(ifidx).await {
+            Some(crate::net::netinfo::LinkLayer::Ethernet(lladdr)) => Some(lladdr),
+            _ => None,
+        };
+
+        /* Let them know the MTU of the interface */
+        /* We use the value from the config, but if they don't specify one, we just read the MTU
+         * from the interface and use that.  If they don't want erbium to specify one, then they
+         * can set the value to "null" in the config.
+         */
+        use config::ConfigValue::*;
+        let mtu = match intf.mtu {
+            NotSpecified => self.netinfo.get_mtu_by_ifidx(ifidx).await,
+            Value(v) => Some(v),
+            DontSet => None,
+        };
+
+        Self::build_announcement_pure(intf, ll, mtu)
+    }
+
+    async fn build_announcement_by_ifidx(
+        &self,
+        ifidx: u32,
+    ) -> Result<icmppkt::RtrAdvertisement, Error> {
+        let ifname = self.netinfo.get_safe_name_by_ifidx(ifidx).await;
+        if let Some(intf) = self
+            .conf
+            .lock()
+            .await
+            .ra
+            .interfaces
+            .iter()
+            .find(|intf| intf.name == ifname)
+        {
+            Ok(self.build_announcement(ifidx, &intf).await)
+        } else {
+            Err(Error::Message(format!(
+                "No router advertisement configuration for interface {}, ignoring.",
+                ifname
+            )))
+        }
+    }
+
+    async fn send_announcement(
+        &self,
+        msg: icmppkt::RtrAdvertisement,
+        dst: nix::sys::socket::SockAddr,
+        intf: u32,
+    ) -> Result<(), Error> {
+        let smsg = icmppkt::Icmp6::RtrAdvert(msg);
+        let s = icmppkt::serialise(&smsg);
+        use crate::net::socket;
+        let cmsg = if intf != 0 {
+            socket::ControlMessage::new().set_src6_intf(intf)
+        } else {
+            socket::ControlMessage::new()
+        };
+        if let Err(e) = self
+            .rawsock
+            .send_msg(&s, &cmsg, socket::MsgFlags::empty(), Some(&dst))
+            .await
+        {
+            println!(
+                "Failed to send Router Advertisement for {} ({}): {}",
+                self.netinfo.get_safe_name_by_ifidx(intf).await,
+                dst,
+                e
+            );
+        }
+        Ok(())
+    }
+
+    async fn handle_solicit(
+        &self,
+        rm: crate::net::socket::RecvMsg,
+        _in_opt: &icmppkt::NDOptions,
+    ) -> Result<(), Error> {
+        if let Some(ifidx) = rm.local_intf() {
+            let reply = self
+                .build_announcement_by_ifidx(ifidx.try_into().expect("Interface with ifidx"))
+                .await?;
+            if let Some(dst) = rm
+                .address
+                .as_ref()
+                .map(crate::net::socket::std_to_nix_sockaddr)
+            {
+                self.send_announcement(reply, dst, 0).await
+            } else {
+                Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Missing destination address",
+                )))
+            }
+        } else {
+            Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Packet missing interface information",
+            )))
+        }
+    }
+
+    async fn send_unsolicited(&self, ifidx: u32) -> Result<(), Error> {
+        let msg = self.build_announcement_by_ifidx(ifidx).await?;
+        let dst = nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::from_std(
+            &std::net::SocketAddr::V6(std::net::SocketAddrV6::new(
+                ALL_NODES,
+                crate::net::raw::IpProto::ICMP6.into(), /* port */
+                0,                                      /* flowid */
+                ifidx,                                  /* scope_id */
+            )),
+        ));
+
+        self.send_announcement(msg, dst, ifidx).await
+    }
+
+    async fn run_unsolicited(&self) -> Result<(), Error> {
+        loop {
+            /* Update the time with jitter */
+            let timeout = std::time::Duration::from_secs(rand::thread_rng().gen_range(
+                DEFAULT_MIN_RTR_ADV_INTERVAL.as_secs(),
+                DEFAULT_MAX_RTR_ADV_INTERVAL.as_secs(),
+            ));
+            tokio::time::delay_for(timeout).await;
+            for idx in self.netinfo.get_ifindexes().await {
+                if let Some(ifflags) = self.netinfo.get_flags_by_ifidx(idx).await {
+                    if ifflags.has_multicast() {
+                        self.send_unsolicited(idx).await?;
+                    }
+                }
+            }
+        }
+    }
+
+    async fn run_solicited(&self) -> Result<(), Error> {
         loop {
             let rm = self
                 .rawsock
-                .recv_msg(65536, crate::net::udp::MsgFlags::empty())
+                .recv_msg(65536, crate::net::raw::MsgFlags::empty())
                 .await
                 .map_err(Error::Io)?;
-            println!("Got packet: {:?}", rm);
+            let msg = icmppkt::parse(&rm.buffer);
+            match msg {
+                Ok(icmppkt::Icmp6::Unknown) => (),
+                Err(_) => (),
+                Ok(icmppkt::Icmp6::RtrSolicit(opt)) => {
+                    if let Err(e) = self.handle_solicit(rm, &opt).await {
+                        println!("Failed to handle router solicitation: {}", e);
+                    }
+                }
+                Ok(icmppkt::Icmp6::RtrAdvert(_)) => (),
+            }
         }
     }
 
-    pub async fn run(&self) -> Result<(), String> {
-        match self.run_internal().await {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e.to_string()),
+    pub async fn run(self: std::sync::Arc<Self>) -> Result<(), String> {
+        use tokio::stream::StreamExt;
+        println!("Starting Router Advertisement service");
+        let mut services = futures::stream::FuturesUnordered::new();
+        let sol_self = self.clone();
+        let unsol_self = self.clone();
+        let sol = async move { sol_self.run_solicited().await };
+        let unsol = async move { unsol_self.run_unsolicited().await };
+        services.push(tokio::spawn(sol));
+        services.push(tokio::spawn(unsol));
+        while !services.is_empty() {
+            let ret = match services.next().await {
+                None => "No router advertisement services found".into(),
+                Some(Ok(_)) => {
+                    "Router advertisement service unexpectedly exited successfully".into()
+                }
+                Some(Err(e)) => e.to_string(),
+            };
+            println!("Router advertisement service shutdown: {}", ret);
         }
+        Err("Router advertisement service shutdown".into())
     }
+}
+
+#[test]
+fn test_build_announcement() {
+    let msg = RaAdvService::build_announcement_pure(
+        &config::Interface {
+            name: "eth0".into(),
+            hoplimit: 64,
+            managed: false,
+            other: false,
+            lifetime: std::time::Duration::from_secs(3600),
+            reachable: std::time::Duration::from_secs(1800),
+            retrans: std::time::Duration::from_secs(10),
+            mtu: config::ConfigValue::NotSpecified,
+            prefixes: vec![config::Prefix {
+                addr: "2001:db8::".parse().unwrap(),
+                prefixlen: 64,
+                onlink: true,
+                autonomous: true,
+                valid: std::time::Duration::from_secs(3600),
+                preferred: std::time::Duration::from_secs(1800),
+            }],
+            rdnss: (
+                std::time::Duration::from_secs(3600),
+                vec!["2001:db8::53".parse().unwrap()],
+            ),
+            dnssl: (std::time::Duration::from_secs(3600), vec![]),
+            captive_portal: Some("http://example.com/".into()),
+            pref64: Some(config::Pref64 {
+                lifetime: std::time::Duration::from_secs(600),
+                prefix: "64:ff9b::".parse().unwrap(),
+                prefixlen: 96,
+            }),
+        },
+        Some([1, 2, 3, 4, 5, 6]),
+        Some(1480),
+    );
+    icmppkt::serialise(&icmppkt::Icmp6::RtrAdvert(msg));
 }

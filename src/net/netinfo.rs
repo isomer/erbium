@@ -33,6 +33,15 @@ pub enum LinkLayer {
     None,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct IfFlags(u32);
+
+impl IfFlags {
+    pub fn has_multicast(&self) -> bool {
+        self.0 & IFF_MULTICAST != 0
+    }
+}
+
 #[derive(Debug)]
 struct IfInfo {
     name: String,
@@ -41,6 +50,7 @@ struct IfInfo {
     llbroadcast: LinkLayer,
     mtu: u32,
     //operstate: netlink_packet_route::rtnl::link::nlas::link_state::State, // Is private
+    flags: IfFlags,
 }
 
 #[derive(Debug)]
@@ -138,6 +148,7 @@ impl SharedNetInfo {
         let mut ifmtu: Option<u32> = None;
         let mut ifaddr = None;
         let mut ifbrd = None;
+        let ifflags = link.header.flags;
         let ifidx = link.header.index;
         for i in &link.nlas {
             match i {
@@ -170,6 +181,7 @@ impl SharedNetInfo {
             addresses: old_addresses.unwrap_or_else(Vec::new),
             lladdr: ifaddr,
             llbroadcast: ifbrd,
+            flags: IfFlags(ifflags),
         };
 
         netinfo.name2idx.insert(ifinfo.name.clone(), ifidx);
@@ -308,6 +320,10 @@ impl SharedNetInfo {
             .collect()
     }
 
+    pub async fn get_ifindexes(&self) -> Vec<u32> {
+        self.0.read().await.intf.keys().copied().collect()
+    }
+
     pub async fn get_linkaddr_by_ifidx(&self, ifidx: u32) -> Option<LinkLayer> {
         self.0
             .read()
@@ -349,5 +365,8 @@ impl SharedNetInfo {
             Some(ifname) => ifname,
             None => format!("if#{}", ifidx),
         }
+    }
+    pub async fn get_flags_by_ifidx(&self, ifidx: u32) -> Option<IfFlags> {
+        self.0.read().await.intf.get(&ifidx).map(|x| x.flags)
     }
 }
