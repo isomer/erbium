@@ -78,8 +78,11 @@ fn parse_nd_rtr_solicit(buf: &mut Buffer) -> Result<Icmp6, Error> {
     let mut options: NDOptions = Default::default();
     while buf.remaining() > 0 {
         let ty = buf.get_u8().map(NDOption).ok_or(Error::Truncated)?;
-        let l = buf.get_u8().ok_or(Error::Truncated)? as usize * 8 - 2;
-        let data = buf.get_bytes(l).ok_or(Error::Truncated)?;
+        let l = buf.get_u8().ok_or(Error::Truncated)? as usize;
+        if l == 0 {
+            return Err(Error::Truncated);
+        }
+        let data = buf.get_bytes(l * 8 - 2).ok_or(Error::Truncated)?;
         match (ty, data) {
             (SOURCE_LL_ADDR, value) => {
                 options.add_option(NDOptionValue::SourceLLAddr(value.to_vec()));
@@ -95,6 +98,10 @@ fn parse_nd_rtr_advert(_buf: &mut Buffer) -> Result<Icmp6, Error> {
 }
 
 pub fn parse(pkt: &[u8]) -> Result<Icmp6, Error> {
+    /* Section 6.1.1: [..] MUST silently discard [.. unless .. ] length is 8 or more octets. */
+    if pkt.len() < 8 {
+        return Err(Error::Truncated);
+    }
     let mut buf = Buffer::new(pkt);
     let ty = Type(buf.get_u8().ok_or(Error::Truncated)?);
     let code = buf.get_u8().ok_or(Error::Truncated)?;
