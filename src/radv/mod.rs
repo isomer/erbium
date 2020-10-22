@@ -23,6 +23,11 @@ use std::convert::TryInto;
 pub(crate) mod config;
 mod icmppkt;
 
+#[cfg(test)]
+mod test {
+    mod rfc4861;
+}
+
 // RFC4861 Section 6.2.1
 const DEFAULT_MAX_RTR_ADV_INTERVAL: std::time::Duration = std::time::Duration::from_secs(600);
 const DEFAULT_MIN_RTR_ADV_INTERVAL: std::time::Duration =
