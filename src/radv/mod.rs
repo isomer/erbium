@@ -58,6 +58,15 @@ impl std::fmt::Display for Error {
     }
 }
 
+/* An uninhabitable type to be clear that this cannot happen */
+enum Void {}
+
+impl std::fmt::Debug for Void {
+    fn fmt(&self, _: &mut std::fmt::Formatter) -> std::fmt::Result {
+        unreachable!()
+    }
+}
+
 pub struct RaAdvService {
     netinfo: crate::net::netinfo::SharedNetInfo,
     conf: crate::config::SharedConfig,
@@ -288,7 +297,7 @@ impl RaAdvService {
         self.send_announcement(msg, dst, ifidx).await
     }
 
-    async fn run_unsolicited(&self) -> Result<(), Error> {
+    async fn run_unsolicited(&self) -> Result<Void, Error> {
         loop {
             /* Update the time with jitter */
             let timeout = std::time::Duration::from_secs(rand::thread_rng().gen_range(
@@ -306,7 +315,7 @@ impl RaAdvService {
         }
     }
 
-    async fn run_solicited(&self) -> Result<(), Error> {
+    async fn run_solicited(&self) -> Result<Void, Error> {
         loop {
             let rm = self
                 .rawsock
@@ -340,10 +349,12 @@ impl RaAdvService {
         while !services.is_empty() {
             let ret = match services.next().await {
                 None => "No router advertisement services found".into(),
-                Some(Ok(_)) => {
-                    "Router advertisement service unexpectedly exited successfully".into()
-                }
-                Some(Err(e)) => e.to_string(),
+                Some(Ok(Ok(v))) => format!(
+                    "Router advertisement service unexpectedly exited successfully: {:?}",
+                    v
+                ),
+                Some(Ok(Err(e))) => e.to_string(), /* If the service failed */
+                Some(Err(e)) => e.to_string(),     /* If the spawn failed */
             };
             println!("Router advertisement service shutdown: {}", ret);
         }
