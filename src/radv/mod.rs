@@ -47,6 +47,7 @@ const ALL_ROUTERS: nix::sys::socket::Ipv6Addr = nix::sys::socket::Ipv6Addr(nix::
 pub enum Error {
     Io(std::io::Error),
     Message(String),
+    UnconfiguredInterface(String),
 }
 
 impl std::fmt::Display for Error {
@@ -54,6 +55,11 @@ impl std::fmt::Display for Error {
         match self {
             Error::Io(e) => write!(f, "I/O Error: {:?}", e),
             Error::Message(e) => write!(f, "{}", e),
+            Error::UnconfiguredInterface(int) => write!(
+                f,
+                "No router advertisement configuration for interface {}, ignoring.",
+                int
+            ),
         }
     }
 }
@@ -218,10 +224,7 @@ impl RaAdvService {
         {
             Ok(self.build_announcement(ifidx, &intf).await)
         } else {
-            Err(Error::Message(format!(
-                "No router advertisement configuration for interface {}, ignoring.",
-                ifname
-            )))
+            Err(Error::UnconfiguredInterface(ifname))
         }
     }
 
@@ -308,7 +311,11 @@ impl RaAdvService {
             for idx in self.netinfo.get_ifindexes().await {
                 if let Some(ifflags) = self.netinfo.get_flags_by_ifidx(idx).await {
                     if ifflags.has_multicast() {
-                        self.send_unsolicited(idx).await?;
+                        match self.send_unsolicited(idx).await {
+                            Ok(_) => (),
+                            Err(Error::UnconfiguredInterface(_)) => (), // Ignore unconfigured interfaces.
+                            e => e?,
+                        }
                     }
                 }
             }
