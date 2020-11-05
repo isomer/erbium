@@ -1,0 +1,11 @@
+[Unit]
+Description=Erbium DHCP server
+After=network.target
+Documentation=https://github.com/isomer/erbium
+
+[Service]
+ExecStart=/usr/local/bin/erbium-dhcp /etc/erbium.conf
+
+[Install]
+WantedBy=multi-user.target
+Alias=dhcpd.service
