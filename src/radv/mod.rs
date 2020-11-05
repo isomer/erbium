@@ -307,7 +307,7 @@ impl RaAdvService {
                 DEFAULT_MIN_RTR_ADV_INTERVAL.as_secs(),
                 DEFAULT_MAX_RTR_ADV_INTERVAL.as_secs(),
             ));
-            tokio::time::delay_for(timeout).await;
+            tokio::time::sleep(timeout).await;
             for idx in self.netinfo.get_ifindexes().await {
                 if let Some(ifflags) = self.netinfo.get_flags_by_ifidx(idx).await {
                     if ifflags.has_multicast() {

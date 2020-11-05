@@ -720,7 +720,14 @@ async fn run_internal(
         pool::Pool::new().map_err(RunError::PoolError)?,
     ));
     let serverids: SharedServerIds = Arc::new(sync::Mutex::new(std::collections::HashSet::new()));
-    let listener = UdpSocket::bind("0.0.0.0:67").await.map_err(RunError::Io)?;
+    let listener = UdpSocket::bind(
+        &tokio::net::lookup_host("0.0.0.0:67")
+            .await
+            .map_err(RunError::Io)?
+            .collect::<Vec<_>>(),
+    )
+    .await
+    .map_err(RunError::Io)?;
     listener
         .set_opt_ipv4_packet_info(true)
         .map_err(RunError::Io)?;

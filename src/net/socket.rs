@@ -17,9 +17,7 @@
  *  Common Socket Traits
  */
 
-use futures::ready;
 use std::os::unix::io::RawFd;
-use std::task::Poll;
 
 pub type SockAddr = nix::sys::socket::SockAddr;
 pub type SocketAddr = std::net::SocketAddr;
@@ -214,11 +212,22 @@ impl RecvMsg {
     }
 }
 
+#[derive(Debug)]
+pub struct SocketFd {
+    fd: RawFd,
+}
+
+impl std::os::unix::io::AsRawFd for SocketFd {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd
+    }
+}
+
 pub fn new_socket(
     domain: libc::c_int,
     ty: libc::c_int,
     protocol: libc::c_int,
-) -> Result<tokio::io::PollEvented<crate::net::raw::RawSocketEvented>, std::io::Error> {
+) -> Result<SocketFd, std::io::Error> {
     // I would love to use the nix socket() wrapper, except, uh, it has a closed enum.
     // See https://github.com/nix-rust/nix/issues/854
     //
@@ -233,16 +242,15 @@ pub fn new_socket(
     if fd == -1 {
         return Err(std::io::Error::last_os_error());
     }
-    Ok(tokio::io::PollEvented::new(crate::net::raw::RawSocketEvented::new(fd as RawFd)).unwrap())
+    Ok(SocketFd { fd: fd as RawFd })
 }
 
-fn poll_recv_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
-    sock: &tokio::io::PollEvented<E>,
-    cx: &mut std::task::Context<'_>,
+pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
+    sock: &tokio::io::unix::AsyncFd<F>,
     bufsize: usize,
     flags: MsgFlags,
-) -> std::task::Poll<Result<RecvMsg, std::io::Error>> {
-    ready!(sock.poll_read_ready(cx, mio::Ready::readable()))?;
+) -> Result<RecvMsg, std::io::Error> {
+    let mut ev = sock.readable().await?;
 
     let mut buf = Vec::new();
     buf.resize_with(bufsize, Default::default);
@@ -254,47 +262,37 @@ fn poll_recv_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
     let mut flags = flags;
     flags.set(MsgFlags::MSG_DONTWAIT, true);
 
+    use std::io::{Error, ErrorKind};
+
     match nix::sys::socket::recvmsg(sock.get_ref().as_raw_fd(), iov, Some(&mut cmsg), flags) {
         Ok(rm) => {
             buf.truncate(rm.bytes);
-            Poll::Ready(Ok(RecvMsg::new(rm, buf)))
+            ev.retain_ready();
+            Ok(RecvMsg::new(rm, buf))
         }
-        Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => Poll::Pending,
+        Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
+            ev.retain_ready();
+            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EINTR))
+        }
         Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
-            sock.clear_read_ready(cx, mio::Ready::readable())?;
-            Poll::Pending
+            ev.clear_ready();
+            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EINTR))
         }
-        Err(e) => Poll::Ready(Err(nix_to_io_error(e))),
+        Err(e) => {
+            ev.retain_ready();
+            Err(nix_to_io_error(e))
+        }
     }
 }
 
-pub async fn recv_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
-    sock: &tokio::io::PollEvented<E>,
-    bufsize: usize,
-    flags: MsgFlags,
-) -> std::io::Result<RecvMsg> {
-    tokio::future::poll_fn(|cx| poll_recv_msg(sock, cx, bufsize, flags)).await
-}
-
-pub async fn send_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
-    sock: &tokio::io::PollEvented<E>,
-    buffer: &[u8],
-    cmsg: &ControlMessage,
-    flags: MsgFlags,
-    addr: Option<&SockAddr>,
-) -> std::io::Result<()> {
-    tokio::future::poll_fn(|cx| poll_send_msg(sock, cx, buffer, cmsg, flags, addr)).await
-}
-
-fn poll_send_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
-    sock: &tokio::io::PollEvented<E>,
-    cx: &mut std::task::Context<'_>,
+pub async fn send_msg<F: std::os::unix::io::AsRawFd>(
+    sock: &tokio::io::unix::AsyncFd<F>,
     buffer: &[u8],
     cmsg: &ControlMessage,
     flags: MsgFlags,
     from: Option<&SockAddr>,
-) -> Poll<std::io::Result<()>> {
-    ready!(sock.poll_write_ready(cx))?;
+) -> std::io::Result<()> {
+    let mut ev = sock.writable().await?;
 
     let iov = &[IoVec::from_slice(buffer)];
     let mut cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
@@ -326,14 +324,25 @@ fn poll_send_msg<E: std::os::unix::io::AsRawFd + mio::event::Evented>(
         ));
     }
 
+    use std::io::{Error, ErrorKind};
+
     match nix::sys::socket::sendmsg(sock.get_ref().as_raw_fd(), iov, &cmsgs, flags, from) {
-        Ok(_) => Poll::Ready(Ok(())),
-        Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => Poll::Pending,
-        Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
-            sock.clear_write_ready(cx)?;
-            Poll::Pending
+        Ok(_) => {
+            ev.retain_ready();
+            Ok(())
         }
-        Err(e) => Poll::Ready(Err(nix_to_io_error(e))),
+        Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
+            ev.retain_ready();
+            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EINTR))
+        }
+        Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
+            ev.clear_ready();
+            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EAGAIN))
+        }
+        Err(e) => {
+            ev.retain_ready();
+            Err(nix_to_io_error(e))
+        }
     }
 }
 

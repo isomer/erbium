@@ -27,6 +27,8 @@ use netlink_packet_route::{
 use netlink_sys::constants::*;
 use netlink_sys::{Protocol, Socket, SocketAddr};
 
+use tokio_compat_02::FutureExt;
+
 #[derive(Clone, PartialEq)]
 pub enum LinkLayer {
     Ethernet([u8; 6]),
@@ -296,7 +298,7 @@ impl SharedNetInfo {
         }
     }
 
-    async fn run(self, mut chan: tokio::sync::mpsc::Sender<()>) {
+    async fn run(self, chan: tokio::sync::mpsc::Sender<()>) {
         let mut socket = Socket::new(Protocol::Route).unwrap();
         let _port_number = socket.bind_auto().unwrap().port_number();
         let mut seq = 1;
@@ -338,7 +340,7 @@ impl SharedNetInfo {
         let shared = SharedNetInfo(std::sync::Arc::new(
             tokio::sync::RwLock::new(NetInfo::new()),
         ));
-        tokio::spawn(shared.clone().run(s));
+        tokio::spawn(shared.clone().run(s).compat());
         // We want to block and wait until all the data is loaded, otherwise we'll cause confusion.
         c.recv().await;
         shared

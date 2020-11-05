@@ -145,7 +145,12 @@ impl DnsServer {
 }
 
 async fn run_internal() -> Result<(), Box<dyn Error>> {
-    let listener = UdpSocket::bind("[::]:1053").await?;
+    let listener = UdpSocket::bind(
+        &tokio::net::lookup_host("[::]:1053")
+            .await?
+            .collect::<Vec<_>>(),
+    )
+    .await?;
 
     listener.set_opt_ipv4_packet_info(true)?;
     listener.set_opt_ipv6_packet_info(true)?;

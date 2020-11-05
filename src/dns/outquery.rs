@@ -71,7 +71,7 @@ impl OutQuery {
     ) -> Result<dnspkt::DNSPkt, std::io::Error> {
         let oq = create_outquery(self.rng.lock().await.get().next_u32() as u16, q);
 
-        let mut outsock = UdpSocket::bind("0.0.0.0:0").await?;
+        let outsock = UdpSocket::bind("0.0.0.0:0").await?;
         outsock.connect("8.8.8.8:53").await?;
 
         println!("OutQuery: {:?}", oq);

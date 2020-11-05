@@ -28,13 +28,12 @@ use std::io;
 use std::net;
 use std::net::SocketAddr;
 use std::os::unix::io::AsRawFd;
-use tokio::io::PollEvented;
-use tokio::net::ToSocketAddrs;
+use tokio::io::unix::AsyncFd;
 
 use nix::libc;
 
 pub struct UdpSocket {
-    io: PollEvented<mio::net::UdpSocket>,
+    fd: AsyncFd<mio::net::UdpSocket>,
 }
 
 pub type SockAddr = crate::net::socket::SockAddr;
@@ -78,19 +77,17 @@ impl TryFrom<mio::net::UdpSocket> for UdpSocket {
     type Error = io::Error;
     fn try_from(s: mio::net::UdpSocket) -> Result<Self, Self::Error> {
         Ok(UdpSocket {
-            io: PollEvented::new(s)?,
+            fd: AsyncFd::new(s)?,
         })
     }
 }
 
 impl UdpSocket {
-    pub async fn bind<A: ToSocketAddrs>(addr: A) -> Result<Self, io::Error> {
-        let addrs = addr.to_socket_addrs().await?;
-
+    pub async fn bind(addrs: &[SocketAddr]) -> Result<Self, io::Error> {
         let mut last_err = None;
 
         for addr in addrs {
-            match mio::net::UdpSocket::bind(&addr) {
+            match mio::net::UdpSocket::bind(*addr) {
                 Ok(socket) => return Self::try_from(socket),
                 Err(e) => last_err = Some(e),
             }
@@ -105,7 +102,7 @@ impl UdpSocket {
     }
 
     pub async fn recv_msg(&self, bufsize: usize, flags: MsgFlags) -> io::Result<RecvMsg> {
-        crate::net::socket::recv_msg(&self.io, bufsize, flags).await
+        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
     }
 
     pub async fn send_msg(
@@ -116,16 +113,16 @@ impl UdpSocket {
         addr: Option<&SocketAddr>,
     ) -> io::Result<()> {
         let addr = addr.map(|x| crate::net::socket::std_to_nix_sockaddr(x));
-        crate::net::socket::send_msg(&self.io, buffer, cmsg, flags, addr.as_ref()).await
+        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr.as_ref()).await
     }
 
     pub fn local_addr(&self) -> Result<SocketAddr, io::Error> {
-        self.io.get_ref().local_addr()
+        self.fd.get_ref().local_addr()
     }
 
     pub fn set_opt_ipv4_packet_info(&self, b: bool) -> Result<(), io::Error> {
         nix::sys::socket::setsockopt(
-            self.io.get_ref().as_raw_fd(),
+            self.fd.get_ref().as_raw_fd(),
             nix::sys::socket::sockopt::Ipv4PacketInfo,
             &b,
         )
@@ -134,7 +131,7 @@ impl UdpSocket {
 
     pub fn set_opt_ipv6_packet_info(&self, b: bool) -> Result<(), io::Error> {
         nix::sys::socket::setsockopt(
-            self.io.get_ref().as_raw_fd(),
+            self.fd.get_ref().as_raw_fd(),
             nix::sys::socket::sockopt::Ipv6RecvPacketInfo,
             &b,
         )
