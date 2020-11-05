@@ -376,10 +376,10 @@ router-advertisements:
          autonomous: true
          valid: 7d
          preferred: 24h
-      rdnss:
+      dns-servers:
        addresses: [ 2001:db8::53, 2001:db8::1:53 ]
        lifetime: 6h
-      dnssl:
+      dns-search:
        domains: [ example.com, example.net ]
        lifetime: 6h
       captive-portal: http://portal.example.com/
