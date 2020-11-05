@@ -298,8 +298,8 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                     prefixes = parse_array("prefixes", p, parse_prefix)?
                         .ok_or_else(|| Error::InvalidConfig("domains should not be null".into()))?
                 }
-                (Some("rdnss"), e) => rdnss = Some(parse_rdnss("rdnss", e)?),
-                (Some("dnssl"), e) => dnssl = Some(parse_dnssl("dnssl", e)?),
+                (Some("dns-servers"), e) => rdnss = Some(parse_rdnss("dns-servers", e)?),
+                (Some("dns-search"), e) => dnssl = Some(parse_dnssl("dns-search", e)?),
                 (Some("captive-portal"), e) => captive_portal = parse_string("captive-portal", e)?,
                 (Some(key), _) => {
                     return Err(Error::InvalidConfig(format!(
