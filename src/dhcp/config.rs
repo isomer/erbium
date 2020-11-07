@@ -390,6 +390,12 @@ impl Config {
                     Some(DhcpOptionType::HwAddr) => {
                         Config::parse_mac(value)?.map(DhcpOptionTypeValue::HwAddr)
                     }
+                    Some(DhcpOptionType::Unknown) => {
+                        return Err(Error::InvalidConfig(format!(
+                            "Option {} not supported",
+                            name
+                        )))
+                    }
                     None => {
                         return Err(Error::InvalidConfig(format!(
                             "Missing type information for {}",

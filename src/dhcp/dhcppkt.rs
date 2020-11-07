@@ -155,6 +155,7 @@ pub const OPTION_MASKDISCOVERY: DhcpOption = DhcpOption(29);
 pub const OPTION_MASKSUPPLIER: DhcpOption = DhcpOption(30);
 pub const OPTION_RTRDISCOVERY: DhcpOption = DhcpOption(31);
 pub const OPTION_RTRREQ: DhcpOption = DhcpOption(32);
+pub const OPTION_STATICROUTE: DhcpOption = DhcpOption(33);
 pub const OPTION_TRAILERS: DhcpOption = DhcpOption(34);
 pub const OPTION_ARPTIMEOUT: DhcpOption = DhcpOption(35);
 pub const OPTION_ETHERNET: DhcpOption = DhcpOption(36);
@@ -194,13 +195,16 @@ pub const OPTION_STREETTALK: DhcpOption = DhcpOption(75);
 pub const OPTION_STDA: DhcpOption = DhcpOption(76);
 pub const OPTION_USERCLASS: DhcpOption = DhcpOption(77); /* RFC3004 */
 pub const OPTION_FQDN: DhcpOption = DhcpOption(81); /* RFC4702 */
+pub const OPTION_UUID: DhcpOption = DhcpOption(97); /* RFC4578 */
 pub const OPTION_PCODE: DhcpOption = DhcpOption(100); /* RFC4833 */
 pub const OPTION_TCODE: DhcpOption = DhcpOption(101); /* RFC4833 */
 pub const OPTION_AUTOCONF: DhcpOption = DhcpOption(103);
 pub const OPTION_SUBNETSELECT: DhcpOption = DhcpOption(104);
 //pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
+pub const OPTION_SIPSERVERS: DhcpOption = DhcpOption(120);
 pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
 pub const OPTION_CAPTIVEPORTAL: DhcpOption = DhcpOption(160);
+pub const OPTION_WPAD: DhcpOption = DhcpOption(252);
 
 const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     ("netmask", OPTION_NETMASK, DhcpOptionType::Ip),
@@ -250,7 +254,11 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
         DhcpOptionType::Bool,
     ),
     ("router-request", OPTION_RTRREQ, DhcpOptionType::Ip),
-    //("static-route",  OPTION_STATICROUTE, DhcpOptionType::...), // Needs special handling. -- DNI
+    (
+        "classful-route",
+        OPTION_STATICROUTE,
+        DhcpOptionType::Unknown,
+    ), // Needs special handling. -- DNI
     ("trailers", OPTION_TRAILERS, DhcpOptionType::Bool),
     ("arp-timeout", OPTION_ARPTIMEOUT, DhcpOptionType::Seconds32),
     ("ethernet", OPTION_ETHERNET, DhcpOptionType::Bool),
@@ -335,10 +343,10 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     ),
     ("stda-servers", OPTION_STDA, DhcpOptionType::IpList),
     ("user-class", OPTION_USERCLASS, DhcpOptionType::String),
-    //("directory-agent", OPTION_
-    //("server-scope"
-    //("rapid-commit"
+    //("directory-agent", OPTION_DIRECTORY_AGENT, DhcpOptionType::Unknown),
+    //("service-scope", OPTION_SERVICE_SCOPE
     // 80
+    //("rapid-commit", OPTION_RAPID_COMMIT
     ("fqdn", OPTION_FQDN, DhcpOptionType::String),
     // option 82 (relay agent information) needs special handling.
     // iSNS
@@ -355,7 +363,7 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     // client-ndi, RFC4578
     // ldap, RFC3679
     //
-    //("uuid",      OPTION_UUID,       DhcpOptionType::String), RFC4578
+    ("uuid", OPTION_UUID, DhcpOptionType::Unknown), //RFC4578
     // userauth, RFC2485
     // geoconf civic, RFC4776
     // 100
@@ -365,7 +373,7 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     ("autoconfig", OPTION_AUTOCONF, DhcpOptionType::Bool),
     ("subnet-selection", OPTION_SUBNETSELECT, DhcpOptionType::Ip), // RFC3011 -- needs better support
     //("search-path", OPTION_DNSSEARCH, DhcpOptionType::...), // RFC3397
-    //("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::...), // RFC3361
+    ("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::Unknown), // RFC3361
     ("routes", OPTION_CIDRROUTE, DhcpOptionType::Routes),
     //122: Cablelabs Client configuration, RFC3495
     //123: GeoConf, RFC6225
@@ -376,6 +384,7 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
         OPTION_CAPTIVEPORTAL,
         DhcpOptionType::String,
     ),
+    ("wpad-url", OPTION_WPAD, DhcpOptionType::String),
 ];
 
 impl From<u8> for DhcpOption {
@@ -398,6 +407,7 @@ pub enum DhcpOptionType {
     Seconds32,
     HwAddr,
     Routes,
+    Unknown,
 }
 
 type IpList = Vec<std::net::Ipv4Addr>;
@@ -419,6 +429,7 @@ impl DhcpOptionType {
             DhcpOptionType::Seconds32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32), // ?
             DhcpOptionType::HwAddr => U8Str::parse_into(v).map(DhcpOptionTypeValue::HwAddr),
             DhcpOptionType::Routes => Vec::<Route>::parse_into(v).map(DhcpOptionTypeValue::Routes),
+            DhcpOptionType::Unknown => U8Str::parse_into(v).map(DhcpOptionTypeValue::Unknown),
         }
     }
 }
@@ -434,6 +445,7 @@ pub enum DhcpOptionTypeValue {
     U32(u32),
     HwAddr(Vec<u8>),
     Routes(Vec<Route>),
+    Unknown(Vec<u8>),
 }
 
 impl DhcpOptionTypeValue {
@@ -461,6 +473,7 @@ impl DhcpOptionTypeValue {
                 }
                 o
             }
+            DhcpOptionTypeValue::Unknown(v) => v.clone(),
         }
     }
 }
@@ -508,6 +521,14 @@ impl std::fmt::Display for DhcpOptionTypeValue {
                     .map(|i| format!("{}->{}", i.prefix, i.nexthop))
                     .collect::<Vec<String>>()
                     .join(",")
+            ),
+            DhcpOptionTypeValue::Unknown(v) => write!(
+                f,
+                "{}",
+                v.iter()
+                    .map(|b| format!("{:0>2x}", b))
+                    .collect::<Vec<_>>()
+                    .join("")
             ),
         }
     }
