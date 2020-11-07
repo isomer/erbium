@@ -225,7 +225,7 @@ dependencies = [
 
 [[package]]
 name = "erbium"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-std",
  "bytes 0.6.0",
