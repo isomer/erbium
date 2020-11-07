@@ -262,21 +262,15 @@ pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
     let mut flags = flags;
     flags.set(MsgFlags::MSG_DONTWAIT, true);
 
-    use std::io::{Error, ErrorKind};
-
     match nix::sys::socket::recvmsg(sock.get_ref().as_raw_fd(), iov, Some(&mut cmsg), flags) {
         Ok(rm) => {
             buf.truncate(rm.bytes);
             ev.retain_ready();
             Ok(RecvMsg::new(rm, buf))
         }
-        Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
-            ev.retain_ready();
-            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EINTR))
-        }
-        Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
+        Err(e) if e == nix::Error::Sys(nix::errno::Errno::EAGAIN) => {
             ev.clear_ready();
-            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EAGAIN))
+            Err(nix_to_io_error(e))
         }
         Err(e) => {
             ev.retain_ready();
