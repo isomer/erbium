@@ -52,7 +52,7 @@ pub fn nix_to_io_error(n: nix::Error) -> std::io::Error {
     use nix::Error::*;
     use std::io::{Error, ErrorKind};
     match n {
-        Sys(_) => Error::new(ErrorKind::Other, n),
+        Sys(errno) => errno.into(),
         InvalidPath => Error::new(ErrorKind::InvalidData, n),
         InvalidUtf8 => Error::new(ErrorKind::InvalidData, n),
         UnsupportedOperation => Error::new(ErrorKind::InvalidData, n),
@@ -276,7 +276,7 @@ pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
         }
         Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
             ev.clear_ready();
-            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EINTR))
+            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EAGAIN))
         }
         Err(e) => {
             ev.retain_ready();

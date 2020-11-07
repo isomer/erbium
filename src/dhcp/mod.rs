@@ -737,10 +737,13 @@ async fn run_internal(
     );
 
     loop {
-        let rm = listener
-            .recv_msg(65536, udp::MsgFlags::empty())
-            .await
-            .map_err(RunError::Io)?;
+        let rm;
+        match listener.recv_msg(65536, udp::MsgFlags::empty()).await {
+            Ok(m) => rm = m,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(RunError::Io(e)),
+        }
         let p = pools.clone();
         let rs = rawsock.clone();
         let s = serverids.clone();

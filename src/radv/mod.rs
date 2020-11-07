@@ -324,11 +324,17 @@ impl RaAdvService {
 
     async fn run_solicited(&self) -> Result<Void, Error> {
         loop {
-            let rm = self
+            let rm;
+            match self
                 .rawsock
                 .recv_msg(65536, crate::net::raw::MsgFlags::empty())
                 .await
-                .map_err(Error::Io)?;
+            {
+                Ok(m) => rm = m,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(Error::Io(e)),
+            }
             let msg = icmppkt::parse(&rm.buffer);
             match msg {
                 Ok(icmppkt::Icmp6::Unknown) => (),
