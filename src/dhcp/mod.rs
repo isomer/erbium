@@ -52,7 +52,7 @@ pub enum DhcpError {
     NoLeasesAvailable,
     ParseError(dhcppkt::ParseError),
     InternalError(String),
-    OtherServer,
+    OtherServer(std::net::Ipv4Addr),
     NoPolicyConfigured,
 }
 
@@ -69,7 +69,7 @@ impl std::fmt::Display for DhcpError {
             DhcpError::NoLeasesAvailable => write!(f, "No Leases Available"),
             DhcpError::ParseError(e) => write!(f, "Parse Error: {:?}", e),
             DhcpError::InternalError(e) => write!(f, "Internal Error: {:?}", e),
-            DhcpError::OtherServer => write!(f, "Packet for a different DHCP server"),
+            DhcpError::OtherServer(s) => write!(f, "Packet for a different DHCP server: {}", s),
             DhcpError::NoPolicyConfigured => write!(f, "No policy configured for client"),
         }
     }
@@ -365,7 +365,7 @@ fn handle_request(
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     if let Some(si) = req.pkt.options.get_serverid() {
         if !serverids.contains(&si) {
-            return Err(DhcpError::OtherServer);
+            return Err(DhcpError::OtherServer(si));
         }
     }
     let mut response: Response = Response {

@@ -313,7 +313,7 @@ async fn ignore_other_request() {
         dhcp::handle_request(&mut p, &pkt, serverids, &cfg).expect_err("Handled request not to me");
     assert_eq!(
         reply,
-        dhcp::DhcpError::OtherServer,
+        dhcp::DhcpError::OtherServer(NOT_SERVER_IP),
         "Packet to not-a-server-ip should be ignored."
     );
 }
