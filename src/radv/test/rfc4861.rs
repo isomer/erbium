@@ -56,15 +56,12 @@ impl Default for config::Interface {
             retrans: std::time::Duration::from_secs(0),
             mtu: config::ConfigValue::NotSpecified,
             prefixes: vec![config::Prefix::default()],
-            rdnss: (
-                std::time::Duration::from_secs(300),
-                vec!["2001:db8::53".parse().unwrap()],
-            ),
-            dnssl: (
-                std::time::Duration::from_secs(300),
-                vec!["example.net".into()],
-            ),
-            captive_portal: Some("http://captive.example.com/".into()),
+            rdnss_lifetime: config::ConfigValue::Value(std::time::Duration::from_secs(300)),
+            rdnss: config::ConfigValue::Value(vec!["2001:db8::53".parse().unwrap()]),
+            dnssl_lifetime: config::ConfigValue::Value(std::time::Duration::from_secs(300)),
+            dnssl: config::ConfigValue::Value(vec!["example.net".into()]),
+
+            captive_portal: config::ConfigValue::Value("http://captive.example.com/".into()),
             pref64: Some(config::Pref64::default()),
         }
     }
@@ -114,9 +111,14 @@ fn test_solicitations_may_contain_unknown_options() {
  */
 #[test]
 fn test_reserved_is_zero() {
-    let conf = config::Interface::default();
-    let msg =
-        radv::RaAdvService::build_announcement_pure(&conf, Some([1, 2, 3, 4, 5, 6]), Some(1500));
+    let conf = crate::config::Config::default();
+    let intf = config::Interface::default();
+    let msg = radv::RaAdvService::build_announcement_pure(
+        &conf,
+        &intf,
+        Some([1, 2, 3, 4, 5, 6]),
+        Some(1500),
+    );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(pkt[5] & 0b00111111, 0b0);
 }
@@ -185,9 +187,14 @@ fn target_lladdr_ignored_in_router_solicitations() {
  */
 #[test]
 fn prefix_reserved1_is_zero() {
-    let conf = config::Interface::default();
-    let msg =
-        radv::RaAdvService::build_announcement_pure(&conf, Some([1, 2, 3, 4, 5, 6]), Some(1500));
+    let conf = crate::config::Config::default();
+    let intf = config::Interface::default();
+    let msg = radv::RaAdvService::build_announcement_pure(
+        &conf,
+        &intf,
+        Some([1, 2, 3, 4, 5, 6]),
+        Some(1500),
+    );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(pkt[8 + 4] & 0b00111111, 0b0);
 }
@@ -197,9 +204,14 @@ fn prefix_reserved1_is_zero() {
  */
 #[test]
 fn prefix_reserved2_is_zero() {
-    let conf = config::Interface::default();
-    let msg =
-        radv::RaAdvService::build_announcement_pure(&conf, Some([1, 2, 3, 4, 5, 6]), Some(1500));
+    let conf = crate::config::Config::default();
+    let intf = config::Interface::default();
+    let msg = radv::RaAdvService::build_announcement_pure(
+        &conf,
+        &intf,
+        Some([1, 2, 3, 4, 5, 6]),
+        Some(1500),
+    );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(&pkt[12..16], &[0, 0, 0, 0]);
 }
@@ -212,9 +224,14 @@ fn prefix_reserved2_is_zero() {
  */
 #[test]
 fn prefix_length_must_have_zero_suffix() {
-    let conf = config::Interface::default();
-    let msg =
-        radv::RaAdvService::build_announcement_pure(&conf, Some([1, 2, 3, 4, 5, 6]), Some(1500));
+    let conf = crate::config::Config::default();
+    let intf = config::Interface::default();
+    let msg = radv::RaAdvService::build_announcement_pure(
+        &conf,
+        &intf,
+        Some([1, 2, 3, 4, 5, 6]),
+        Some(1500),
+    );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(&pkt[12..16], &[0, 0, 0, 0]);
 }
@@ -247,9 +264,14 @@ fn prefix_ignored_for_solicitation() {
  */
 #[test]
 fn mtu_reserved_must_be_zero() {
-    let conf = config::Interface::default();
-    let msg =
-        radv::RaAdvService::build_announcement_pure(&conf, Some([1, 2, 3, 4, 5, 6]), Some(1500));
+    let conf = crate::config::Config::default();
+    let intf = config::Interface::default();
+    let msg = radv::RaAdvService::build_announcement_pure(
+        &conf,
+        &intf,
+        Some([1, 2, 3, 4, 5, 6]),
+        Some(1500),
+    );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(&pkt[26..=27], &[0, 0]);
 }

@@ -25,7 +25,7 @@ pub const DNSSL: NDOption = NDOption(31);
 pub const CAPTIVE_PORTAL: NDOption = NDOption(37);
 pub const PREF64: NDOption = NDOption(38);
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum NDOptionValue {
     SourceLLAddr(Vec<u8>),
     MTU(u32),
@@ -42,6 +42,23 @@ pub struct NDOptions(Vec<NDOptionValue>);
 impl NDOptions {
     pub fn add_option(&mut self, ov: NDOptionValue) {
         self.0.push(ov);
+    }
+
+    #[cfg(test)]
+    pub fn find_option(&self, o: NDOption) -> Vec<NDOptionValue> {
+        self.0
+            .iter()
+            .filter(|x| match (&o, &x) {
+                (&RDNSS, &NDOptionValue::RDNSS(_)) => true,
+                (&RDNSS, _) => false,
+                (&DNSSL, &NDOptionValue::DNSSL(_)) => true,
+                (&DNSSL, _) => false,
+                (&CAPTIVE_PORTAL, &NDOptionValue::CaptivePortal(_)) => true,
+                (&CAPTIVE_PORTAL, _) => false,
+                (_, _) => unimplemented!(),
+            })
+            .cloned()
+            .collect()
     }
 }
 
@@ -63,7 +80,7 @@ pub struct RtrAdvertisement {
     pub options: NDOptions,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AdvPrefix {
     pub prefixlen: u8,
     pub onlink: bool,

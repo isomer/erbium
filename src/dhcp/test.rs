@@ -67,7 +67,7 @@ fn mk_dhcp_request_pkt() -> dhcppkt::DHCP {
     }
 }
 
-fn mk_dhcp_request() -> dhcp::DHCPRequest {
+pub fn mk_dhcp_request() -> dhcp::DHCPRequest {
     dhcp::DHCPRequest {
         pkt: mk_dhcp_request_pkt(),
         serverip: SERVER_IP,
@@ -75,7 +75,7 @@ fn mk_dhcp_request() -> dhcp::DHCPRequest {
     }
 }
 
-fn mk_default_config() -> crate::config::Config {
+pub fn mk_default_config() -> crate::config::Config {
     let mut apply_address: pool::PoolAddresses = Default::default();
     for i in 1..255 {
         apply_address

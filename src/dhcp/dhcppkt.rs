@@ -200,7 +200,7 @@ pub const OPTION_PCODE: DhcpOption = DhcpOption(100); /* RFC4833 */
 pub const OPTION_TCODE: DhcpOption = DhcpOption(101); /* RFC4833 */
 pub const OPTION_AUTOCONF: DhcpOption = DhcpOption(103);
 pub const OPTION_SUBNETSELECT: DhcpOption = DhcpOption(104);
-//pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
+pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
 pub const OPTION_SIPSERVERS: DhcpOption = DhcpOption(120);
 pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
 pub const OPTION_CAPTIVEPORTAL: DhcpOption = DhcpOption(160);
@@ -372,8 +372,8 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     // uuid/guid
     ("autoconfig", OPTION_AUTOCONF, DhcpOptionType::Bool),
     ("subnet-selection", OPTION_SUBNETSELECT, DhcpOptionType::Ip), // RFC3011 -- needs better support
-    //("search-path", OPTION_DNSSEARCH, DhcpOptionType::...), // RFC3397
-    ("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::Unknown), // RFC3361
+    ("dns-searches", OPTION_DOMAINSEARCH, DhcpOptionType::Unknown), // RFC3397
+    ("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::Unknown),   // RFC3361
     ("routes", OPTION_CIDRROUTE, DhcpOptionType::Routes),
     //122: Cablelabs Client configuration, RFC3495
     //123: GeoConf, RFC6225

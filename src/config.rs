@@ -58,6 +58,77 @@ impl Error {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum ConfigValue<T: Clone> {
+    NotSpecified,
+    DontSet,
+    Value(T),
+}
+
+impl<T: Clone> ConfigValue<T> {
+    pub fn from_option(v: Option<T>) -> Self {
+        match v {
+            None => ConfigValue::DontSet,
+            Some(x) => ConfigValue::Value(x),
+        }
+    }
+    /// Converts an ConfigValue into an Option, leaving DontSet as None.
+    pub fn unwrap_or(&self, n: T) -> Option<T> {
+        match self {
+            ConfigValue::NotSpecified => Some(n),
+            ConfigValue::DontSet => None,
+            ConfigValue::Value(v) => Some(v.clone()),
+        }
+    }
+    pub fn or(&self, n: Option<T>) -> Option<T> {
+        match self {
+            ConfigValue::NotSpecified => n,
+            ConfigValue::DontSet => None,
+            ConfigValue::Value(v) => Some(v.clone()),
+        }
+    }
+    pub fn as_ref(&self) -> ConfigValue<&T> {
+        match self {
+            ConfigValue::NotSpecified => ConfigValue::NotSpecified,
+            ConfigValue::DontSet => ConfigValue::DontSet,
+            ConfigValue::Value(v) => ConfigValue::Value(&v),
+        }
+    }
+    // Converts a ConfigValue into an Option, leaving NotSpecified as None.
+    // This is useful if "don't set" has a default value that must be applied anyway.
+    pub fn base_default(&self, n: T) -> Option<T> {
+        match self {
+            ConfigValue::NotSpecified => None,
+            ConfigValue::DontSet => Some(n),
+            ConfigValue::Value(v) => Some(v.clone()),
+        }
+    }
+    // This return T, setting the default, and unspecified to a value.
+    // This is useful if the unspecified value has an obvious required default.
+    pub fn always_unwrap_or(&self, n: T) -> T {
+        match self {
+            ConfigValue::NotSpecified => n,
+            ConfigValue::DontSet => n,
+            ConfigValue::Value(v) => v.clone(),
+        }
+    }
+    pub fn apply_default(&self, n: ConfigValue<T>) -> ConfigValue<T> {
+        match (self, n) {
+            (ConfigValue::NotSpecified, ConfigValue::NotSpecified) => ConfigValue::NotSpecified,
+            (ConfigValue::NotSpecified, ConfigValue::DontSet) => ConfigValue::DontSet,
+            (ConfigValue::NotSpecified, ConfigValue::Value(v)) => ConfigValue::Value(v),
+            (ConfigValue::DontSet, _) => ConfigValue::DontSet,
+            (ConfigValue::Value(v), _) => ConfigValue::Value(v.clone()),
+        }
+    }
+}
+
+impl<T: Clone> Default for ConfigValue<T> {
+    fn default() -> Self {
+        ConfigValue::NotSpecified
+    }
+}
+
 pub fn type_to_name(fragment: &yaml::Yaml) -> String {
     match fragment {
         yaml::Yaml::Real(_) => "Real".into(),
@@ -166,6 +237,11 @@ where
     }
 }
 
+pub fn str_parse_ip(st: &str) -> Result<std::net::IpAddr, Error> {
+    st.parse()
+        .map_err(|e| Error::InvalidConfig(format!("{}", e)))
+}
+
 pub fn parse_duration(value: &yaml::Yaml) -> Result<Option<std::time::Duration>, Error> {
     match value {
         yaml::Yaml::Null => Ok(None),
@@ -226,6 +302,9 @@ pub fn parse_duration(value: &yaml::Yaml) -> Result<Option<std::time::Duration>,
 pub struct Config {
     pub dhcp: crate::dhcp::config::Config,
     pub ra: crate::radv::config::Config,
+    pub dns_servers: Vec<std::net::IpAddr>,
+    pub dns_search: Vec<String>,
+    pub captive_portal: Option<String>,
 }
 
 pub type SharedConfig = std::sync::Arc<tokio::sync::Mutex<Config>>;
@@ -240,10 +319,26 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
     if let Some(fragment) = y[0].as_hash() {
         let mut ra = None;
         let mut dhcp = None;
+        let mut dns_servers = vec![];
+        let mut dns_search = vec![];
+        let mut captive_portal = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
                 (Some("dhcp"), d) => dhcp = crate::dhcp::config::Config::new(d)?,
                 (Some("router-advertisements"), r) => ra = crate::radv::config::parse(r)?,
+                (Some("dns-servers"), s) => {
+                    dns_servers = parse_array("dns-servers", s, |name, yaml| {
+                        parse_string_as(name, yaml, str_parse_ip)
+                    })?
+                    .ok_or_else(|| Error::InvalidConfig("dns-servers cannot be null".into()))?
+                }
+                (Some("dns-search"), s) => {
+                    dns_search = parse_array("dns-search", s, parse_string)?
+                        .ok_or_else(|| Error::InvalidConfig("dns-search cannot be null".into()))?
+                }
+                (Some("captive-portal"), s) => {
+                    captive_portal = parse_string("captive-portal", s)?;
+                }
                 (Some(x), _) => {
                     return Err(Error::InvalidConfig(format!(
                         "Unknown configuration option {}",
@@ -261,6 +356,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let conf = Config {
             dhcp: dhcp.unwrap_or_else(crate::dhcp::config::Config::default),
             ra: ra.unwrap_or_else(crate::radv::config::Config::default),
+            dns_servers,
+            dns_search,
+            captive_portal,
         };
         Ok(std::sync::Arc::new(tokio::sync::Mutex::new(conf)))
     } else {

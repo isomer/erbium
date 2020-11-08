@@ -17,7 +17,7 @@
  *  IPv6 Router Advertisement Configuration
  */
 
-use crate::config::*;
+pub use crate::config::*;
 use yaml_rust::yaml;
 
 #[derive(Debug)]
@@ -28,22 +28,6 @@ pub struct Prefix {
     pub autonomous: bool,
     pub valid: std::time::Duration,
     pub preferred: std::time::Duration,
-}
-
-#[derive(Debug)]
-pub enum ConfigValue<T> {
-    NotSpecified,
-    DontSet,
-    Value(T),
-}
-
-impl<T> ConfigValue<T> {
-    fn from_option(v: Option<T>) -> Self {
-        match v {
-            None => ConfigValue::DontSet,
-            Some(x) => ConfigValue::Value(x),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -64,9 +48,11 @@ pub struct Interface {
     pub retrans: std::time::Duration,
     pub mtu: ConfigValue<u32>,
     pub prefixes: Vec<Prefix>,
-    pub rdnss: (std::time::Duration, Vec<std::net::Ipv6Addr>),
-    pub dnssl: (std::time::Duration, Vec<String>),
-    pub captive_portal: Option<String>,
+    pub rdnss_lifetime: ConfigValue<std::time::Duration>,
+    pub rdnss: ConfigValue<Vec<std::net::Ipv6Addr>>,
+    pub dnssl_lifetime: ConfigValue<std::time::Duration>,
+    pub dnssl: ConfigValue<Vec<String>>,
+    pub captive_portal: ConfigValue<String>,
     pub pref64: Option<Pref64>,
 }
 
@@ -147,19 +133,24 @@ fn str_parse_address(st: &str) -> Result<std::net::Ipv6Addr, Error> {
 fn parse_rdnss(
     name: &str,
     fragment: &yaml::Yaml,
-) -> Result<(Option<std::time::Duration>, Vec<std::net::Ipv6Addr>), Error> {
-    let mut lifetime = None;
-    let mut address = vec![];
+) -> Result<
+    (
+        ConfigValue<std::time::Duration>,
+        ConfigValue<Vec<std::net::Ipv6Addr>>,
+    ),
+    Error,
+> {
+    let mut lifetime = Default::default();
+    let mut address = Default::default();
     if let Some(h) = fragment.as_hash() {
         for (k, v) in h {
             match (k.as_str(), v) {
                 (Some("addresses"), a) => {
-                    address = parse_array("addresses", a, |n, f| {
+                    address = ConfigValue::from_option(parse_array("addresses", a, |n, f| {
                         parse_string_as(n, f, str_parse_address)
-                    })?
-                    .unwrap()
+                    })?)
                 }
-                (Some("lifetime"), d) => lifetime = parse_duration(d)?,
+                (Some("lifetime"), d) => lifetime = ConfigValue::from_option(parse_duration(d)?),
                 (Some(m), _) => {
                     return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)))
                 }
@@ -197,17 +188,16 @@ fn parse_domain(name: &str, fragment: &yaml::Yaml) -> Result<Option<String>, Err
 fn parse_dnssl(
     name: &str,
     fragment: &yaml::Yaml,
-) -> Result<(Option<std::time::Duration>, Vec<String>), Error> {
-    let mut lifetime = None;
-    let mut domains = vec![];
+) -> Result<(ConfigValue<std::time::Duration>, ConfigValue<Vec<String>>), Error> {
+    let mut lifetime = Default::default();
+    let mut domains = Default::default();
     if let Some(h) = fragment.as_hash() {
         for (k, v) in h {
             match (k.as_str(), v) {
                 (Some("domains"), a) => {
-                    domains = parse_array("domains", a, parse_domain)?
-                        .ok_or_else(|| Error::InvalidConfig("domains should not be null".into()))?
+                    domains = ConfigValue::from_option(parse_array("domains", a, parse_domain)?)
                 }
-                (Some("lifetime"), d) => lifetime = parse_duration(d)?,
+                (Some("lifetime"), d) => lifetime = ConfigValue::from_option(parse_duration(d)?),
                 (Some(m), _) => {
                     return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)))
                 }
@@ -279,9 +269,9 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
         let mut retrans = None;
         let mut mtu = ConfigValue::NotSpecified;
         let mut prefixes = vec![];
-        let mut rdnss = None;
-        let mut dnssl = None;
-        let mut captive_portal = None;
+        let mut rdnss = (ConfigValue::NotSpecified, ConfigValue::NotSpecified);
+        let mut dnssl = (Default::default(), Default::default());
+        let mut captive_portal = Default::default();
         let mut pref64 = None;
         for (k, v) in h {
             match (k.as_str(), v) {
@@ -298,9 +288,11 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                     prefixes = parse_array("prefixes", p, parse_prefix)?
                         .ok_or_else(|| Error::InvalidConfig("domains should not be null".into()))?
                 }
-                (Some("dns-servers"), e) => rdnss = Some(parse_rdnss("dns-servers", e)?),
-                (Some("dns-search"), e) => dnssl = Some(parse_dnssl("dns-search", e)?),
-                (Some("captive-portal"), e) => captive_portal = parse_string("captive-portal", e)?,
+                (Some("dns-servers"), e) => rdnss = parse_rdnss("dns-servers", e)?,
+                (Some("dns-search"), e) => dnssl = parse_dnssl("dns-search", e)?,
+                (Some("captive-portal"), e) => {
+                    captive_portal = ConfigValue::from_option(parse_string("captive-portal", e)?)
+                }
                 (Some(key), _) => {
                     return Err(Error::InvalidConfig(format!(
                         "Unknown {} key {}",
@@ -318,8 +310,6 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
         }
         if let Some(ifname) = intf {
             let lifetime = lifetime.unwrap_or_else(|| std::time::Duration::from_secs(0));
-            let rdnss = rdnss.unwrap_or((None, vec![]));
-            let dnssl = dnssl.unwrap_or((None, vec![]));
             Ok(Some(Interface {
                 name: ifname,
                 hoplimit: hoplimit.unwrap_or(0),
@@ -330,8 +320,10 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                 retrans: retrans.unwrap_or_else(|| std::time::Duration::from_secs(0)),
                 mtu,
                 prefixes,
-                rdnss: (rdnss.0.unwrap_or(lifetime), rdnss.1),
-                dnssl: (dnssl.0.unwrap_or(lifetime), dnssl.1),
+                rdnss_lifetime: rdnss.0,
+                rdnss: rdnss.1,
+                dnssl_lifetime: dnssl.0,
+                dnssl: dnssl.1,
                 captive_portal,
                 pref64,
             }))

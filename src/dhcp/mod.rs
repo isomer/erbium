@@ -157,19 +157,31 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
 }
 
 fn apply_policy(req: &DHCPRequest, policy: &config::Policy, response: &mut Response) -> bool {
-    let policymatch = check_policy(req, policy);
-    if policymatch == PolicyMatch::MatchFailed {
-        return false;
+    /* Check if our policy should match.
+     */
+    match check_policy(req, policy) {
+        /* If the match failed, do not apply. */
+        PolicyMatch::MatchFailed => return false,
+        /* If there are no matches applied for this policy, check if any subpolicies match, and if
+         * so, apply this policy too, otherwise fail.
+         */
+        PolicyMatch::NoMatch => {
+            if !check_policies(req, &policy.policies) {
+                return false;
+            }
+        }
+        /* If there were matchers, and we matched them all, then continue with applying the policy.
+         */
+        PolicyMatch::MatchSucceeded => (),
     }
 
-    if policymatch == PolicyMatch::NoMatch && !check_policies(req, &policy.policies) {
-        return false;
-    }
-
+    /* If there are addresses provided here, override any from the parent */
     if let Some(address) = &policy.apply_address {
         response.address = Some(address.clone()); /* HELP: I tried to make the lifetimes worked, and failed */
     }
 
+    /* Now get the list of parameters we will apply from the parameter list from the client.
+     */
     // TODO: This should probably just be a u128 bitvector
     let pl: std::collections::HashSet<
         dhcppkt::DhcpOption,
@@ -193,7 +205,7 @@ fn apply_policy(req: &DHCPRequest, policy: &config::Policy, response: &mut Respo
     /* And check to see if a subpolicy also matches */
     apply_policies(req, &policy.policies, response);
 
-    /* Automatically apply some defaults */
+    /* Some of the defaults depend on what other options end up being set, so apply them here. */
     if let Some(subnet) = &policy.match_subnet {
         if pl.contains(&dhcppkt::OPTION_NETMASK) {
             response
@@ -310,6 +322,7 @@ fn handle_discover<'l>(
     _serverids: ServerIds,
     conf: &'l super::config::Config,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
+    /* Build the default response we are about to reply with, it will be filled in later */
     let mut response: Response = Response {
         options: ResponseOptions {
             ..Default::default()
@@ -318,9 +331,48 @@ fn handle_discover<'l>(
         .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
         ..Default::default()
     };
+
+    /* Apply any defaults from the root configuration */
+    for opt in req
+        .pkt
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+        .unwrap_or_else(Vec::new)
+    {
+        match dhcppkt::DhcpOption::from(opt) {
+            dhcppkt::OPTION_DOMAINSERVER => {
+                response.options.mutate_option(
+                    &dhcppkt::OPTION_DOMAINSERVER,
+                    Some(
+                        &conf
+                            .dns_servers
+                            .iter()
+                            .filter_map(|ip| {
+                                if let std::net::IpAddr::V4(v4) = ip {
+                                    Some(v4)
+                                } else {
+                                    None
+                                }
+                            })
+                            .copied()
+                            .collect::<Vec<_>>(),
+                    ),
+                );
+            }
+            dhcppkt::OPTION_DOMAINSEARCH => (), // Not implemented
+            dhcppkt::OPTION_CAPTIVEPORTAL => response
+                .options
+                .mutate_option(&dhcppkt::OPTION_CAPTIVEPORTAL, conf.captive_portal.as_ref()),
+            _ => (),
+        }
+    }
+
+    /* Now attempt to apply all the policies.*/
     if !apply_policies(req, &conf.dhcp.policies, &mut response) {
+        /* If none of the policies applied at all, then provide a warning back to the caller */
         Err(DhcpError::NoPolicyConfigured)
     } else if let Some(addresses) = response.address {
+        /* At least one policy matched, and provided addresses.  So now go allocate an address */
         match pools.allocate_address(
             &req.pkt.get_client_id(),
             req.pkt.options.get_address_request(),
@@ -328,6 +380,7 @@ fn handle_discover<'l>(
             response.minlease.unwrap_or(pool::DEFAULT_MIN_LEASE),
             response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
         ) {
+            /* Now we have an address, send the reply */
             Ok(lease) => Ok(dhcppkt::DHCP {
                 op: dhcppkt::OP_BOOTREPLY,
                 htype: dhcppkt::HWTYPE_ETHERNET,
@@ -349,10 +402,12 @@ fn handle_discover<'l>(
                     .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
                     .to_options(),
             }),
+            /* There was an address pool assigned, but there were no available addresses in it */
             Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
             Err(e) => Err(DhcpError::InternalError(e.to_string())),
         }
     } else {
+        /* There were no addresses assigned to this match */
         Err(DhcpError::NoLeasesAvailable)
     }
 }
@@ -900,4 +955,41 @@ fn test_format_client() {
         },
     };
     assert_eq!(format_client(&req), "00:01:02:03:04:05 ()");
+}
+
+#[test]
+fn test_defaults() {
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
+    let mut pkt = test::mk_dhcp_request();
+    pkt.pkt.options.mutate_option(
+        &dhcppkt::OPTION_PARAMLIST,
+        &vec![6u8 /* Domain Server */, 160 /* Captive Portal */],
+    );
+
+    let serverids: ServerIds = ServerIds::new();
+    let conf = crate::config::Config {
+        dns_servers: vec![
+            "192.0.2.53".parse().unwrap(),
+            "2001:db8::53".parse().unwrap(),
+        ],
+        captive_portal: Some("example.com".into()),
+        ..test::mk_default_config()
+    };
+    let resp = handle_discover(&mut p, &pkt, serverids, &conf).expect("Failed to handle request");
+    assert_eq!(
+        resp.options
+            .get_option::<Vec<std::net::Ipv4Addr>>(&dhcppkt::OPTION_DOMAINSERVER),
+        Some(vec!["192.0.2.53".parse::<std::net::Ipv4Addr>().unwrap()])
+    );
+    assert_eq!(
+        resp.options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_CAPTIVEPORTAL),
+        Some(
+            "example.com"
+                .as_bytes()
+                .iter()
+                .copied()
+                .collect::<Vec<u8>>()
+        )
+    );
 }

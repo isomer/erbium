@@ -126,6 +126,7 @@ impl RaAdvService {
     }
 
     fn build_announcement_pure(
+        config: &crate::config::Config,
         intf: &config::Interface,
         ll: Option<[u8; 6]>, /* TODO: This only works for ethernet */
         mtu: Option<u32>,
@@ -151,12 +152,31 @@ impl RaAdvService {
             }));
         }
 
-        if !intf.rdnss.1.is_empty() {
-            options.add_option(icmppkt::NDOptionValue::RDNSS(intf.rdnss.clone()))
+        if let Some(v) = &intf.rdnss.unwrap_or(
+            config
+                .dns_servers
+                .iter()
+                .filter_map(|ip| {
+                    if let std::net::IpAddr::V6(v6) = ip {
+                        Some(v6)
+                    } else {
+                        None
+                    }
+                })
+                .copied()
+                .collect(),
+        ) {
+            options.add_option(icmppkt::NDOptionValue::RDNSS((
+                intf.rdnss_lifetime.always_unwrap_or(intf.lifetime),
+                v.clone(),
+            )))
         }
 
-        if !intf.dnssl.1.is_empty() {
-            options.add_option(icmppkt::NDOptionValue::DNSSL(intf.dnssl.clone()))
+        if let Some(v) = &intf.dnssl.unwrap_or(config.dns_search.clone()) {
+            options.add_option(icmppkt::NDOptionValue::DNSSL((
+                intf.dnssl_lifetime.always_unwrap_or(intf.lifetime),
+                v.clone(),
+            )))
         }
 
         if let Some(pref64) = &intf.pref64 {
@@ -167,7 +187,11 @@ impl RaAdvService {
             )))
         }
 
-        if let Some(url) = &intf.captive_portal {
+        if let Some(url) = intf
+            .captive_portal
+            .as_ref()
+            .or(config.captive_portal.as_ref())
+        {
             options.add_option(icmppkt::NDOptionValue::CaptivePortal(url.into()))
         }
 
@@ -205,7 +229,7 @@ impl RaAdvService {
             DontSet => None,
         };
 
-        Self::build_announcement_pure(intf, ll, mtu)
+        Self::build_announcement_pure(&*self.conf.lock().await, intf, ll, mtu)
     }
 
     async fn build_announcement_by_ifidx(
@@ -377,7 +401,9 @@ impl RaAdvService {
 
 #[test]
 fn test_build_announcement() {
+    let conf = crate::config::Config::default();
     let msg = RaAdvService::build_announcement_pure(
+        &conf,
         &config::Interface {
             name: "eth0".into(),
             hoplimit: 64,
@@ -395,12 +421,11 @@ fn test_build_announcement() {
                 valid: std::time::Duration::from_secs(3600),
                 preferred: std::time::Duration::from_secs(1800),
             }],
-            rdnss: (
-                std::time::Duration::from_secs(3600),
-                vec!["2001:db8::53".parse().unwrap()],
-            ),
-            dnssl: (std::time::Duration::from_secs(3600), vec![]),
-            captive_portal: Some("http://example.com/".into()),
+            rdnss_lifetime: config::ConfigValue::Value(std::time::Duration::from_secs(3600)),
+            rdnss: config::ConfigValue::Value(vec!["2001:db8::53".parse().unwrap()]),
+            dnssl_lifetime: config::ConfigValue::Value(std::time::Duration::from_secs(3600)),
+            dnssl: config::ConfigValue::Value(vec![]),
+            captive_portal: config::ConfigValue::Value("http://example.com/".into()),
             pref64: Some(config::Pref64 {
                 lifetime: std::time::Duration::from_secs(600),
                 prefix: "64:ff9b::".parse().unwrap(),
@@ -411,4 +436,96 @@ fn test_build_announcement() {
         Some(1480),
     );
     icmppkt::serialise(&icmppkt::Icmp6::RtrAdvert(msg));
+}
+
+#[test]
+fn test_default_values() {
+    let conf = crate::config::Config {
+        dns_servers: vec![
+            "192.0.2.53".parse().unwrap(),
+            "2001:db8::53".parse().unwrap(),
+        ],
+        dns_search: vec!["example.com".into()],
+        captive_portal: Some("example.com".into()),
+        ..Default::default()
+    };
+    let msg = RaAdvService::build_announcement_pure(
+        &conf,
+        &config::Interface {
+            dnssl: config::ConfigValue::NotSpecified,
+            rdnss: config::ConfigValue::NotSpecified,
+            captive_portal: config::ConfigValue::NotSpecified,
+            ..Default::default()
+        },
+        Some([1, 2, 3, 4, 5, 6]),
+        Some(1480),
+    );
+    assert_eq!(
+        msg.options
+            .find_option(icmppkt::RDNSS)
+            .iter()
+            .map(|x| if let icmppkt::NDOptionValue::RDNSS((_, servers)) = x {
+                servers
+            } else {
+                panic!("bad")
+            })
+            .cloned()
+            .collect::<Vec<Vec<_>>>(),
+        vec![vec!["2001:db8::53".parse::<std::net::Ipv6Addr>().unwrap()]]
+    );
+    assert_eq!(
+        msg.options
+            .find_option(icmppkt::DNSSL)
+            .iter()
+            .map(|x| if let icmppkt::NDOptionValue::DNSSL((_, domains)) = x {
+                domains
+            } else {
+                panic!("bad")
+            })
+            .cloned()
+            .collect::<Vec<Vec<_>>>(),
+        vec![vec![String::from("example.com")]]
+    );
+    assert_eq!(
+        msg.options
+            .find_option(icmppkt::CAPTIVE_PORTAL)
+            .iter()
+            .map(
+                |x| if let icmppkt::NDOptionValue::CaptivePortal(domain) = x {
+                    domain
+                } else {
+                    panic!("bad")
+                }
+            )
+            .cloned()
+            .collect::<Vec<_>>(),
+        vec![String::from("example.com")]
+    );
+}
+
+#[test]
+fn test_dontset_values() {
+    let conf = crate::config::Config {
+        dns_servers: vec![
+            "192.0.2.53".parse().unwrap(),
+            "2001:db8::53".parse().unwrap(),
+        ],
+        dns_search: vec!["example.com".into()],
+        captive_portal: Some("example.com".into()),
+        ..Default::default()
+    };
+    let msg = RaAdvService::build_announcement_pure(
+        &conf,
+        &config::Interface {
+            dnssl: config::ConfigValue::DontSet,
+            rdnss: config::ConfigValue::DontSet,
+            captive_portal: config::ConfigValue::DontSet,
+            ..Default::default()
+        },
+        Some([1, 2, 3, 4, 5, 6]),
+        Some(1480),
+    );
+    assert!(msg.options.find_option(icmppkt::RDNSS).is_empty());
+    assert!(msg.options.find_option(icmppkt::DNSSL).is_empty());
+    assert!(msg.options.find_option(icmppkt::CAPTIVE_PORTAL).is_empty());
 }
