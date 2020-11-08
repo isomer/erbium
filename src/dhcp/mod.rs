@@ -285,6 +285,15 @@ impl ResponseOptions {
         }
     }
 
+    pub fn mutate_option_value(
+        &mut self,
+        option: &dhcppkt::DhcpOption,
+        maybe_value: Option<&dhcppkt::DhcpOptionTypeValue>,
+    ) {
+        self.option
+            .insert(*option, maybe_value.map(|x| x.as_bytes()));
+    }
+
     pub fn mutate_option_default<T: dhcppkt::Serialise>(
         &mut self,
         option: &dhcppkt::DhcpOption,
@@ -359,10 +368,17 @@ fn handle_discover<'l>(
                     ),
                 );
             }
-            dhcppkt::OPTION_DOMAINSEARCH => (), // Not implemented
-            dhcppkt::OPTION_CAPTIVEPORTAL => response
-                .options
-                .mutate_option(&dhcppkt::OPTION_CAPTIVEPORTAL, conf.captive_portal.as_ref()),
+            dhcppkt::OPTION_DOMAINSEARCH => response.options.mutate_option_value(
+                &dhcppkt::OPTION_DOMAINSEARCH,
+                Some(&dhcppkt::DhcpOptionTypeValue::DomainList(
+                    conf.dns_search.clone(),
+                )),
+            ),
+            dhcppkt::OPTION_CAPTIVEPORTAL => {
+                response
+                    .options
+                    .mutate_option(&dhcppkt::OPTION_CAPTIVEPORTAL, conf.captive_portal.as_ref());
+            }
             _ => (),
         }
     }
@@ -963,7 +979,11 @@ fn test_defaults() {
     let mut pkt = test::mk_dhcp_request();
     pkt.pkt.options.mutate_option(
         &dhcppkt::OPTION_PARAMLIST,
-        &vec![6u8 /* Domain Server */, 160 /* Captive Portal */],
+        &vec![
+            6u8, /* Domain Server */
+            119, /* Domain Search */
+            160, /* Captive Portal */
+        ],
     );
 
     let serverids: ServerIds = ServerIds::new();
@@ -972,6 +992,7 @@ fn test_defaults() {
             "192.0.2.53".parse().unwrap(),
             "2001:db8::53".parse().unwrap(),
         ],
+        dns_search: vec!["example.org".into()],
         captive_portal: Some("example.com".into()),
         ..test::mk_default_config()
     };
@@ -980,6 +1001,10 @@ fn test_defaults() {
         resp.options
             .get_option::<Vec<std::net::Ipv4Addr>>(&dhcppkt::OPTION_DOMAINSERVER),
         Some(vec!["192.0.2.53".parse::<std::net::Ipv4Addr>().unwrap()])
+    );
+    println!(
+        "{:?}",
+        resp.options.get_raw_option(&dhcppkt::OPTION_CAPTIVEPORTAL)
     );
     assert_eq!(
         resp.options
@@ -991,5 +1016,10 @@ fn test_defaults() {
                 .copied()
                 .collect::<Vec<u8>>()
         )
+    );
+    assert_eq!(
+        resp.options
+            .get_option::<Vec<String>>(&dhcppkt::OPTION_DOMAINSEARCH),
+        Some(vec![String::from("example.org")])
     );
 }

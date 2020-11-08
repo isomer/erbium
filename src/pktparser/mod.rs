@@ -56,6 +56,10 @@ impl<'l> Buffer<'l> {
         self.buffer.len()
     }
 
+    pub fn empty(&self) -> bool {
+        self.remaining() == 0
+    }
+
     pub fn set_offset(mut self, o: usize) -> Option<Self> {
         if o <= self.size() {
             self.offset = o;
@@ -116,6 +120,30 @@ impl<'l> Buffer<'l> {
         let t = tl[0];
         let l = tl[1];
         Some((t, self.get_bytes(l as usize)?))
+    }
+
+    fn get_label(&mut self) -> Option<&[u8]> {
+        let l = self.get_u8()?;
+        self.get_bytes(l as usize)
+    }
+
+    fn get_domain(&mut self) -> Option<Vec<String>> {
+        let mut d = vec![];
+        loop {
+            let l = self.get_label()?;
+            if l == [] {
+                return Some(d);
+            }
+            d.push(String::from_utf8_lossy(l).to_string())
+        }
+    }
+
+    pub fn get_domains(&mut self) -> Option<Vec<Vec<String>>> {
+        let mut dl = vec![];
+        while !self.empty() {
+            dl.push(self.get_domain()?);
+        }
+        Some(dl)
     }
 }
 
@@ -197,4 +225,20 @@ fn test_remaining() {
     assert_eq!(buffer.remaining(), 8);
     buffer.get_u8();
     assert_eq!(buffer.remaining(), 7);
+}
+
+#[test]
+fn test_domains() {
+    let data = [
+        3, 0x77, 0x77, 0x77, 7, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 3, 0x63, 0x6f, 0x6d, 0,
+        3, 0x77, 0x77, 0x77, 7, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 3, 0x6f, 0x72, 0x67, 0,
+    ];
+    let mut buf = Buffer::new(&data);
+    assert_eq!(
+        buf.get_domains(),
+        Some(vec![
+            vec!["www".into(), "example".into(), "com".into()],
+            vec!["www".into(), "example".into(), "org".into()]
+        ])
+    );
 }

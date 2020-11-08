@@ -390,6 +390,10 @@ impl Config {
                     Some(DhcpOptionType::HwAddr) => {
                         Config::parse_mac(value)?.map(DhcpOptionTypeValue::HwAddr)
                     }
+                    Some(DhcpOptionType::DomainList) => {
+                        crate::config::parse_array(name, value, crate::config::parse_string)?
+                            .map(DhcpOptionTypeValue::DomainList)
+                    }
                     Some(DhcpOptionType::Unknown) => {
                         return Err(Error::InvalidConfig(format!(
                             "Option {} not supported",

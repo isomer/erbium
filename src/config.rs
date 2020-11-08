@@ -454,6 +454,26 @@ router-advertisements:
 }
 
 #[test]
+fn test_simple_config_parse() -> Result<(), Error> {
+    load_config_from_string(
+        "---
+dns-servers: ['8.8.8.8', '8.8.4.4', '2001:4860:4860::8888', '2001:4860:4860::8844']
+dns-search: ['example.com']
+
+dhcp:
+    policies:
+      - match-subnet: 192.0.2.0/24
+        apply-subnet: 192.0.2.0/24
+
+router-advertisements:
+    - interface: eth0
+      lifetime: 1d
+",
+    )?;
+    Ok(())
+}
+
+#[test]
 fn test_duration() {
     assert_eq!(
         parse_duration(&yaml::Yaml::String("5s".into())).unwrap(),

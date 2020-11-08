@@ -372,7 +372,11 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     // uuid/guid
     ("autoconfig", OPTION_AUTOCONF, DhcpOptionType::Bool),
     ("subnet-selection", OPTION_SUBNETSELECT, DhcpOptionType::Ip), // RFC3011 -- needs better support
-    ("dns-searches", OPTION_DOMAINSEARCH, DhcpOptionType::Unknown), // RFC3397
+    (
+        "dns-searches",
+        OPTION_DOMAINSEARCH,
+        DhcpOptionType::DomainList,
+    ), // RFC3397
     ("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::Unknown),   // RFC3361
     ("routes", OPTION_CIDRROUTE, DhcpOptionType::Routes),
     //122: Cablelabs Client configuration, RFC3495
@@ -407,6 +411,7 @@ pub enum DhcpOptionType {
     Seconds32,
     HwAddr,
     Routes,
+    DomainList,
     Unknown,
 }
 
@@ -429,6 +434,9 @@ impl DhcpOptionType {
             DhcpOptionType::Seconds32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32), // ?
             DhcpOptionType::HwAddr => U8Str::parse_into(v).map(DhcpOptionTypeValue::HwAddr),
             DhcpOptionType::Routes => Vec::<Route>::parse_into(v).map(DhcpOptionTypeValue::Routes),
+            DhcpOptionType::DomainList => {
+                Vec::<String>::parse_into(v).map(DhcpOptionTypeValue::DomainList)
+            }
             DhcpOptionType::Unknown => U8Str::parse_into(v).map(DhcpOptionTypeValue::Unknown),
         }
     }
@@ -445,6 +453,7 @@ pub enum DhcpOptionTypeValue {
     U32(u32),
     HwAddr(Vec<u8>),
     Routes(Vec<Route>),
+    DomainList(Vec<String>),
     Unknown(Vec<u8>),
 }
 
@@ -474,6 +483,17 @@ impl DhcpOptionTypeValue {
                 o
             }
             DhcpOptionTypeValue::Unknown(v) => v.clone(),
+            DhcpOptionTypeValue::DomainList(l) => {
+                let mut o = vec![];
+                for domains in l.iter().map(|d| d.split('.')) {
+                    for label in domains {
+                        o.push(label.len() as u8);
+                        o.extend(label.as_bytes());
+                    }
+                    o.push(0u8)
+                }
+                o
+            }
         }
     }
 }
@@ -530,6 +550,7 @@ impl std::fmt::Display for DhcpOptionTypeValue {
                     .collect::<Vec<_>>()
                     .join("")
             ),
+            DhcpOptionTypeValue::DomainList(v) => write!(f, "{}", v.join(",")),
         }
     }
 }
@@ -706,6 +727,14 @@ impl DhcpParse for MessageType {
     }
 }
 
+impl DhcpParse for Vec<String> {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        let mut buf = crate::pktparser::Buffer::new(v);
+        Some(buf.get_domains()?.iter().map(|d| d.join(".")).collect())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DhcpOptions {
     pub other: collections::HashMap<DhcpOption, Vec<u8>>,
@@ -751,6 +780,10 @@ impl DhcpOptions {
         let mut v = Vec::new();
         value.serialise(&mut v);
         self.other.insert(*option, v);
+    }
+
+    pub fn mutate_option_value(&mut self, option: &DhcpOption, value: &DhcpOptionTypeValue) {
+        self.other.insert(*option, value.as_bytes());
     }
 
     pub fn maybe_set_option<T: Serialise>(self, option: &DhcpOption, value: Option<&T>) -> Self {
