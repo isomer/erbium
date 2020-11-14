@@ -41,7 +41,6 @@ pub mod pool;
 #[cfg(test)]
 mod test;
 
-type Pool = Arc<sync::Mutex<pool::Pool>>;
 type UdpSocket = udp::UdpSocket;
 type ServerIds = std::collections::HashSet<net::Ipv4Addr>;
 pub type SharedServerIds = Arc<sync::Mutex<ServerIds>>;
@@ -628,148 +627,6 @@ fn to_array(mac: &[u8]) -> Option<[u8; 6]> {
     mac[0..6].try_into().ok()
 }
 
-async fn recvdhcp(
-    raw: Arc<raw::RawSocket>,
-    pools: Pool,
-    serverids: SharedServerIds,
-    pkt: &[u8],
-    src: std::net::SocketAddr,
-    netinfo: crate::net::netinfo::SharedNetInfo,
-    intf: u32,
-    conf: super::config::SharedConfig,
-) {
-    /* First, lets find the various metadata IP addresses */
-    let ip4 = if let net::SocketAddr::V4(f) = src {
-        f
-    } else {
-        println!("from={:?}", src);
-        unimplemented!()
-    };
-    let optional_dst = netinfo.get_ipv4_by_ifidx(intf).await;
-    if optional_dst.is_none() {
-        println!(
-            "No IPv4 found on interface {}",
-            netinfo.get_safe_name_by_ifidx(intf).await
-        );
-        return;
-    }
-
-    /* Now lets decode the packet, and if it fails decode, fail the function early */
-    let req = match dhcppkt::parse(pkt) {
-        Err(e) => {
-            println!("Failed to parse packet: {}", e);
-            return;
-        }
-        Ok(req) => req,
-    };
-
-    /* Log what we've got */
-    let request = DHCPRequest {
-        pkt: req,
-        serverip: optional_dst.unwrap(),
-        ifindex: intf,
-    };
-    log_pkt(&request, &netinfo).await;
-
-    /* Now, lets process the packet we've found */
-    let reply;
-    {
-        /* Limit the amount of time we have these locked to just handling the packet */
-        let mut pool = pools.lock().await;
-        let lockedconf = conf.lock().await;
-
-        reply = match handle_pkt(
-            &mut pool,
-            &request,
-            get_serverids(&serverids).await,
-            &lockedconf,
-        )
-        .await
-        {
-            Err(e) => {
-                println!(
-                    "{}: Failed to handle {}: {}",
-                    format_client(&request.pkt),
-                    request
-                        .pkt
-                        .options
-                        .get_messagetype()
-                        .map(|x| x.to_string())
-                        .unwrap_or_else(|| "packet".into()),
-                    e
-                );
-                return;
-            }
-            Ok(r) => r,
-        };
-    }
-
-    /* Now, we should have a packet ready to send */
-    /* First, if we're claiming to be particular IP, we should remember that as an IP that is one
-     * of ours
-     */
-    if let Some(si) = reply.options.get_serverid() {
-        serverids.lock().await.insert(si);
-    }
-
-    /* Log what we're sending */
-    println!(
-        "{}: Sending {} on {} with {} for {}",
-        format_client(&reply),
-        reply
-            .options
-            .get_messagetype()
-            .map(|x| x.to_string())
-            .unwrap_or_else(|| "[unknown]".into()),
-        netinfo
-            .get_name_by_ifidx(intf)
-            .await
-            .unwrap_or_else(|| "<unknown if>".into()),
-        reply.yiaddr,
-        reply
-            .options
-            .get_option::<u32>(&dhcppkt::OPTION_LEASETIME)
-            .unwrap_or(0)
-    );
-    log_options(&reply);
-
-    /* Collect metadata ready to send */
-    let srcll = if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) =
-        netinfo.get_linkaddr_by_ifidx(intf).await
-    {
-        srcll
-    } else {
-        println!("{}: Not a usable LinkLayer?!", format_client(&reply));
-        return;
-    };
-
-    let chaddr = if let Some(chaddr) = to_array(&reply.chaddr) {
-        chaddr
-    } else {
-        println!(
-            "{}: Cannot send reply to invalid address {:?}",
-            format_client(&reply),
-            reply.chaddr
-        );
-        return;
-    };
-
-    /* Construct the raw packet from the reply to send */
-    let replybuf = reply.serialise();
-    let etherbuf = packet::Fragment::new_udp(
-        std::net::SocketAddrV4::new(request.serverip, 67),
-        &srcll,
-        ip4,
-        &chaddr,
-        packet::Tail::Payload(&replybuf),
-    )
-    .flatten();
-
-    if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
-        println!("{}: Failed to send reply: {:?}", format_client(&reply), e);
-    }
-}
-
 enum RunError {
     Io(std::io::Error),
     PoolError(pool::Error),
@@ -794,6 +651,140 @@ pub struct DhcpService {
 }
 
 impl DhcpService {
+    async fn recvdhcp(&self, pkt: &[u8], src: std::net::SocketAddr, intf: u32) {
+        let raw = self.rawsock.clone();
+        /* First, lets find the various metadata IP addresses */
+        let ip4 = if let net::SocketAddr::V4(f) = src {
+            f
+        } else {
+            println!("from={:?}", src);
+            unimplemented!()
+        };
+        let optional_dst = self.netinfo.get_ipv4_by_ifidx(intf).await;
+        if optional_dst.is_none() {
+            println!(
+                "No IPv4 found on interface {}",
+                self.netinfo.get_safe_name_by_ifidx(intf).await
+            );
+            return;
+        }
+
+        /* Now lets decode the packet, and if it fails decode, fail the function early */
+        let req = match dhcppkt::parse(pkt) {
+            Err(e) => {
+                println!("Failed to parse packet: {}", e);
+                return;
+            }
+            Ok(req) => req,
+        };
+
+        /* Log what we've got */
+        let request = DHCPRequest {
+            pkt: req,
+            serverip: optional_dst.unwrap(),
+            ifindex: intf,
+        };
+        log_pkt(&request, &self.netinfo).await;
+
+        /* Now, lets process the packet we've found */
+        let reply;
+        {
+            /* Limit the amount of time we have these locked to just handling the packet */
+            let mut pool = self.pool.lock().await;
+            let lockedconf = self.conf.lock().await;
+
+            reply = match handle_pkt(
+                &mut pool,
+                &request,
+                get_serverids(&self.serverids).await,
+                &lockedconf,
+            )
+            .await
+            {
+                Err(e) => {
+                    println!(
+                        "{}: Failed to handle {}: {}",
+                        format_client(&request.pkt),
+                        request
+                            .pkt
+                            .options
+                            .get_messagetype()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "packet".into()),
+                        e
+                    );
+                    return;
+                }
+                Ok(r) => r,
+            };
+        }
+
+        /* Now, we should have a packet ready to send */
+        /* First, if we're claiming to be particular IP, we should remember that as an IP that is one
+         * of ours
+         */
+        if let Some(si) = reply.options.get_serverid() {
+            self.serverids.lock().await.insert(si);
+        }
+
+        /* Log what we're sending */
+        println!(
+            "{}: Sending {} on {} with {} for {}",
+            format_client(&reply),
+            reply
+                .options
+                .get_messagetype()
+                .map(|x| x.to_string())
+                .unwrap_or_else(|| "[unknown]".into()),
+            self.netinfo
+                .get_name_by_ifidx(intf)
+                .await
+                .unwrap_or_else(|| "<unknown if>".into()),
+            reply.yiaddr,
+            reply
+                .options
+                .get_option::<u32>(&dhcppkt::OPTION_LEASETIME)
+                .unwrap_or(0)
+        );
+        log_options(&reply);
+
+        /* Collect metadata ready to send */
+        let srcll = if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) =
+            self.netinfo.get_linkaddr_by_ifidx(intf).await
+        {
+            srcll
+        } else {
+            println!("{}: Not a usable LinkLayer?!", format_client(&reply));
+            return;
+        };
+
+        let chaddr = if let Some(chaddr) = to_array(&reply.chaddr) {
+            chaddr
+        } else {
+            println!(
+                "{}: Cannot send reply to invalid address {:?}",
+                format_client(&reply),
+                reply.chaddr
+            );
+            return;
+        };
+
+        /* Construct the raw packet from the reply to send */
+        let replybuf = reply.serialise();
+        let etherbuf = packet::Fragment::new_udp(
+            std::net::SocketAddrV4::new(request.serverip, 67),
+            &srcll,
+            ip4,
+            &chaddr,
+            packet::Tail::Payload(&replybuf),
+        )
+        .flatten();
+
+        if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
+            println!("{}: Failed to send reply: {:?}", format_client(&reply), e);
+        }
+    }
+
     async fn new_internal(
         netinfo: crate::net::netinfo::SharedNetInfo,
         conf: super::config::SharedConfig,
@@ -839,7 +830,7 @@ impl DhcpService {
         }
     }
 
-    async fn run_internal(&self) -> Result<(), RunError> {
+    async fn run_internal(self: std::sync::Arc<Self>) -> Result<(), RunError> {
         println!("Starting DHCP service");
         loop {
             let rm;
@@ -849,23 +840,15 @@ impl DhcpService {
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(RunError::Io(e)),
             }
-            let p = self.pool.clone();
-            let rs = self.rawsock.clone();
-            let s = self.serverids.clone();
-            let ni = self.netinfo.clone();
-            let c = self.conf.clone();
+            let self2 = self.clone();
             tokio::spawn(async move {
-                recvdhcp(
-                    rs,
-                    p,
-                    s,
-                    &rm.buffer,
-                    rm.address.unwrap(),
-                    ni,
-                    rm.local_intf().unwrap().try_into().unwrap(),
-                    c,
-                )
-                .await
+                self2
+                    .recvdhcp(
+                        &rm.buffer,
+                        rm.address.unwrap(),
+                        rm.local_intf().unwrap().try_into().unwrap(),
+                    )
+                    .await
             });
         }
     }
