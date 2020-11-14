@@ -25,6 +25,7 @@ use erbium::dhcp;
 
 enum Error {
     ConfigError(std::path::PathBuf, erbium::config::Error),
+    ServiceError(String),
 }
 
 impl std::fmt::Display for Error {
@@ -36,6 +37,7 @@ impl std::fmt::Display for Error {
                 path.to_string_lossy(),
                 e
             ),
+            Error::ServiceError(e) => write!(f, "{}", e),
         }
     }
 }
@@ -56,7 +58,12 @@ async fn go() -> Result<(), Error> {
         .map_err(|e| Error::ConfigError(config_file.to_path_buf(), e))?;
     let mut services = futures::stream::FuturesUnordered::new();
 
-    services.push(tokio::spawn(dhcp::run(netinfo, conf)));
+    let dhcp = std::sync::Arc::new(
+        dhcp::DhcpService::new(netinfo.clone(), conf.clone())
+            .await
+            .map_err(Error::ServiceError)?,
+    );
+    services.push(tokio::spawn(async move { dhcp.run().await }));
 
     while let Some(x) = services.next().await {
         println!("Service complete: {:?}", x)

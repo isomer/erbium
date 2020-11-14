@@ -56,14 +56,19 @@ async fn go() -> Result<(), Error> {
         .await
         .map_err(|e| Error::ConfigError(config_file.to_path_buf(), e))?;
 
+    let dhcp = std::sync::Arc::new(
+        dhcp::DhcpService::new(netinfo.clone(), conf.clone())
+            .await
+            .map_err(Error::ServiceError)?,
+    );
     let radv = std::sync::Arc::new(
         radv::RaAdvService::new(netinfo.clone(), conf.clone())
             .map_err(|x| Error::ServiceError(x.to_string()))?,
     );
 
     let mut services = futures::stream::FuturesUnordered::new();
-    services.push(tokio::spawn(dhcp::run(netinfo, conf)));
     services.push(tokio::spawn(dns::run()));
+    services.push(tokio::spawn(async move { dhcp.run().await }));
     services.push(tokio::spawn(async move { radv.run().await }));
 
     let x = services.next().await.unwrap();

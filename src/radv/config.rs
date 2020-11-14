@@ -61,25 +61,6 @@ pub struct Config {
     pub interfaces: Vec<Interface>,
 }
 
-fn str_parse_v6prefix(st: &str) -> Result<(std::net::Ipv6Addr, u8), Error> {
-    let sections: Vec<&str> = st.split('/').collect();
-    if sections.len() != 2 {
-        Err(Error::InvalidConfig(format!(
-            "Expected IPv6 prefix, got '{}'",
-            st
-        )))
-    } else {
-        Ok((
-            sections[0]
-                .parse()
-                .map_err(|e| Error::InvalidConfig(format!("{}", e)))?,
-            sections[1]
-                .parse()
-                .map_err(|e| Error::InvalidConfig(format!("{}", e)))?,
-        ))
-    }
-}
-
 fn parse_prefix(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix>, Error> {
     match fragment {
         yaml::Yaml::Hash(h) => {
@@ -90,13 +71,11 @@ fn parse_prefix(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix>, Err
             let mut preferred = None;
             for (k, v) in h {
                 match (k.as_str(), v) {
-                    (Some("prefix"), p) => {
-                        prefix = parse_string_as("prefix", p, str_parse_v6prefix)?
-                    }
+                    (Some("prefix"), p) => prefix = parse_string_prefix6("prefix", p)?,
                     (Some("on-link"), b) => onlink = parse_boolean("on-link", b)?,
                     (Some("autonomous"), b) => autonomous = parse_boolean("autonomous", b)?,
-                    (Some("valid"), d) => valid = parse_duration(d)?,
-                    (Some("preferred"), d) => preferred = parse_duration(d)?,
+                    (Some("valid"), d) => valid = parse_duration("valid", d)?,
+                    (Some("preferred"), d) => preferred = parse_duration("preferred", d)?,
                     (Some(m), _) => {
                         return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)))
                     }
@@ -108,9 +87,10 @@ fn parse_prefix(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix>, Err
                     }
                 }
             }
+            let prefix = prefix.unwrap();
             Ok(Some(Prefix {
-                addr: prefix.unwrap().0,
-                prefixlen: prefix.unwrap().1,
+                addr: prefix.addr,
+                prefixlen: prefix.prefixlen,
                 onlink: onlink.unwrap_or(true),
                 autonomous: autonomous.unwrap_or(true),
                 valid: valid.unwrap_or_else(|| std::time::Duration::from_secs(2592000)),
@@ -123,11 +103,6 @@ fn parse_prefix(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix>, Err
             type_to_name(e)
         ))),
     }
-}
-
-fn str_parse_address(st: &str) -> Result<std::net::Ipv6Addr, Error> {
-    st.parse::<std::net::Ipv6Addr>()
-        .map_err(|e| Error::InvalidConfig(e.to_string()))
 }
 
 fn parse_rdnss(
@@ -146,11 +121,12 @@ fn parse_rdnss(
         for (k, v) in h {
             match (k.as_str(), v) {
                 (Some("addresses"), a) => {
-                    address = ConfigValue::from_option(parse_array("addresses", a, |n, f| {
-                        parse_string_as(n, f, str_parse_address)
-                    })?)
+                    address =
+                        ConfigValue::from_option(parse_array("addresses", a, parse_string_ip6)?)
                 }
-                (Some("lifetime"), d) => lifetime = ConfigValue::from_option(parse_duration(d)?),
+                (Some("lifetime"), d) => {
+                    lifetime = ConfigValue::from_option(parse_duration("lifetime", d)?)
+                }
                 (Some(m), _) => {
                     return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)))
                 }
@@ -197,7 +173,9 @@ fn parse_dnssl(
                 (Some("domains"), a) => {
                     domains = ConfigValue::from_option(parse_array("domains", a, parse_domain)?)
                 }
-                (Some("lifetime"), d) => lifetime = ConfigValue::from_option(parse_duration(d)?),
+                (Some("lifetime"), d) => {
+                    lifetime = ConfigValue::from_option(parse_duration("lifetime", d)?)
+                }
                 (Some(m), _) => {
                     return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)))
                 }
@@ -226,8 +204,8 @@ fn parse_pref64(name: &str, fragment: &yaml::Yaml) -> Result<Option<Pref64>, Err
         let mut lifetime = None;
         for (k, v) in h {
             match (k.as_str(), v) {
-                (Some("prefix"), p) => prefix = parse_string_as("prefix", p, str_parse_v6prefix)?,
-                (Some("lifetime"), d) => lifetime = parse_duration(d)?,
+                (Some("prefix"), p) => prefix = parse_string_prefix6("prefix", p)?,
+                (Some("lifetime"), d) => lifetime = parse_duration("lifetime", d)?,
                 (Some(n), _) => {
                     return Err(Error::InvalidConfig(format!("Unknown {} key: {}", name, n)))
                 }
@@ -242,9 +220,9 @@ fn parse_pref64(name: &str, fragment: &yaml::Yaml) -> Result<Option<Pref64>, Err
         }
         if let Some(prefix) = prefix {
             Ok(Some(Pref64 {
-                prefix: prefix.0,
+                prefix: prefix.addr,
                 lifetime: lifetime.unwrap_or_else(|| std::time::Duration::from_secs(600)),
-                prefixlen: prefix.1,
+                prefixlen: prefix.prefixlen,
             }))
         } else {
             Ok(None)
@@ -279,9 +257,9 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                 (Some("hop-limit"), i) => hoplimit = parse_num("hop-limit", i)?,
                 (Some("managed"), b) => managed = parse_boolean("managed", b)?,
                 (Some("other"), o) => other = parse_boolean("other", o)?,
-                (Some("lifetime"), d) => lifetime = parse_duration(d)?,
-                (Some("reachable"), d) => reachable = parse_duration(d)?,
-                (Some("retransmit"), d) => retrans = parse_duration(d)?,
+                (Some("lifetime"), d) => lifetime = parse_duration("lifetime", d)?,
+                (Some("reachable"), d) => reachable = parse_duration("reachable", d)?,
+                (Some("retransmit"), d) => retrans = parse_duration("retransmit", d)?,
                 (Some("mtu"), m) => mtu = ConfigValue::from_option(parse_num("mtu", m)?),
                 (Some("pref64"), p) => pref64 = parse_pref64("pref64", p)?,
                 (Some("prefixes"), p) => {

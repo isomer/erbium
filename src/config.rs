@@ -222,80 +222,278 @@ where
     }
 }
 
-pub fn parse_string_as<T, F>(
-    name: &str,
-    fragment: &yaml::Yaml,
-    str_parser: F,
-) -> Result<Option<T>, Error>
-where
-    F: Fn(&str) -> Result<T, Error>,
-{
-    match parse_string(name, fragment) {
-        Ok(Some(s)) => Ok(Some(str_parser(&s)?)),
-        Ok(None) => Ok(None),
-        Err(e) => Err(e),
+fn str_ip(ost: Option<String>) -> Result<Option<std::net::IpAddr>, Error> {
+    ost.map(|st| {
+        st.parse()
+            .map_err(|e| Error::InvalidConfig(format!("{}", e)))
+    })
+    .transpose()
+}
+
+fn str_ip4(ost: Option<String>) -> Result<Option<std::net::Ipv4Addr>, Error> {
+    ost.map(|st| {
+        st.parse()
+            .map_err(|e| Error::InvalidConfig(format!("{}", e)))
+    })
+    .transpose()
+}
+
+fn str_ip6(ost: Option<String>) -> Result<Option<std::net::Ipv6Addr>, Error> {
+    ost.map(|st| {
+        st.parse()
+            .map_err(|e| Error::InvalidConfig(format!("{}", e)))
+    })
+    .transpose()
+}
+
+#[derive(Debug)]
+enum HexError {
+    InvalidDigit(u8),
+    WrongLength,
+}
+
+impl std::fmt::Display for HexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HexError::InvalidDigit(x) => write!(f, "Unexpected hex digit {}", x),
+            HexError::WrongLength => write!(f, "Hex byte is not two digits long"),
+        }
     }
 }
 
-pub fn str_parse_ip(st: &str) -> Result<std::net::IpAddr, Error> {
-    st.parse()
-        .map_err(|e| Error::InvalidConfig(format!("{}", e)))
+fn hexdigit(c: u8) -> Result<u8, HexError> {
+    match c {
+        b'A'..=b'F' => Ok(c - b'A' + 10),
+        b'a'..=b'f' => Ok(c - b'a' + 10),
+        b'0'..=b'9' => Ok(c - b'0'),
+        _ => Err(HexError::InvalidDigit(c)),
+    }
 }
 
-pub fn parse_duration(value: &yaml::Yaml) -> Result<Option<std::time::Duration>, Error> {
-    match value {
-        yaml::Yaml::Null => Ok(None),
-        yaml::Yaml::String(v) => {
-            let mut num = None;
-            let mut ret = Default::default();
-            for c in v.chars() {
-                match c {
-                    '0'..='9' => {
-                        if let Some(n) = num {
-                            num = Some(n * 10 + c as u64 - '0' as u64);
-                        } else {
-                            num = Some(c as u64 - '0' as u64);
-                        }
-                    }
-                    's' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap());
-                    }
-                    'm' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap() * 60);
-                    }
-                    'h' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap() * 3600);
-                    }
-                    'd' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap() * 86400);
-                    }
-                    'w' => {
-                        ret += std::time::Duration::from_secs(num.take().unwrap() * 7 * 86400);
-                    }
-                    x if x.is_whitespace() => (),
-                    '_' => (),
-                    _ => {
-                        return Err(Error::InvalidConfig(format!(
-                            "Unexpected {} in duration",
-                            c
-                        )))
-                    }
+fn hexbyte(st: &str) -> Result<u8, HexError> {
+    let mut it = st.bytes();
+    if let Some(n1) = it.next() {
+        if let Some(n2) = it.next() {
+            if it.next().is_none() {
+                return Ok((hexdigit(n1)? << 4) | hexdigit(n2)?);
+            }
+        }
+    }
+    Err(HexError::WrongLength)
+}
+
+fn str_hwaddr(ost: Option<String>) -> Result<Option<Vec<u8>>, Error> {
+    ost.map(|st| {
+        st.split(':') /* Vec<String> */
+            .map(hexbyte) /* Vec<Result<u8>> */
+            .collect()
+    })
+    .transpose()
+    .map_err(|e| Error::InvalidConfig(e.to_string()))
+}
+
+/// Parses a prefix of the form IP/prefixlen.
+/// IP can be v4 or v6.
+/// Currently no error handling on prefixlen is done.
+fn str_prefix(ost: Option<String>) -> Result<Option<Prefix>, Error> {
+    Ok(ost
+        .map(|st| {
+            let sections = st.split('/').collect::<Vec<_>>();
+            if sections.len() != 2 {
+                Err(Error::InvalidConfig(format!(
+                    "Expected IP prefix, but '{}'",
+                    st
+                )))
+            } else {
+                let prefixlen = sections[1]
+                    .parse()
+                    .map_err(|x| Error::InvalidConfig(format!("{}", x)))?;
+                match str_ip(Some(sections[0].into())) {
+                    Ok(Some(std::net::IpAddr::V4(ip4))) => Ok(Some(Prefix::V4(Prefix4 {
+                        addr: ip4,
+                        prefixlen,
+                    }))),
+                    Ok(Some(std::net::IpAddr::V6(ip6))) => Ok(Some(Prefix::V6(Prefix6 {
+                        addr: ip6,
+                        prefixlen,
+                    }))),
+                    Err(e) => Err(e),
+                    Ok(None) => Ok(None),
                 }
             }
-            if let Some(n) = num {
-                ret += std::time::Duration::from_secs(n);
+        })
+        .transpose()?
+        .flatten())
+}
+
+/// Parses a prefix of the form IPv4/prefixlen.
+/// Currently no error handling on prefixlen is done.
+fn str_prefix4(ost: Option<String>) -> Result<Option<Prefix4>, Error> {
+    Ok(ost
+        .map(|st| {
+            let sections = st.split('/').collect::<Vec<_>>();
+            if sections.len() != 2 {
+                Err(Error::InvalidConfig(format!(
+                    "Expected IPv4 prefix, but '{}'",
+                    st
+                )))
+            } else {
+                let prefixlen = sections[1]
+                    .parse()
+                    .map_err(|x| Error::InvalidConfig(format!("{}", x)))?;
+                match str_ip4(Some(sections[0].into())) {
+                    Ok(Some(ip4)) => Ok(Some(Prefix4 {
+                        addr: ip4,
+                        prefixlen,
+                    })),
+                    Err(e) => Err(e),
+                    Ok(None) => Ok(None),
+                }
             }
-            Ok(Some(ret))
+        })
+        .transpose()?
+        .flatten())
+}
+
+/// Parses a prefix of the form IPv6/prefixlen.
+/// Currently no error handling on prefixlen is done.
+fn str_prefix6(ost: Option<String>) -> Result<Option<Prefix6>, Error> {
+    Ok(ost
+        .map(|st| {
+            let sections = st.split('/').collect::<Vec<_>>();
+            if sections.len() != 2 {
+                Err(Error::InvalidConfig(format!(
+                    "Expected IPv6 prefix, but '{}'",
+                    st
+                )))
+            } else {
+                let prefixlen = sections[1]
+                    .parse()
+                    .map_err(|x| Error::InvalidConfig(format!("{}", x)))?;
+                match str_ip6(Some(sections[0].into())) {
+                    Ok(Some(ip6)) => Ok(Some(Prefix6 {
+                        addr: ip6,
+                        prefixlen,
+                    })),
+                    Err(e) => Err(e),
+                    Ok(None) => Ok(None),
+                }
+            }
+        })
+        .transpose()?
+        .flatten())
+}
+
+fn str_duration(ost: Option<String>) -> Result<Option<std::time::Duration>, Error> {
+    ost.map(|st| {
+        let mut num = None;
+        let mut ret = Default::default();
+        for c in st.chars() {
+            match c {
+                '0'..='9' => {
+                    if let Some(n) = num {
+                        num = Some(n * 10 + c as u64 - '0' as u64);
+                    } else {
+                        num = Some(c as u64 - '0' as u64);
+                    }
+                }
+                's' => {
+                    ret += std::time::Duration::from_secs(num.take().unwrap());
+                }
+                'm' => {
+                    ret += std::time::Duration::from_secs(num.take().unwrap() * 60);
+                }
+                'h' => {
+                    ret += std::time::Duration::from_secs(num.take().unwrap() * 3600);
+                }
+                'd' => {
+                    ret += std::time::Duration::from_secs(num.take().unwrap() * 86400);
+                }
+                'w' => {
+                    ret += std::time::Duration::from_secs(num.take().unwrap() * 7 * 86400);
+                }
+                x if x.is_whitespace() => (),
+                '_' => (),
+                _ => {
+                    return Err(Error::InvalidConfig(format!(
+                        "Unexpected {} in duration",
+                        c
+                    )))
+                }
+            }
         }
-        yaml::Yaml::Integer(s) => Ok(Some(std::time::Duration::from_secs(
-            u64::try_from(*s)
-                .map_err(|_| Error::InvalidConfig("Durations cannot be negative".into()))?,
-        ))),
-        e => Err(Error::InvalidConfig(format!(
-            "Expected duration, got {:?}",
-            e,
-        ))),
+        if let Some(n) = num {
+            ret += std::time::Duration::from_secs(n);
+        }
+        Ok(ret)
+    })
+    .transpose()
+}
+
+pub fn parse_string_hwaddr(name: &str, fragment: &yaml::Yaml) -> Result<Option<Vec<u8>>, Error> {
+    parse_string(name, fragment).and_then(str_hwaddr)
+}
+
+pub fn parse_string_ip(
+    name: &str,
+    fragment: &yaml::Yaml,
+) -> Result<Option<std::net::IpAddr>, Error> {
+    parse_string(name, fragment).and_then(str_ip)
+}
+
+pub fn parse_string_ip4(
+    name: &str,
+    fragment: &yaml::Yaml,
+) -> Result<Option<std::net::Ipv4Addr>, Error> {
+    parse_string(name, fragment).and_then(str_ip4)
+}
+
+pub fn parse_string_ip6(
+    name: &str,
+    fragment: &yaml::Yaml,
+) -> Result<Option<std::net::Ipv6Addr>, Error> {
+    parse_string(name, fragment).and_then(str_ip6)
+}
+
+pub fn parse_string_prefix(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix>, Error> {
+    parse_string(name, fragment).and_then(str_prefix)
+}
+
+pub fn parse_string_prefix4(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix4>, Error> {
+    parse_string(name, fragment).and_then(str_prefix4)
+}
+
+pub fn parse_string_prefix6(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix6>, Error> {
+    parse_string(name, fragment).and_then(str_prefix6)
+}
+
+pub fn parse_duration(
+    name: &str,
+    fragment: &yaml::Yaml,
+) -> Result<Option<std::time::Duration>, Error> {
+    if let yaml::Yaml::Integer(i) = fragment {
+        Ok(Some(std::time::Duration::from_secs(*i as u64)))
+    } else {
+        parse_string(name, fragment).and_then(str_duration)
     }
+}
+
+#[derive(Debug)]
+pub struct Prefix4 {
+    pub addr: std::net::Ipv4Addr,
+    pub prefixlen: u8,
+}
+
+#[derive(Debug)]
+pub struct Prefix6 {
+    pub addr: std::net::Ipv6Addr,
+    pub prefixlen: u8,
+}
+
+#[derive(Debug)]
+pub enum Prefix {
+    V4(Prefix4),
+    V6(Prefix6),
 }
 
 #[derive(Debug, Default)]
@@ -305,6 +503,7 @@ pub struct Config {
     pub dns_servers: Vec<std::net::IpAddr>,
     pub dns_search: Vec<String>,
     pub captive_portal: Option<String>,
+    pub addresses: Vec<Prefix>,
 }
 
 pub type SharedConfig = std::sync::Arc<tokio::sync::Mutex<Config>>;
@@ -322,15 +521,14 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut dns_servers = vec![];
         let mut dns_search = vec![];
         let mut captive_portal = None;
+        let mut addresses = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
                 (Some("dhcp"), d) => dhcp = crate::dhcp::config::Config::new(d)?,
                 (Some("router-advertisements"), r) => ra = crate::radv::config::parse(r)?,
                 (Some("dns-servers"), s) => {
-                    dns_servers = parse_array("dns-servers", s, |name, yaml| {
-                        parse_string_as(name, yaml, str_parse_ip)
-                    })?
-                    .ok_or_else(|| Error::InvalidConfig("dns-servers cannot be null".into()))?
+                    dns_servers = parse_array("dns-servers", s, parse_string_ip)?
+                        .ok_or_else(|| Error::InvalidConfig("dns-servers cannot be null".into()))?
                 }
                 (Some("dns-search"), s) => {
                     dns_search = parse_array("dns-search", s, parse_string)?
@@ -338,6 +536,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 }
                 (Some("captive-portal"), s) => {
                     captive_portal = parse_string("captive-portal", s)?;
+                }
+                (Some("addresses"), s) => {
+                    addresses = parse_array("addresses", s, parse_string_prefix)?;
                 }
                 (Some(x), _) => {
                     return Err(Error::InvalidConfig(format!(
@@ -359,6 +560,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             dns_servers,
             dns_search,
             captive_portal,
+            addresses: addresses.unwrap_or_else(Vec::new),
         };
         Ok(std::sync::Arc::new(tokio::sync::Mutex::new(conf)))
     } else {
@@ -459,6 +661,7 @@ fn test_simple_config_parse() -> Result<(), Error> {
         "---
 dns-servers: ['8.8.8.8', '8.8.4.4', '2001:4860:4860::8888', '2001:4860:4860::8844']
 dns-search: ['example.com']
+addresses: [192.0.2.0/24, 2001:db8::/64]
 
 dhcp:
     policies:
@@ -476,11 +679,11 @@ router-advertisements:
 #[test]
 fn test_duration() {
     assert_eq!(
-        parse_duration(&yaml::Yaml::String("5s".into())).unwrap(),
+        parse_duration("test", &yaml::Yaml::String("5s".into())).unwrap(),
         Some(std::time::Duration::from_secs(5))
     );
     assert_eq!(
-        parse_duration(&yaml::Yaml::String("1w2d3h4m5s".into())).unwrap(),
+        parse_duration("test", &yaml::Yaml::String("1w2d3h4m5s".into())).unwrap(),
         Some(std::time::Duration::from_secs(
             7 * 86400 + 2 * 86400 + 3 * 3600 + 4 * 60 + 5
         ))

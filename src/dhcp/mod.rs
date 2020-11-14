@@ -537,19 +537,15 @@ fn log_options(req: &dhcppkt::DHCP) {
 }
 
 async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNetInfo) {
-    print!("{}", format_client(&request.pkt));
-    print!(": ");
     print!(
-        "{}",
+        "{}: {} on {}",
+        format_client(&request.pkt),
         request
             .pkt
             .options
             .get_messagetype()
             .map(|x| x.to_string())
             .unwrap_or_else(|| "[unknown]".into()),
-    );
-    print!(
-        " on {}",
         netinfo.get_safe_name_by_ifidx(request.ifindex).await
     );
     if !request.serverip.is_unspecified() {
@@ -583,7 +579,12 @@ async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNet
     );
 }
 
-pub fn handle_pkt(
+pub async fn build_default_config(_request: &DHCPRequest) -> Result<(), DhcpError> {
+    //let intf =
+    unimplemented!()
+}
+
+pub async fn handle_pkt(
     mut pools: &mut pool::Pool,
     request: &DHCPRequest,
     serverids: ServerIds,
@@ -682,7 +683,9 @@ async fn recvdhcp(
             &request,
             get_serverids(&serverids).await,
             &lockedconf,
-        ) {
+        )
+        .await
+        {
             Err(e) => {
                 println!(
                     "{}: Failed to handle {}: {}",
@@ -781,68 +784,97 @@ impl ToString for RunError {
     }
 }
 
-async fn run_internal(
+pub struct DhcpService {
     netinfo: crate::net::netinfo::SharedNetInfo,
-    conf: super::config::SharedConfig,
-) -> Result<(), RunError> {
-    println!("Starting DHCP service");
-    let rawsock = Arc::new(raw::RawSocket::new(raw::EthProto::ALL).map_err(RunError::Io)?);
-    let pools = Arc::new(sync::Mutex::new(
-        pool::Pool::new().map_err(RunError::PoolError)?,
-    ));
-    let serverids: SharedServerIds = Arc::new(sync::Mutex::new(std::collections::HashSet::new()));
-    let listener = UdpSocket::bind(
-        &tokio::net::lookup_host("0.0.0.0:67")
-            .await
-            .map_err(RunError::Io)?
-            .collect::<Vec<_>>(),
-    )
-    .await
-    .map_err(RunError::Io)?;
-    listener
-        .set_opt_ipv4_packet_info(true)
-        .map_err(RunError::Io)?;
-    println!(
-        "Listening for DHCP on {}",
-        listener.local_addr().map_err(RunError::Io)?
-    );
-
-    loop {
-        let rm;
-        match listener.recv_msg(65536, udp::MsgFlags::empty()).await {
-            Ok(m) => rm = m,
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
-            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(e) => return Err(RunError::Io(e)),
-        }
-        let p = pools.clone();
-        let rs = rawsock.clone();
-        let s = serverids.clone();
-        let ni = netinfo.clone();
-        let c = conf.clone();
-        tokio::spawn(async move {
-            recvdhcp(
-                rs,
-                p,
-                s,
-                &rm.buffer,
-                rm.address.unwrap(),
-                ni,
-                rm.local_intf().unwrap().try_into().unwrap(),
-                c,
-            )
-            .await
-        });
-    }
+    conf: crate::config::SharedConfig,
+    rawsock: std::sync::Arc<crate::net::raw::RawSocket>,
+    pool: std::sync::Arc<sync::Mutex<pool::Pool>>,
+    serverids: SharedServerIds,
+    listener: UdpSocket,
 }
 
-pub async fn run(
-    netinfo: crate::net::netinfo::SharedNetInfo,
-    conf: super::config::SharedConfig,
-) -> Result<(), String> {
-    match run_internal(netinfo, conf).await {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e.to_string()),
+impl DhcpService {
+    async fn new_internal(
+        netinfo: crate::net::netinfo::SharedNetInfo,
+        conf: super::config::SharedConfig,
+    ) -> Result<Self, RunError> {
+        let rawsock = Arc::new(raw::RawSocket::new(raw::EthProto::ALL).map_err(RunError::Io)?);
+        let pool = Arc::new(sync::Mutex::new(
+            pool::Pool::new().map_err(RunError::PoolError)?,
+        ));
+        let serverids: SharedServerIds =
+            Arc::new(sync::Mutex::new(std::collections::HashSet::new()));
+        let listener = UdpSocket::bind(
+            &tokio::net::lookup_host("0.0.0.0:67")
+                .await
+                .map_err(RunError::Io)?
+                .collect::<Vec<_>>(),
+        )
+        .await
+        .map_err(RunError::Io)?;
+        listener
+            .set_opt_ipv4_packet_info(true)
+            .map_err(RunError::Io)?;
+        println!(
+            "Listening for DHCP on {}",
+            listener.local_addr().map_err(RunError::Io)?
+        );
+        Ok(Self {
+            netinfo,
+            conf,
+            rawsock,
+            serverids,
+            listener,
+            pool,
+        })
+    }
+
+    pub async fn new(
+        netinfo: crate::net::netinfo::SharedNetInfo,
+        conf: super::config::SharedConfig,
+    ) -> Result<Self, String> {
+        match Self::new_internal(netinfo, conf).await {
+            Ok(x) => Ok(x),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    async fn run_internal(&self) -> Result<(), RunError> {
+        println!("Starting DHCP service");
+        loop {
+            let rm;
+            match self.listener.recv_msg(65536, udp::MsgFlags::empty()).await {
+                Ok(m) => rm = m,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(RunError::Io(e)),
+            }
+            let p = self.pool.clone();
+            let rs = self.rawsock.clone();
+            let s = self.serverids.clone();
+            let ni = self.netinfo.clone();
+            let c = self.conf.clone();
+            tokio::spawn(async move {
+                recvdhcp(
+                    rs,
+                    p,
+                    s,
+                    &rm.buffer,
+                    rm.address.unwrap(),
+                    ni,
+                    rm.local_intf().unwrap().try_into().unwrap(),
+                    c,
+                )
+                .await
+            });
+        }
+    }
+
+    pub async fn run(self: std::sync::Arc<Self>) -> Result<(), String> {
+        match self.run_internal().await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
     }
 }
 

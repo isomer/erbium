@@ -21,50 +21,7 @@ use std::convert::TryFrom;
 use std::ops::Sub;
 use yaml_rust::yaml;
 
-use crate::config::Error;
-
-#[derive(Debug)]
-pub enum HexError {
-    InvalidDigit(u8),
-    OddLength,
-}
-
-impl std::fmt::Display for HexError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            HexError::InvalidDigit(x) => write!(f, "Unexpected hex digit {}", x),
-            HexError::OddLength => write!(f, "Hex number has odd length"),
-        }
-    }
-}
-
-fn hexdigit(c: u8) -> Result<u8, HexError> {
-    match c {
-        b'A'..=b'F' => Ok(c - b'A' + 10),
-        b'a'..=b'f' => Ok(c - b'a' + 10),
-        b'0'..=b'9' => Ok(c - b'0'),
-        _ => Err(HexError::InvalidDigit(c)),
-    }
-}
-
-fn hexstring(s: &[u8]) -> Result<Vec<u8>, HexError> {
-    let mut v = Vec::new();
-    let mut it = s.iter();
-    loop {
-        let mut byte;
-        if let Some(hi) = it.next() {
-            byte = hexdigit(*hi)? << 4;
-        } else {
-            return Ok(v);
-        }
-        if let Some(lo) = it.next() {
-            byte |= hexdigit(*lo)?;
-        } else {
-            return Err(HexError::OddLength);
-        }
-        v.push(byte)
-    }
-}
+use crate::config::*;
 
 #[derive(Clone, Debug, Default)]
 pub struct Policy {
@@ -101,72 +58,6 @@ pub struct Config {
 }
 
 impl Config {
-    fn parse_string(fragment: &yaml::Yaml) -> Result<Option<String>, Error> {
-        match fragment {
-            yaml::Yaml::Null => Ok(None),
-            yaml::Yaml::String(s) => Ok(Some(s.into())),
-            e => Err(Error::InvalidConfig(format!(
-                "Expected String, got '{:?}'",
-                e
-            ))),
-        }
-    }
-
-    fn parse_mac(fragment: &yaml::Yaml) -> Result<Option<Vec<u8>>, Error> {
-        match fragment {
-            yaml::Yaml::Null => Ok(None),
-            yaml::Yaml::String(s) => Ok(Some(
-                s.split(':')
-                    .map(|b| hexstring(b.as_bytes()))
-                    .flatten()
-                    .flatten()
-                    .collect(),
-            )),
-            e => Err(Error::InvalidConfig(format!(
-                "Hardware addresses should be a string, not {:?}",
-                e
-            ))),
-        }
-    }
-
-    fn parse_required_ip(fragment: &yaml::Yaml) -> Result<std::net::Ipv4Addr, Error> {
-        match fragment {
-            yaml::Yaml::Null => Err(Error::InvalidConfig("IP address cannot be null".into())),
-            yaml::Yaml::String(s) => Ok(s.parse().map_err(|_| {
-                Error::InvalidConfig(format!("iplist contains an invalid IP: {:?}", s))
-            })?),
-            e => Err(Error::InvalidConfig(format!(
-                "Expected a string, got {:?}",
-                e
-            ))),
-        }
-    }
-
-    fn parse_ip(fragment: &yaml::Yaml) -> Result<Option<std::net::Ipv4Addr>, Error> {
-        if yaml::Yaml::Null == *fragment {
-            Ok(None)
-        } else {
-            Ok(Some(Self::parse_required_ip(fragment)?))
-        }
-    }
-
-    fn parse_iplist(fragment: &yaml::Yaml) -> Result<Option<Vec<std::net::Ipv4Addr>>, Error> {
-        match fragment {
-            yaml::Yaml::Null => Ok(None),
-            yaml::Yaml::Array(yiplist) => {
-                let mut iplist = Vec::new();
-                for ip in yiplist {
-                    iplist.push(Self::parse_required_ip(ip)?)
-                }
-                Ok(Some(iplist))
-            }
-            e => Err(Error::InvalidConfig(format!(
-                "Expected IP list, got {:?}",
-                e
-            ))),
-        }
-    }
-
     fn parse_routes(fragment: &yaml::Yaml) -> Result<Option<Vec<dhcppkt::Route>>, Error> {
         match fragment {
             yaml::Yaml::Null => Ok(None),
@@ -184,7 +75,9 @@ impl Config {
                                     ))
                                 }
                                 yaml::Yaml::String(s) if s == "next-hop" => {
-                                    nexthop = Some(Self::parse_required_ip(v)?);
+                                    nexthop = Some(parse_string_ip4("next-hop", v)?.ok_or_else(
+                                        || Error::InvalidConfig("next-hop cannot be null".into()),
+                                    )?);
                                 }
                                 yaml::Yaml::String(s) if s == "prefix" => match v {
                                     yaml::Yaml::Null => {
@@ -297,17 +190,6 @@ impl Config {
         }
     }
 
-    fn parse_bool(value: &yaml::Yaml) -> Result<Option<bool>, Error> {
-        match value {
-            yaml::Yaml::Null => Ok(None),
-            yaml::Yaml::Boolean(b) => Ok(Some(*b)),
-            e => Err(Error::InvalidConfig(format!(
-                "Expected Boolean, got '{:?}'",
-                e
-            ))),
-        }
-    }
-
     fn parse_generic(
         name: &str,
         value: &yaml::Yaml,
@@ -319,16 +201,16 @@ impl Config {
                 opt,
                 match opt.get_type() {
                     Some(DhcpOptionType::String) => {
-                        Config::parse_string(value)?.map(DhcpOptionTypeValue::String)
+                        parse_string(name, value)?.map(DhcpOptionTypeValue::String)
                     }
                     Some(DhcpOptionType::IpList) => {
-                        Config::parse_iplist(value)?.map(DhcpOptionTypeValue::IpList)
+                        parse_array(name, value, parse_string_ip4)?.map(DhcpOptionTypeValue::IpList)
                     }
                     Some(DhcpOptionType::Routes) => {
                         Config::parse_routes(value)?.map(DhcpOptionTypeValue::Routes)
                     }
                     Some(DhcpOptionType::Ip) => {
-                        Config::parse_ip(value)?.map(DhcpOptionTypeValue::Ip)
+                        parse_string_ip4(name, value)?.map(DhcpOptionTypeValue::Ip)
                     }
                     Some(DhcpOptionType::I32) => Config::parse_number(value)?
                         .map(|i| {
@@ -362,7 +244,7 @@ impl Config {
                         })
                         .transpose()?
                         .map(DhcpOptionTypeValue::U32),
-                    Some(DhcpOptionType::Seconds16) => crate::config::parse_duration(value)?
+                    Some(DhcpOptionType::Seconds16) => parse_duration(name, value)?
                         .map(|i| {
                             u16::try_from(i.as_secs()).map_err(|_| {
                                 Error::InvalidConfig(format!(
@@ -373,7 +255,7 @@ impl Config {
                         })
                         .transpose()?
                         .map(DhcpOptionTypeValue::U16),
-                    Some(DhcpOptionType::Seconds32) => crate::config::parse_duration(value)?
+                    Some(DhcpOptionType::Seconds32) => parse_duration(name, value)?
                         .map(|i| {
                             u32::try_from(i.as_secs()).map_err(|_| {
                                 Error::InvalidConfig(format!(
@@ -385,13 +267,13 @@ impl Config {
                         .transpose()?
                         .map(DhcpOptionTypeValue::U32),
                     Some(DhcpOptionType::Bool) => {
-                        Config::parse_bool(value)?.map(|b| DhcpOptionTypeValue::U8(b as u8))
+                        parse_boolean(name, value)?.map(|b| DhcpOptionTypeValue::U8(b as u8))
                     }
                     Some(DhcpOptionType::HwAddr) => {
-                        Config::parse_mac(value)?.map(DhcpOptionTypeValue::HwAddr)
+                        parse_string_hwaddr(name, value)?.map(DhcpOptionTypeValue::HwAddr)
                     }
                     Some(DhcpOptionType::DomainList) => {
-                        crate::config::parse_array(name, value, crate::config::parse_string)?
+                        crate::config::parse_array(name, value, parse_string)?
                             .map(DhcpOptionTypeValue::DomainList)
                     }
                     Some(DhcpOptionType::Unknown) => {
@@ -421,7 +303,7 @@ impl Config {
                 match k.as_str() {
                     Some("match-interface") => {
                         policy.match_interface = Some(
-                            Config::parse_string(v)
+                            parse_string(k.as_str().unwrap(), v)
                                 .map_err(|x| x.annotate("Failed to parse match-interface"))?,
                         );
                     }
@@ -431,7 +313,7 @@ impl Config {
                                 "match-hardware-address specified twice".into(),
                             ));
                         }
-                        policy.match_chaddr = Config::parse_mac(v)
+                        policy.match_chaddr = parse_string_hwaddr("match-hardware-address", v)
                             .map_err(|x| x.annotate("Failed to parse match-hardware-address"))?;
                     }
                     Some("match-subnet") => {
@@ -457,7 +339,7 @@ impl Config {
                     Some("apply-address") => {
                         let addresses = addresses.get_or_insert_with(Vec::new);
                         addresses.push(
-                            Config::parse_ip(v)
+                            parse_string_ip4("apply-address", v)
                                 .map_err(|x| x.annotate("Failed to parse apply-address"))?
                                 .ok_or_else(|| {
                                     Error::InvalidConfig("apply-address cannot be nil".into())
@@ -466,7 +348,7 @@ impl Config {
                     }
                     Some("apply-default-lease") => {
                         policy.apply_default_lease = Some(
-                            crate::config::parse_duration(v)
+                            parse_duration("apply-default-lease", v)
                                 .map_err(|x| x.annotate("Failed to parse apply-default-lease"))?
                                 .ok_or_else(|| {
                                     Error::InvalidConfig("apply-default-lease cannot be nil".into())
@@ -475,7 +357,7 @@ impl Config {
                     }
                     Some("apply-max-lease") => {
                         policy.apply_default_lease = Some(
-                            crate::config::parse_duration(v)
+                            parse_duration("apply-max-lease", v)
                                 .map_err(|x| x.annotate("Failed to parse apply-max-lease"))?
                                 .ok_or_else(|| {
                                     Error::InvalidConfig("apply-max-lease cannot be nil".into())
@@ -490,7 +372,7 @@ impl Config {
                                 match rangek.as_str() {
                                     Some("start") => {
                                         start = Some(
-                                            Config::parse_ip(rangev)
+                                            parse_string_ip4("start", rangev)
                                                 .map_err(|x| {
                                                     x.annotate("Failed to parse range start")
                                                 })?
@@ -503,7 +385,7 @@ impl Config {
                                     }
                                     Some("end") => {
                                         end = Some(
-                                            Config::parse_ip(rangev)
+                                            parse_string_ip4("end", rangev)
                                                 .map_err(|x| {
                                                     x.annotate("Failed to parse range end")
                                                 })?
