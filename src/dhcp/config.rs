@@ -21,10 +21,11 @@ use std::convert::TryFrom;
 use std::ops::Sub;
 use yaml_rust::yaml;
 
-use crate::config::*;
+pub use crate::config::*;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct Policy {
+    pub match_all: bool,
     pub match_interface: Option<Option<String>>,
     pub match_chaddr: Option<Vec<u8>>,
     pub match_subnet: Option<crate::net::Ipv4Subnet>,
@@ -36,19 +37,41 @@ pub struct Policy {
     pub apply_other:
         std::collections::HashMap<dhcppkt::DhcpOption, Option<dhcppkt::DhcpOptionTypeValue>>,
     pub policies: Vec<Policy>,
+    pub(super) address_cache:
+        std::sync::Mutex<std::cell::RefCell<Option<super::pool::PoolAddresses>>>,
+}
+
+impl Clone for Policy {
+    fn clone(&self) -> Self {
+        Self {
+            address_cache: Default::default(),
+            match_interface: self.match_interface.clone(),
+            match_chaddr: self.match_chaddr.clone(),
+            match_other: self.match_other.clone(),
+            apply_address: self.apply_address.clone(),
+            apply_other: self.apply_other.clone(),
+            policies: self.policies.clone(),
+            ..*self
+        }
+    }
 }
 
 impl Policy {
     fn get_all_used_addresses(&self) -> std::collections::HashSet<std::net::Ipv4Addr> {
-        let mut addrset: std::collections::HashSet<std::net::Ipv4Addr> = Default::default();
-        if let Some(address) = &self.apply_address {
-            addrset.extend(address.iter());
-        }
-        for p in &self.policies {
-            addrset.extend(p.get_all_used_addresses());
+        /* We cache the result of this. */
+        if self.address_cache.lock().unwrap().borrow().is_none() {
+            /* Cache is cold, heat it. */
+            let mut addrset: std::collections::HashSet<std::net::Ipv4Addr> = Default::default();
+            if let Some(address) = &self.apply_address {
+                addrset.extend(address.iter());
+            }
+            for p in &self.policies {
+                addrset.extend(p.get_all_used_addresses().iter());
+            }
+            self.address_cache.lock().unwrap().replace(Some(addrset));
         }
 
-        addrset
+        self.address_cache.lock().unwrap().borrow().clone().unwrap()
     }
 }
 
@@ -58,6 +81,18 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn get_all_used_addresses(&self) -> std::collections::HashSet<std::net::Ipv4Addr> {
+        self.policies
+            .iter()
+            .map(Policy::get_all_used_addresses)
+            .fold(
+                std::collections::HashSet::<std::net::Ipv4Addr>::new(),
+                |mut acc, e| {
+                    acc.extend(e);
+                    acc
+                },
+            )
+    }
     fn parse_routes(fragment: &yaml::Yaml) -> Result<Option<Vec<dhcppkt::Route>>, Error> {
         match fragment {
             yaml::Yaml::Null => Ok(None),

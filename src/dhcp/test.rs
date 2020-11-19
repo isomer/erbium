@@ -192,7 +192,7 @@ async fn ignore_unused_flag_bits() {
     pkt.pkt.flags = 0x7FFF;
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
-    dhcp::handle_discover(&mut p, &pkt, serverids, &conf).expect("Failed to handle request");
+    dhcp::handle_discover(&mut p, &pkt, serverids, &[], &conf).expect("Failed to handle request");
 }
 
 /* rfc2131 Section 3.1 Step 3: The client broadcasts a DHCPREQUEST message that MUST include the
@@ -213,8 +213,8 @@ async fn confirm_yiaddr_set() {
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
-    let reply =
-        dhcp::handle_discover(&mut p, &pkt, serverids, &conf).expect("Failed to handle request");
+    let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &[], &conf)
+        .expect("Failed to handle request");
     assert_ne!(
         reply.yiaddr,
         net::Ipv4Addr::UNSPECIFIED,
@@ -284,8 +284,8 @@ async fn server_address_set() {
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
-    let reply =
-        dhcp::handle_discover(&mut p, &pkt, serverids, &conf).expect("Failed to handle request");
+    let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &[], &conf)
+        .expect("Failed to handle request");
     assert_ne!(
         reply
             .options
@@ -311,8 +311,8 @@ async fn ignore_other_request() {
     serverids.insert(SERVER_IP);
     serverids.insert(SERVER_IP2);
     let cfg = mk_default_config();
-    let reply =
-        dhcp::handle_request(&mut p, &pkt, serverids, &cfg).expect_err("Handled request not to me");
+    let reply = dhcp::handle_request(&mut p, &pkt, serverids, &[], &cfg)
+        .expect_err("Handled request not to me");
     assert_eq!(
         reply,
         dhcp::DhcpError::OtherServer(NOT_SERVER_IP),
@@ -680,7 +680,7 @@ dhcp:
     .expect("Failed to parse test config");
     let lockedconf = conf.lock().await;
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
-    let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &lockedconf)
+    let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &[], &lockedconf)
         .expect("Failed to handle request");
     /* We've asked that netmask doesn't get set, so check it's not set */
     assert_eq!(

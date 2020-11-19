@@ -222,28 +222,45 @@ where
     }
 }
 
+pub const INTERFACE4: std::net::IpAddr = std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0));
+pub const INTERFACE6: std::net::IpAddr =
+    std::net::IpAddr::V6(std::net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0));
+
 fn str_ip(ost: Option<String>) -> Result<Option<std::net::IpAddr>, Error> {
-    ost.map(|st| {
-        st.parse()
-            .map_err(|e| Error::InvalidConfig(format!("{}", e)))
-    })
-    .transpose()
+    match ost {
+        Some(st) if st == "$self4" => Ok(Some(INTERFACE4)),
+        Some(st) if st == "$self6" => Ok(Some(INTERFACE6)),
+        Some(st) => Some(
+            st.parse()
+                .map_err(|e| Error::InvalidConfig(format!("{}", e))),
+        )
+        .transpose(),
+        None => Ok(None),
+    }
 }
 
 fn str_ip4(ost: Option<String>) -> Result<Option<std::net::Ipv4Addr>, Error> {
-    ost.map(|st| {
-        st.parse()
-            .map_err(|e| Error::InvalidConfig(format!("{}", e)))
-    })
-    .transpose()
+    match str_ip(ost) {
+        Err(e) => Err(e),
+        Ok(None) => Ok(None),
+        Ok(Some(std::net::IpAddr::V4(ip4))) => Ok(Some(ip4)),
+        Ok(Some(std::net::IpAddr::V6(ip6))) => Err(Error::InvalidConfig(format!(
+            "Expected v4 address, got v6 address ({})",
+            ip6,
+        ))),
+    }
 }
 
 fn str_ip6(ost: Option<String>) -> Result<Option<std::net::Ipv6Addr>, Error> {
-    ost.map(|st| {
-        st.parse()
-            .map_err(|e| Error::InvalidConfig(format!("{}", e)))
-    })
-    .transpose()
+    match str_ip(ost) {
+        Err(e) => Err(e),
+        Ok(None) => Ok(None),
+        Ok(Some(std::net::IpAddr::V6(ip6))) => Ok(Some(ip6)),
+        Ok(Some(std::net::IpAddr::V4(ip4))) => Err(Error::InvalidConfig(format!(
+            "Expected v6 address, got v4 address ({})",
+            ip4,
+        ))),
+    }
 }
 
 #[derive(Debug)]
@@ -659,14 +676,9 @@ router-advertisements:
 fn test_simple_config_parse() -> Result<(), Error> {
     load_config_from_string(
         "---
-dns-servers: ['8.8.8.8', '8.8.4.4', '2001:4860:4860::8888', '2001:4860:4860::8844']
+dns-servers: [$self4, $self6]
 dns-search: ['example.com']
 addresses: [192.0.2.0/24, 2001:db8::/64]
-
-dhcp:
-    policies:
-      - match-subnet: 192.0.2.0/24
-        apply-subnet: 192.0.2.0/24
 
 router-advertisements:
     - interface: eth0

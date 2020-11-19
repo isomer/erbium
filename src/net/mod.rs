@@ -23,7 +23,7 @@ pub mod udp;
 pub use nix::sys::socket::sockopt::*;
 
 // TODO: Write better Debug or to_string() method.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Ipv4Subnet {
     pub addr: std::net::Ipv4Addr,
     pub prefixlen: u8,
