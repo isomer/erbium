@@ -678,7 +678,7 @@ dhcp:
 ",
     )
     .expect("Failed to parse test config");
-    let lockedconf = conf.lock().await;
+    let lockedconf = conf.read().await;
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &[], &lockedconf)
         .expect("Failed to handle request");

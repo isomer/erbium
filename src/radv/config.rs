@@ -56,6 +56,30 @@ pub struct Interface {
     pub pref64: Option<Pref64>,
 }
 
+impl Default for Interface {
+    fn default() -> Self {
+        use std::time::Duration;
+        use ConfigValue::*;
+        Self {
+            name: "default".into(),
+            hoplimit: 0,
+            managed: false,
+            other: false,
+            lifetime: Duration::from_secs(0), /* Not a default router */
+            reachable: Duration::from_secs(0), /* Not defined. */
+            retrans: Duration::from_secs(0),  /* Not defined. */
+            mtu: NotSpecified,
+            prefixes: vec![],
+            rdnss_lifetime: NotSpecified,
+            rdnss: NotSpecified,
+            dnssl_lifetime: NotSpecified,
+            dnssl: NotSpecified,
+            captive_portal: NotSpecified,
+            pref64: None,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Config {
     pub interfaces: Vec<Interface>,

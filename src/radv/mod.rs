@@ -229,7 +229,7 @@ impl RaAdvService {
             DontSet => None,
         };
 
-        Self::build_announcement_pure(&*self.conf.lock().await, intf, ll, mtu)
+        Self::build_announcement_pure(&*self.conf.read().await, intf, ll, mtu)
     }
 
     async fn build_announcement_by_ifidx(
@@ -239,7 +239,7 @@ impl RaAdvService {
         let ifname = self.netinfo.get_safe_name_by_ifidx(ifidx).await;
         if let Some(intf) = self
             .conf
-            .lock()
+            .read()
             .await
             .ra
             .interfaces
@@ -247,6 +247,39 @@ impl RaAdvService {
             .find(|intf| intf.name == ifname)
         {
             Ok(self.build_announcement(ifidx, &intf).await)
+        } else if let Some(prefixes) = self.netinfo.get_prefixes_by_ifidx(ifidx).await {
+            let addresses = &self.conf.read().await.addresses;
+            let prefixes = prefixes
+                .iter()
+                .filter_map(|(addr, prefixlen)| {
+                    if let std::net::IpAddr::V6(ip6) = addr {
+                        if addresses.contains(&crate::config::Prefix::new(*addr, *prefixlen)) {
+                            Some(config::Prefix {
+                                addr: *ip6,
+                                prefixlen: *prefixlen,
+                                onlink: true,
+                                autonomous: true,
+                                valid: std::time::Duration::from_secs(2592000),
+                                preferred: std::time::Duration::from_secs(604800),
+                            })
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<config::Prefix>>();
+            if prefixes.is_empty() {
+                Err(Error::UnconfiguredInterface(ifname))
+            } else {
+                let intf = config::Interface {
+                    // TODO: should we fill in the interface name correctly here?
+                    prefixes: prefixes,
+                    ..Default::default()
+                };
+                Ok(self.build_announcement(ifidx, &intf).await)
+            }
         } else {
             Err(Error::UnconfiguredInterface(ifname))
         }
@@ -272,8 +305,9 @@ impl RaAdvService {
             .await
         {
             println!(
-                "Failed to send Router Advertisement for {} ({}): {}",
+                "Failed to send router advertisement for {}(if#{}) ({}): {}",
                 self.netinfo.get_safe_name_by_ifidx(intf).await,
+                intf,
                 dst,
                 e
             );

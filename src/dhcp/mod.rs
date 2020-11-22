@@ -351,7 +351,7 @@ fn handle_discover<'l>(
             response.minlease.unwrap_or(pool::DEFAULT_MIN_LEASE),
             response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
         ) {
-            /* Now we have an address, send the reply */
+            /* Now we have an address, build the reply */
             Ok(lease) => Ok(dhcppkt::DHCP {
                 op: dhcppkt::OP_BOOTREPLY,
                 htype: dhcppkt::HWTYPE_ETHERNET,
@@ -375,6 +375,7 @@ fn handle_discover<'l>(
             }),
             /* There was an address pool assigned, but there were no available addresses in it */
             Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
+            /* Some other error occurred, document it. */
             Err(e) => Err(DhcpError::InternalError(e.to_string())),
         }
     } else {
@@ -554,7 +555,7 @@ async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNet
 pub async fn build_default_config(
     conf: &crate::config::Config,
     request: &DHCPRequest,
-) -> Result<config::Policy, DhcpError> {
+) -> config::Policy {
     let mut default_policy = config::Policy {
         match_all: true, /* We always want this policy to match. */
         ..Default::default()
@@ -615,7 +616,7 @@ pub async fn build_default_config(
             }
         })
         .collect();
-    Ok(default_policy)
+    default_policy
 }
 
 pub async fn handle_pkt(
@@ -626,11 +627,11 @@ pub async fn handle_pkt(
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     match request.pkt.options.get_messagetype() {
         Some(dhcppkt::DHCPDISCOVER) => {
-            let base = [build_default_config(&conf, &request).await?];
+            let base = [build_default_config(&conf, &request).await];
             handle_discover(&mut pools, &request, serverids, &base, conf)
         }
         Some(dhcppkt::DHCPREQUEST) => {
-            let base = [build_default_config(&conf, &request).await?];
+            let base = [build_default_config(&conf, &request).await];
             handle_request(&mut pools, &request, serverids, &base, conf)
         }
         Some(x) => Err(DhcpError::UnknownMessageType(x)),
@@ -732,7 +733,7 @@ impl DhcpService {
         {
             /* Limit the amount of time we have these locked to just handling the packet */
             let mut pool = self.pool.lock().await;
-            let lockedconf = self.conf.lock().await;
+            let lockedconf = self.conf.read().await;
 
             reply = match handle_pkt(
                 &mut pool,
@@ -987,13 +988,13 @@ dhcp:
             serverip: "192.168.0.67".parse().unwrap(),
             ifindex: 1,
         },
-        &cfg.lock().await.dhcp.policies,
+        &cfg.read().await.dhcp.policies,
         &mut resp,
     ) {
         panic!("No policies applied");
     }
 
-    println!("{:?}", cfg.lock().await);
+    println!("{:?}", cfg.read().await);
 
     assert_eq!(
         resp.address,
@@ -1052,7 +1053,7 @@ async fn test_defaults() {
         captive_portal: Some("example.com".into()),
         ..test::mk_default_config()
     };
-    let base = [build_default_config(&conf, &pkt).await.unwrap()];
+    let base = [build_default_config(&conf, &pkt).await];
     println!("base={:?}", base);
     let resp =
         handle_discover(&mut p, &pkt, serverids, &base, &conf).expect("Failed to handle request");
@@ -1119,7 +1120,7 @@ async fn test_base() {
         },
         ..Default::default()
     };
-    let base = build_default_config(&conf, &pkt).await.unwrap();
+    let base = build_default_config(&conf, &pkt).await;
     /* The generated policy should not allocate 192.0.2.3, because that is allocated in the
      * custom dhcp policy provided.
      */

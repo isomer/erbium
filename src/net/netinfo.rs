@@ -377,14 +377,20 @@ impl SharedNetInfo {
             .map(|x| x.lladdr.clone())
     }
 
-    pub async fn get_ipv4_by_ifidx(&self, ifidx: u32) -> Option<std::net::Ipv4Addr> {
+    pub async fn get_prefixes_by_ifidx(&self, ifidx: u32) -> Option<Vec<(std::net::IpAddr, u8)>> {
         self.0
             .read()
             .await
             .intf
             .get(&ifidx)
-            .map(|x| {
-                x.addresses
+            .map(|x| x.addresses.clone())
+    }
+
+    pub async fn get_ipv4_by_ifidx(&self, ifidx: u32) -> Option<std::net::Ipv4Addr> {
+        self.get_prefixes_by_ifidx(ifidx)
+            .await
+            .map(|prefixes| {
+                prefixes
                     .iter()
                     .filter_map(|(prefix, _prefixlen)| {
                         if let std::net::IpAddr::V4(addr) = prefix {
@@ -393,7 +399,7 @@ impl SharedNetInfo {
                             None
                         }
                     })
-                    .cloned()
+                    .copied()
                     .next()
             })
             .flatten()

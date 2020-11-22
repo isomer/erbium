@@ -44,29 +44,6 @@ impl Default for config::Prefix {
     }
 }
 
-impl Default for config::Interface {
-    fn default() -> Self {
-        config::Interface {
-            name: "test0".into(),
-            hoplimit: 64,
-            managed: false,
-            other: false,
-            lifetime: std::time::Duration::from_secs(0),
-            reachable: std::time::Duration::from_secs(0),
-            retrans: std::time::Duration::from_secs(0),
-            mtu: config::ConfigValue::NotSpecified,
-            prefixes: vec![config::Prefix::default()],
-            rdnss_lifetime: config::ConfigValue::Value(std::time::Duration::from_secs(300)),
-            rdnss: config::ConfigValue::Value(vec!["2001:db8::53".parse().unwrap()]),
-            dnssl_lifetime: config::ConfigValue::Value(std::time::Duration::from_secs(300)),
-            dnssl: config::ConfigValue::Value(vec!["example.net".into()]),
-
-            captive_portal: config::ConfigValue::Value("http://captive.example.com/".into()),
-            pref64: Some(config::Pref64::default()),
-        }
-    }
-}
-
 /* Section 2.3: All interfaces on routers MUST have a link-local address.
  * Justification: Kernels responsibility.
  */

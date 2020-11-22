@@ -495,22 +495,123 @@ pub fn parse_duration(
     }
 }
 
-#[derive(Debug)]
+trait PrefixOps {
+    type Ip;
+    fn network(&self) -> Self::Ip;
+    fn netmask(&self) -> Self::Ip;
+    fn broadcast(&self) -> Self::Ip;
+}
+
+trait Match<Ip> {
+    fn contains(&self, ip: Ip) -> bool;
+}
+
+#[derive(Debug, Eq)]
 pub struct Prefix4 {
     pub addr: std::net::Ipv4Addr,
     pub prefixlen: u8,
 }
 
-#[derive(Debug)]
+impl PrefixOps for Prefix4 {
+    type Ip = std::net::Ipv4Addr;
+    fn network(&self) -> std::net::Ipv4Addr {
+        (u32::from(self.addr) & u32::from(self.netmask())).into()
+    }
+    fn netmask(&self) -> std::net::Ipv4Addr {
+        (!(0xffffffffu32 >> self.prefixlen) as u32).into()
+    }
+    fn broadcast(&self) -> std::net::Ipv4Addr {
+        (u32::from(self.network()) | !u32::from(self.netmask())).into()
+    }
+}
+
+impl Match<std::net::Ipv4Addr> for Prefix4 {
+    fn contains(&self, ip: std::net::Ipv4Addr) -> bool {
+        u32::from(ip) & u32::from(self.netmask()) == u32::from(self.addr)
+    }
+}
+
+impl PartialEq for Prefix4 {
+    fn eq(&self, other: &Self) -> bool {
+        self.network() == other.network() && self.netmask() == other.netmask()
+    }
+}
+
+#[derive(Debug, Eq)]
 pub struct Prefix6 {
     pub addr: std::net::Ipv6Addr,
     pub prefixlen: u8,
 }
 
-#[derive(Debug)]
+impl PrefixOps for Prefix6 {
+    type Ip = std::net::Ipv6Addr;
+    fn network(&self) -> std::net::Ipv6Addr {
+        (u128::from(self.addr) & u128::from(self.netmask())).into()
+    }
+    fn netmask(&self) -> std::net::Ipv6Addr {
+        (!(0xffffffff_ffffffff_fffffff_ffffffffu128 >> self.prefixlen)).into()
+    }
+    fn broadcast(&self) -> std::net::Ipv6Addr {
+        (u128::from(self.network()) | !u128::from(self.netmask())).into()
+    }
+}
+
+impl Match<std::net::Ipv6Addr> for Prefix6 {
+    fn contains(&self, ip: std::net::Ipv6Addr) -> bool {
+        u128::from(ip) & u128::from(self.netmask()) == u128::from(self.addr)
+    }
+}
+
+impl PartialEq for Prefix6 {
+    fn eq(&self, other: &Self) -> bool {
+        self.network() == other.network() && self.netmask() == other.netmask()
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum Prefix {
     V4(Prefix4),
     V6(Prefix6),
+}
+
+impl PrefixOps for Prefix {
+    type Ip = std::net::IpAddr;
+    fn network(&self) -> Self::Ip {
+        use std::net::IpAddr::*;
+        match self {
+            Prefix::V4(p4) => V4(p4.network()),
+            Prefix::V6(p6) => V6(p6.network()),
+        }
+    }
+    fn netmask(&self) -> Self::Ip {
+        use std::net::IpAddr::*;
+        match self {
+            Prefix::V4(p4) => V4(p4.netmask()),
+            Prefix::V6(p6) => V6(p6.netmask()),
+        }
+    }
+    fn broadcast(&self) -> Self::Ip {
+        use std::net::IpAddr::*;
+        match self {
+            Prefix::V4(p4) => V4(p4.broadcast()),
+            Prefix::V6(p6) => V6(p6.broadcast()),
+        }
+    }
+}
+
+impl Prefix {
+    pub fn new(addr: std::net::IpAddr, prefixlen: u8) -> Self {
+        match addr {
+            std::net::IpAddr::V4(ip4) => Prefix::V4(Prefix4 {
+                addr: ip4,
+                prefixlen,
+            }),
+            std::net::IpAddr::V6(ip6) => Prefix::V6(Prefix6 {
+                addr: ip6,
+                prefixlen,
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -523,7 +624,7 @@ pub struct Config {
     pub addresses: Vec<Prefix>,
 }
 
-pub type SharedConfig = std::sync::Arc<tokio::sync::Mutex<Config>>;
+pub type SharedConfig = std::sync::Arc<tokio::sync::RwLock<Config>>;
 
 fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
     let y = yaml::YamlLoader::load_from_str(cfg).map_err(Error::YamlError)?;
@@ -579,7 +680,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             captive_portal,
             addresses: addresses.unwrap_or_else(Vec::new),
         };
-        Ok(std::sync::Arc::new(tokio::sync::Mutex::new(conf)))
+        Ok(std::sync::Arc::new(tokio::sync::RwLock::new(conf)))
     } else {
         Err(Error::InvalidConfig(
             "Top level configuration should be a Hash".into(),
@@ -700,4 +801,11 @@ fn test_duration() {
             7 * 86400 + 2 * 86400 + 3 * 3600 + 4 * 60 + 5
         ))
     );
+}
+
+#[test]
+fn test_prefix() {
+    let p1 = "2001:db8::1".parse().unwrap();
+    let p2 = "2001:db8::".parse().unwrap();
+    assert_eq!(Prefix::new(p1, 64), Prefix::new(p2, 64));
 }
