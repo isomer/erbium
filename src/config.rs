@@ -502,7 +502,7 @@ trait PrefixOps {
     fn broadcast(&self) -> Self::Ip;
 }
 
-trait Match<Ip> {
+pub trait Match<Ip> {
     fn contains(&self, ip: Ip) -> bool;
 }
 

@@ -22,7 +22,7 @@ use netlink_packet_route::NetlinkPayload::InnerMessage;
 use netlink_packet_route::RtnlMessage::*;
 use netlink_packet_route::{
     constants::*, AddressMessage, LinkMessage, NetlinkHeader, NetlinkMessage, NetlinkPayload,
-    RtnlMessage,
+    RouteMessage, RtnlMessage,
 };
 use netlink_sys::constants::*;
 use netlink_sys::{Protocol, Socket, SocketAddr};
@@ -70,10 +70,32 @@ struct IfInfo {
     flags: IfFlags,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub struct RouteInfo {
+    pub addr: std::net::IpAddr,
+    pub prefixlen: u8,
+    pub oifidx: Option<u32>,
+    pub nexthop: Option<std::net::IpAddr>,
+}
+
+impl std::fmt::Display for RouteInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.addr, self.prefixlen)?;
+        if let Some(nexthop) = self.nexthop {
+            write!(f, " via {}", nexthop)?;
+        }
+        if let Some(oifidx) = self.oifidx {
+            write!(f, " dev if#{}", oifidx)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 struct NetInfo {
     name2idx: std::collections::HashMap<String, u32>,
     intf: std::collections::HashMap<u32, IfInfo>,
+    routeinfo: Vec<RouteInfo>,
 }
 
 impl NetInfo {
@@ -81,6 +103,7 @@ impl NetInfo {
         NetInfo {
             name2idx: std::collections::HashMap::new(),
             intf: std::collections::HashMap::new(),
+            routeinfo: vec![],
         }
     }
 }
@@ -210,6 +233,82 @@ impl SharedNetInfo {
         netinfo.intf.insert(ifidx, ifinfo);
     }
 
+    fn decode_route(&self, route: &RouteMessage) -> Option<RouteInfo> {
+        use netlink_packet_route::rtnl::nlas::route::Nla::*;
+        use std::convert::TryFrom as _;
+        // NewRoute(RouteMessage { header: RouteHeader { address_family: 10,
+        // destination_prefix_length: 128, source_prefix_length: 0, tos: 0, table: 255, protocol:
+        // 2, scope: 0, kind: 2, flags: (empty) },
+        // nlas: [Table(255),
+        //        Destination([254, 128, 0, 0, 0, 0, 0, 0, 244, 123, 221, 255, 254, 130, 137, 42]),
+        //        Priority(0),
+        //        Oif(2),
+        //        CacheInfo([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        // 0, 0]),
+        //        Pref([0])] }))
+        let mut destination = None;
+        let mut oifidx = None;
+        let mut gateway = None;
+        for nla in &route.nlas {
+            match nla {
+                Destination(dest) => {
+                    destination = match route.header.address_family as u16 {
+                        AF_INET => <[u8; 4]>::try_from(&dest[..])
+                            .map(std::net::IpAddr::from)
+                            .ok(),
+                        AF_INET6 => <[u8; 16]>::try_from(&dest[..])
+                            .map(std::net::IpAddr::from)
+                            .ok(),
+                        f => panic!("Unexpected family {}", f),
+                    }
+                }
+                Gateway(via) => {
+                    gateway = match route.header.address_family as u16 {
+                        AF_INET => <[u8; 4]>::try_from(&via[..])
+                            .map(std::net::IpAddr::from)
+                            .ok(),
+                        AF_INET6 => <[u8; 16]>::try_from(&via[..])
+                            .map(std::net::IpAddr::from)
+                            .ok(),
+                        f => panic!("Unexpected family {}", f),
+                    }
+                }
+                Oif(oif) => oifidx = Some(oif),
+                Table(254) => (),
+                Table(_) => return None, /* Skip routes that are not in the "main" table */
+                _ => (),                 /* Ignore unknown nlas */
+            }
+        }
+        Some(RouteInfo {
+            addr: destination.unwrap_or_else(|| match route.header.address_family as u16 {
+                AF_INET => "0.0.0.0".parse().unwrap(),
+                AF_INET6 => "::".parse().unwrap(),
+                _ => unreachable!(),
+            }),
+            prefixlen: route.header.destination_prefix_length,
+            oifidx: oifidx.copied(),
+            nexthop: gateway,
+        })
+    }
+
+    async fn process_newroute(&self, route: &RouteMessage) {
+        if let Some(ri) = self.decode_route(route) {
+            println!("New Route: {}", ri);
+            self.0.write().await.routeinfo.push(ri);
+        }
+    }
+
+    async fn process_delroute(&self, route: &RouteMessage) {
+        if let Some(ri) = self.decode_route(route) {
+            println!("Del Route: {}", ri);
+            /* We basically assume there will only ever be one route for each prefix.
+             * We'd have to be a lot more careful if we were to support multiple routes to a
+             * particular prefix
+             */
+            self.0.write().await.routeinfo.retain(|r| *r != ri);
+        }
+    }
+
     async fn send_linkdump(&self, socket: &mut Socket, seq: &mut u32) {
         let mut packet = NetlinkMessage {
             header: NetlinkHeader {
@@ -233,6 +332,47 @@ impl SharedNetInfo {
         packet.serialize(&mut buf[..]);
 
         socket.add_membership(RTNLGRP_LINK).unwrap();
+
+        if let Err(e) = socket.send(&buf[..]).await {
+            println!("SEND ERROR {}", e);
+        }
+    }
+
+    async fn send_routedump(&self, socket: &mut Socket, seq: &mut u32, address_family: u8) {
+        use netlink_packet_route::RouteHeader;
+        let mut packet = NetlinkMessage {
+            header: NetlinkHeader {
+                flags: NLM_F_REQUEST | NLM_F_DUMP,
+                sequence_number: *seq,
+                ..Default::default()
+            },
+            payload: NetlinkPayload::from(RtnlMessage::GetRoute(RouteMessage {
+                header: RouteHeader {
+                    address_family,
+                    ..Default::default()
+                },
+                ..Default::default()
+            })),
+        };
+
+        *seq += 1;
+
+        packet.finalize();
+
+        let mut buf = vec![0; packet.header.length as usize];
+
+        // Before calling serialize, it is important to check that the buffer in which we're emitting is big
+        // enough for the packet, other `serialize()` panics.
+
+        assert!(buf.len() == packet.buffer_len());
+
+        packet.serialize(&mut buf[..]);
+
+        match address_family as u16 {
+            AF_INET => socket.add_membership(RTNLGRP_IPV4_ROUTE).unwrap(),
+            AF_INET6 => socket.add_membership(RTNLGRP_IPV6_ROUTE).unwrap(),
+            _ => unreachable!(),
+        }
 
         if let Err(e) = socket.send(&buf[..]).await {
             println!("SEND ERROR {}", e);
@@ -290,6 +430,14 @@ impl SharedNetInfo {
                 self.process_deladdr(addr).await;
                 false
             }
+            InnerMessage(NewRoute(route)) => {
+                self.process_newroute(route).await;
+                false
+            }
+            InnerMessage(DelRoute(route)) => {
+                self.process_delroute(route).await;
+                false
+            }
             NetlinkPayload::Done => true,
             e => {
                 println!("Unknown: {:?}", e);
@@ -308,7 +456,14 @@ impl SharedNetInfo {
         let mut offset = 0;
 
         self.send_linkdump(&mut socket, &mut seq).await;
-        let mut sent_addrdump = false;
+        enum State {
+            ReadingLink,
+            ReadingAddr,
+            ReadingRoute4,
+            ReadingRoute6,
+            Done,
+        };
+        let mut state = State::ReadingLink;
         // we set the NLM_F_DUMP flag so we expect a multipart rx_packet in response.
         while let Ok(size) = socket.recv(&mut receive_buffer[..]).await {
             loop {
@@ -316,13 +471,28 @@ impl SharedNetInfo {
                 let rx_packet = <NetlinkMessage<RtnlMessage>>::deserialize(bytes).unwrap();
 
                 if self.process_message(&rx_packet).await {
-                    if !sent_addrdump {
-                        self.send_addrdump(&mut socket, &mut seq).await;
-                        sent_addrdump = true;
-                    } else {
-                        // Try and inform anyone listening that we have completed.
-                        // But if it fails, don't worry, we'll send another one soonish.
-                        let _ = chan.try_send(());
+                    match state {
+                        State::ReadingLink => {
+                            self.send_addrdump(&mut socket, &mut seq).await;
+                            state = State::ReadingAddr
+                        }
+                        State::ReadingAddr => {
+                            self.send_routedump(&mut socket, &mut seq, AF_INET as u8)
+                                .await;
+                            state = State::ReadingRoute4
+                        }
+                        State::ReadingRoute4 => {
+                            self.send_routedump(&mut socket, &mut seq, AF_INET6 as u8)
+                                .await;
+                            state = State::ReadingRoute6
+                        }
+                        State::ReadingRoute6 => {
+                            // Try and inform anyone listening that we have completed.
+                            // But if it fails, don't worry, we'll send another one soonish.
+                            let _ = chan.try_send(());
+                            state = State::Done
+                        }
+                        State::Done => {}
                     }
                 }
 
@@ -418,6 +588,56 @@ impl SharedNetInfo {
     }
     pub async fn get_flags_by_ifidx(&self, ifidx: u32) -> Option<IfFlags> {
         self.0.read().await.intf.get(&ifidx).map(|x| x.flags)
+    }
+
+    pub async fn get_ipv4_default_route(
+        &self,
+    ) -> Option<(Option<std::net::Ipv4Addr>, Option<u32>)> {
+        self.0
+            .read()
+            .await
+            .routeinfo
+            .iter()
+            .filter_map(|ri| {
+                if ri.prefixlen == 0 && ri.addr.is_ipv4() {
+                    Some((
+                        if let Some(std::net::IpAddr::V4(nexthop)) = ri.nexthop {
+                            Some(nexthop)
+                        } else {
+                            None
+                        },
+                        ri.oifidx,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .next()
+    }
+
+    pub async fn get_ipv6_default_route(
+        &self,
+    ) -> Option<(Option<std::net::Ipv6Addr>, Option<u32>)> {
+        self.0
+            .read()
+            .await
+            .routeinfo
+            .iter()
+            .filter_map(|ri| {
+                if ri.prefixlen == 0 && ri.addr.is_ipv6() {
+                    Some((
+                        if let Some(std::net::IpAddr::V6(nexthop)) = ri.nexthop {
+                            Some(nexthop)
+                        } else {
+                            None
+                        },
+                        ri.oifidx,
+                    ))
+                } else {
+                    None
+                }
+            })
+            .next()
     }
 }
 

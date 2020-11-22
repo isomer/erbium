@@ -20,6 +20,7 @@
 use crate::radv;
 use radv::config;
 use radv::icmppkt;
+use radv::ADV_DEFAULT_LIFETIME;
 
 impl Default for config::Pref64 {
     fn default() -> Self {
@@ -96,6 +97,7 @@ fn test_reserved_is_zero() {
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
         std::net::Ipv6Addr::UNSPECIFIED,
+        ADV_DEFAULT_LIFETIME,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(pkt[5] & 0b00111111, 0b0);
@@ -173,6 +175,7 @@ fn prefix_reserved1_is_zero() {
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
         std::net::Ipv6Addr::UNSPECIFIED,
+        ADV_DEFAULT_LIFETIME,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(pkt[8 + 4] & 0b00111111, 0b0);
@@ -191,6 +194,7 @@ fn prefix_reserved2_is_zero() {
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
         std::net::Ipv6Addr::UNSPECIFIED,
+        ADV_DEFAULT_LIFETIME,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(&pkt[12..16], &[0, 0, 0, 0]);
@@ -212,6 +216,7 @@ fn prefix_length_must_have_zero_suffix() {
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
         std::net::Ipv6Addr::UNSPECIFIED,
+        ADV_DEFAULT_LIFETIME,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(&pkt[12..16], &[0, 0, 0, 0]);
@@ -253,6 +258,7 @@ fn mtu_reserved_must_be_zero() {
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
         std::net::Ipv6Addr::UNSPECIFIED,
+        ADV_DEFAULT_LIFETIME,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(&pkt[26..=27], &[0, 0]);

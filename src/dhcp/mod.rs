@@ -83,6 +83,8 @@ pub struct DHCPRequest {
     pub serverip: std::net::Ipv4Addr,
     /// The interface index that the request was received on.
     pub ifindex: u32,
+    pub if_mtu: Option<u32>,
+    pub if_router: Option<std::net::Ipv4Addr>,
 }
 
 #[cfg(test)]
@@ -111,6 +113,8 @@ impl std::default::Default for DHCPRequest {
             },
             serverip: "0.0.0.0".parse().unwrap(),
             ifindex: 0,
+            if_mtu: None,
+            if_router: None,
         }
     }
 }
@@ -593,10 +597,11 @@ pub async fn build_default_config(
         .iter()
         .filter_map(|prefix| {
             if let super::config::Prefix::V4(p4) = prefix {
+                use crate::config::Match as _;
                 // TODO: Currently if the subnet is invalid, then we just skip adding it.
                 // This is probably fine for now, but is likely to cause confusion in the future.
                 let subnet = crate::net::Ipv4Subnet::new(p4.addr, p4.prefixlen).ok()?;
-                Some(config::Policy {
+                let mut ret = config::Policy {
                     match_subnet: Some(subnet),
                     apply_address: Some(
                         (1..((1 << (32 - p4.prefixlen)) - 2))
@@ -608,9 +613,27 @@ pub async fn build_default_config(
                             .collect::<pool::PoolAddresses>()
                             .sub(&all_addrs),
                     ),
-                    // TODO: Add the MTU of the local interface (if it's non standard)
                     ..Default::default()
-                })
+                };
+                /* If this is the interface the request is coming in, then we can do extra stuff */
+                if p4.contains(request.serverip) {
+                    // Add the MTU
+                    // TODO: Perhaps don't send it if it's default?
+                    if let Some(mtu) = request.if_mtu {
+                        ret.apply_other.insert(
+                            dhcppkt::OPTION_MTUIF,
+                            Some(dhcppkt::DhcpOptionTypeValue::U16(mtu as u16)),
+                        );
+                    }
+                    // Add the default route.
+                    if let Some(route) = request.if_router {
+                        ret.apply_other.insert(
+                            dhcppkt::OPTION_ROUTERADDR,
+                            Some(dhcppkt::DhcpOptionTypeValue::Ip(route)),
+                        );
+                    }
+                }
+                Some(ret)
             } else {
                 None
             }
@@ -725,6 +748,14 @@ impl DhcpService {
             pkt: req,
             serverip: optional_dst.unwrap(),
             ifindex: intf,
+            if_mtu: self.netinfo.get_mtu_by_ifidx(intf).await,
+            if_router: match self.netinfo.get_ipv4_default_route().await {
+                /* If the default route points out a different interface, then this is the default route */
+                Some((_, Some(rtridx))) if rtridx != intf => Some(optional_dst.unwrap()),
+                /* If it's the same interface, then the default router should be the nexthop */
+                Some((Some(nexthop), Some(rtridx))) if rtridx == intf => Some(nexthop),
+                _ => None,
+            },
         };
         log_pkt(&request, &self.netinfo).await;
 
@@ -987,6 +1018,8 @@ dhcp:
             },
             serverip: "192.168.0.67".parse().unwrap(),
             ifindex: 1,
+            if_mtu: None,
+            if_router: None,
         },
         &cfg.read().await.dhcp.policies,
         &mut resp,

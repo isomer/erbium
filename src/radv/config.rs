@@ -43,7 +43,7 @@ pub struct Interface {
     pub hoplimit: u8,
     pub managed: bool,
     pub other: bool,
-    pub lifetime: std::time::Duration,
+    pub lifetime: ConfigValue<std::time::Duration>,
     pub reachable: std::time::Duration,
     pub retrans: std::time::Duration,
     pub mtu: ConfigValue<u32>,
@@ -65,9 +65,9 @@ impl Default for Interface {
             hoplimit: 0,
             managed: false,
             other: false,
-            lifetime: Duration::from_secs(0), /* Not a default router */
+            lifetime: NotSpecified,
             reachable: Duration::from_secs(0), /* Not defined. */
-            retrans: Duration::from_secs(0),  /* Not defined. */
+            retrans: Duration::from_secs(0),   /* Not defined. */
             mtu: NotSpecified,
             prefixes: vec![],
             rdnss_lifetime: NotSpecified,
@@ -266,7 +266,7 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
         let mut hoplimit: Option<u8> = None;
         let mut managed = None;
         let mut other = None;
-        let mut lifetime = None;
+        let mut lifetime = ConfigValue::NotSpecified;
         let mut reachable = None;
         let mut retrans = None;
         let mut mtu = ConfigValue::NotSpecified;
@@ -281,7 +281,9 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                 (Some("hop-limit"), i) => hoplimit = parse_num("hop-limit", i)?,
                 (Some("managed"), b) => managed = parse_boolean("managed", b)?,
                 (Some("other"), o) => other = parse_boolean("other", o)?,
-                (Some("lifetime"), d) => lifetime = parse_duration("lifetime", d)?,
+                (Some("lifetime"), d) => {
+                    lifetime = ConfigValue::from_option(parse_duration("lifetime", d)?)
+                }
                 (Some("reachable"), d) => reachable = parse_duration("reachable", d)?,
                 (Some("retransmit"), d) => retrans = parse_duration("retransmit", d)?,
                 (Some("mtu"), m) => mtu = ConfigValue::from_option(parse_num("mtu", m)?),
@@ -311,7 +313,6 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
             }
         }
         if let Some(ifname) = intf {
-            let lifetime = lifetime.unwrap_or_else(|| std::time::Duration::from_secs(0));
             Ok(Some(Interface {
                 name: ifname,
                 hoplimit: hoplimit.unwrap_or(0),

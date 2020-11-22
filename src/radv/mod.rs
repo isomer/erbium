@@ -18,7 +18,7 @@
  */
 
 use rand::Rng;
-use std::convert::TryInto;
+use std::convert::TryInto as _;
 
 pub(crate) mod config;
 mod icmppkt;
@@ -32,6 +32,8 @@ mod test {
 const DEFAULT_MAX_RTR_ADV_INTERVAL: std::time::Duration = std::time::Duration::from_secs(600);
 const DEFAULT_MIN_RTR_ADV_INTERVAL: std::time::Duration =
     std::time::Duration::from_micros((DEFAULT_MAX_RTR_ADV_INTERVAL.as_micros() / 3) as u64);
+const ADV_DEFAULT_LIFETIME: std::time::Duration =
+    std::time::Duration::from_secs(3 * DEFAULT_MAX_RTR_ADV_INTERVAL.as_secs());
 
 const ALL_NODES: std::net::Ipv6Addr = std::net::Ipv6Addr::new(
     0xff02, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0001,
@@ -201,6 +203,7 @@ impl RaAdvService {
         ll: Option<[u8; 6]>, /* TODO: This only works for ethernet */
         mtu: Option<u32>,
         self6: std::net::Ipv6Addr,
+        lifetime: std::time::Duration,
     ) -> icmppkt::RtrAdvertisement {
         let mut options = icmppkt::NDOptions::default();
         /* Add the LL address of the interface, if it exists. */
@@ -271,7 +274,7 @@ impl RaAdvService {
             hop_limit: intf.hoplimit,
             flag_managed: intf.managed,
             flag_other: intf.other,
-            lifetime: intf.lifetime,
+            lifetime: intf.lifetime.always_unwrap_or(lifetime),
             reachable: intf.reachable,
             retrans: intf.retrans,
             options,
@@ -320,7 +323,27 @@ impl RaAdvService {
             DontSet => None,
         };
 
-        Self::build_announcement_pure(&*self.conf.read().await, intf, ll, mtu, self6)
+        /* Now we decide if we should set the lifetime (ie, that this should be used as a default
+         * route)
+         */
+        let lifetime = match intf.lifetime {
+            NotSpecified => {
+                if let Some((_gw, gwif)) = self.netinfo.get_ipv6_default_route().await {
+                    if gwif != Some(ifidx) {
+                        /* TODO: Should also check that forwarding is enabled on ifidx */
+                        ADV_DEFAULT_LIFETIME
+                    } else {
+                        std::time::Duration::from_secs(0)
+                    }
+                } else {
+                    std::time::Duration::from_secs(0)
+                }
+            }
+            Value(v) => v,
+            DontSet => std::time::Duration::from_secs(0),
+        };
+
+        Self::build_announcement_pure(&*self.conf.read().await, intf, ll, mtu, self6, lifetime)
     }
 
     async fn build_announcement_by_ifidx(
@@ -524,6 +547,9 @@ impl RaAdvService {
     }
 }
 
+#[cfg(test)]
+use crate::config::ConfigValue;
+
 #[test]
 fn test_build_announcement() {
     let conf = crate::config::Config::default();
@@ -534,7 +560,7 @@ fn test_build_announcement() {
             hoplimit: 64,
             managed: false,
             other: false,
-            lifetime: std::time::Duration::from_secs(3600),
+            lifetime: ConfigValue::Value(std::time::Duration::from_secs(3600)),
             reachable: std::time::Duration::from_secs(1800),
             retrans: std::time::Duration::from_secs(10),
             mtu: config::ConfigValue::NotSpecified,
@@ -560,6 +586,7 @@ fn test_build_announcement() {
         Some([1, 2, 3, 4, 5, 6]),
         Some(1480),
         std::net::Ipv6Addr::UNSPECIFIED,
+        ADV_DEFAULT_LIFETIME,
     );
     icmppkt::serialise(&icmppkt::Icmp6::RtrAdvert(msg));
 }
@@ -586,6 +613,7 @@ fn test_default_values() {
         Some([1, 2, 3, 4, 5, 6]),
         Some(1480),
         std::net::Ipv6Addr::UNSPECIFIED,
+        ADV_DEFAULT_LIFETIME,
     );
     assert_eq!(
         msg.options
@@ -652,6 +680,7 @@ fn test_dontset_values() {
         Some([1, 2, 3, 4, 5, 6]),
         Some(1480),
         std::net::Ipv6Addr::UNSPECIFIED,
+        ADV_DEFAULT_LIFETIME,
     );
     assert!(msg.options.find_option(icmppkt::RDNSS).is_empty());
     assert!(msg.options.find_option(icmppkt::DNSSL).is_empty());

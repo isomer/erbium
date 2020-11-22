@@ -72,6 +72,8 @@ pub fn mk_dhcp_request() -> dhcp::DHCPRequest {
         pkt: mk_dhcp_request_pkt(),
         serverip: SERVER_IP,
         ifindex: 1,
+        if_mtu: None,
+        if_router: None,
     }
 }
 
