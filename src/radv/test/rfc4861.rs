@@ -95,6 +95,7 @@ fn test_reserved_is_zero() {
         &intf,
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
+        std::net::Ipv6Addr::UNSPECIFIED,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(pkt[5] & 0b00111111, 0b0);
@@ -171,6 +172,7 @@ fn prefix_reserved1_is_zero() {
         &intf,
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
+        std::net::Ipv6Addr::UNSPECIFIED,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(pkt[8 + 4] & 0b00111111, 0b0);
@@ -188,6 +190,7 @@ fn prefix_reserved2_is_zero() {
         &intf,
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
+        std::net::Ipv6Addr::UNSPECIFIED,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(&pkt[12..16], &[0, 0, 0, 0]);
@@ -208,6 +211,7 @@ fn prefix_length_must_have_zero_suffix() {
         &intf,
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
+        std::net::Ipv6Addr::UNSPECIFIED,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(&pkt[12..16], &[0, 0, 0, 0]);
@@ -248,6 +252,7 @@ fn mtu_reserved_must_be_zero() {
         &intf,
         Some([1, 2, 3, 4, 5, 6]),
         Some(1500),
+        std::net::Ipv6Addr::UNSPECIFIED,
     );
     let pkt = icmppkt::serialise(&radv::icmppkt::Icmp6::RtrAdvert(msg));
     assert_eq!(&pkt[26..=27], &[0, 0]);

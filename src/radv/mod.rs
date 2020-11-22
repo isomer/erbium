@@ -79,6 +79,76 @@ pub struct RaAdvService {
     rawsock: std::sync::Arc<crate::net::raw::Raw6Socket>,
 }
 
+#[derive(Eq, PartialEq)]
+struct ScopeSorter(std::net::Ipv6Addr);
+
+#[derive(Eq, PartialEq)]
+enum Scope {
+    Link,
+    Loopback,
+    ULA,
+    Global,
+    Unspecified,
+    Multicast,
+}
+
+fn v6_scope(ip6: std::net::Ipv6Addr) -> Scope {
+    use std::net::*;
+    if (ip6.segments()[0] & 0xfe00) == 0xfc00 {
+        Scope::ULA
+    } else if u128::from_be_bytes(ip6.octets()) == u128::from_be_bytes(Ipv6Addr::LOCALHOST.octets())
+    {
+        Scope::Loopback
+    } else if u128::from_be_bytes(ip6.octets())
+        == u128::from_be_bytes(Ipv6Addr::UNSPECIFIED.octets())
+    {
+        Scope::Unspecified
+    } else if (ip6.segments()[0] & 0xffff) == 0xfe80
+        && (ip6.segments()[1] & 0xffff) == 0
+        && (ip6.segments()[2] & 0xffff) == 0
+        && (ip6.segments()[3] & 0xffff) == 0
+    {
+        /* Follows the stricter definition in RFC4291 */
+        Scope::Link
+    } else if (ip6.segments()[0] & 0xff00) == 0xff00 {
+        Scope::Multicast
+    } else {
+        Scope::Global
+    }
+}
+
+impl Ord for ScopeSorter {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        use Scope::*;
+        /* We prefer ULA > Global > Link addresses > Other */
+        let scopes = [Scope::Unspecified, Link, Global, ULA];
+        let sscope = v6_scope(self.0);
+        let oscope = v6_scope(other.0);
+        let sscopepos = scopes
+            .iter()
+            .position(|x| *x == sscope)
+            .unwrap_or(usize::MIN);
+        let oscopepos = scopes
+            .iter()
+            .position(|x| *x == oscope)
+            .unwrap_or(usize::MIN);
+        let ret = sscopepos.cmp(&oscopepos);
+        if ret == std::cmp::Ordering::Equal {
+            /* If the two addresses are the same scope, just compare on addresses */
+            /* We might want to consider other criteria here */
+            self.0.cmp(&other.0)
+        } else {
+            ret
+        }
+    }
+}
+
+impl PartialOrd for ScopeSorter {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl RaAdvService {
     pub fn new(
         netinfo: crate::net::netinfo::SharedNetInfo,
@@ -130,6 +200,7 @@ impl RaAdvService {
         intf: &config::Interface,
         ll: Option<[u8; 6]>, /* TODO: This only works for ethernet */
         mtu: Option<u32>,
+        self6: std::net::Ipv6Addr,
     ) -> icmppkt::RtrAdvertisement {
         let mut options = icmppkt::NDOptions::default();
         /* Add the LL address of the interface, if it exists. */
@@ -156,25 +227,26 @@ impl RaAdvService {
             config
                 .dns_servers
                 .iter()
-                .filter_map(|ip| {
-                    if let std::net::IpAddr::V6(v6) = ip {
-                        Some(v6)
-                    } else {
-                        None
+                .filter_map(|ip| match ip {
+                    std::net::IpAddr::V6(ip6) if *ip6 == std::net::Ipv6Addr::UNSPECIFIED => {
+                        Some(self6)
                     }
+                    std::net::IpAddr::V6(ip6) => Some(*ip6),
+                    _ => None,
                 })
-                .copied()
                 .collect(),
         ) {
             options.add_option(icmppkt::NDOptionValue::RDNSS((
-                intf.rdnss_lifetime.always_unwrap_or(intf.lifetime),
+                intf.rdnss_lifetime
+                    .always_unwrap_or(3 * DEFAULT_MAX_RTR_ADV_INTERVAL),
                 v.clone(),
             )))
         }
 
         if let Some(v) = &intf.dnssl.unwrap_or(config.dns_search.clone()) {
             options.add_option(icmppkt::NDOptionValue::DNSSL((
-                intf.dnssl_lifetime.always_unwrap_or(intf.lifetime),
+                intf.dnssl_lifetime
+                    .always_unwrap_or(3 * DEFAULT_MAX_RTR_ADV_INTERVAL),
                 v.clone(),
             )))
         }
@@ -217,6 +289,25 @@ impl RaAdvService {
             _ => None,
         };
 
+        /* Find the "best" address for an interface.
+         * We prefer ULA > Global > Link > Other
+         */
+        let ScopeSorter(self6) = self
+            .netinfo
+            .get_prefixes_by_ifidx(ifidx)
+            .await
+            .unwrap() // TODO: Error?
+            .iter()
+            .filter_map(|(addr, _prefixlen)| {
+                if let std::net::IpAddr::V6(ip6) = addr {
+                    Some(ScopeSorter(*ip6))
+                } else {
+                    None
+                }
+            })
+            .max()
+            .unwrap(); /* v6 interfaces always have a linklocal, so we should have found at least one address here */
+
         /* Let them know the MTU of the interface */
         /* We use the value from the config, but if they don't specify one, we just read the MTU
          * from the interface and use that.  If they don't want erbium to specify one, then they
@@ -229,7 +320,7 @@ impl RaAdvService {
             DontSet => None,
         };
 
-        Self::build_announcement_pure(&*self.conf.read().await, intf, ll, mtu)
+        Self::build_announcement_pure(&*self.conf.read().await, intf, ll, mtu, self6)
     }
 
     async fn build_announcement_by_ifidx(
@@ -468,6 +559,7 @@ fn test_build_announcement() {
         },
         Some([1, 2, 3, 4, 5, 6]),
         Some(1480),
+        std::net::Ipv6Addr::UNSPECIFIED,
     );
     icmppkt::serialise(&icmppkt::Icmp6::RtrAdvert(msg));
 }
@@ -493,6 +585,7 @@ fn test_default_values() {
         },
         Some([1, 2, 3, 4, 5, 6]),
         Some(1480),
+        std::net::Ipv6Addr::UNSPECIFIED,
     );
     assert_eq!(
         msg.options
@@ -558,6 +651,7 @@ fn test_dontset_values() {
         },
         Some([1, 2, 3, 4, 5, 6]),
         Some(1480),
+        std::net::Ipv6Addr::UNSPECIFIED,
     );
     assert!(msg.options.find_option(icmppkt::RDNSS).is_empty());
     assert!(msg.options.find_option(icmppkt::DNSSL).is_empty());
