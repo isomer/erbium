@@ -262,7 +262,6 @@ fn parse_pref64(name: &str, fragment: &yaml::Yaml) -> Result<Option<Pref64>, Err
 
 fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface>, Error> {
     if let Some(h) = fragment.as_hash() {
-        let mut intf = None;
         let mut hoplimit: Option<u8> = None;
         let mut managed = None;
         let mut other = None;
@@ -277,7 +276,11 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
         let mut pref64 = None;
         for (k, v) in h {
             match (k.as_str(), v) {
-                (Some("interface"), s) => intf = parse_string("interface", s)?,
+                (Some("interface"), _) => {
+                    return Err(Error::InvalidConfig(
+                        "interface name is no longer specified here".into(),
+                    ))
+                }
                 (Some("hop-limit"), i) => hoplimit = parse_num("hop-limit", i)?,
                 (Some("managed"), b) => managed = parse_boolean("managed", b)?,
                 (Some("other"), o) => other = parse_boolean("other", o)?,
@@ -312,29 +315,23 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                 }
             }
         }
-        if let Some(ifname) = intf {
-            Ok(Some(Interface {
-                name: ifname,
-                hoplimit: hoplimit.unwrap_or(0),
-                managed: managed.unwrap_or(false),
-                other: other.unwrap_or(false),
-                lifetime,
-                reachable: reachable.unwrap_or_else(|| std::time::Duration::from_secs(0)),
-                retrans: retrans.unwrap_or_else(|| std::time::Duration::from_secs(0)),
-                mtu,
-                prefixes,
-                rdnss_lifetime: rdnss.0,
-                rdnss: rdnss.1,
-                dnssl_lifetime: dnssl.0,
-                dnssl: dnssl.1,
-                captive_portal,
-                pref64,
-            }))
-        } else {
-            Err(Error::InvalidConfig(
-                "Interface specified without a name".into(),
-            ))
-        }
+        Ok(Some(Interface {
+            name: name.into(),
+            hoplimit: hoplimit.unwrap_or(0),
+            managed: managed.unwrap_or(false),
+            other: other.unwrap_or(false),
+            lifetime,
+            reachable: reachable.unwrap_or_else(|| std::time::Duration::from_secs(0)),
+            retrans: retrans.unwrap_or_else(|| std::time::Duration::from_secs(0)),
+            mtu,
+            prefixes,
+            rdnss_lifetime: rdnss.0,
+            rdnss: rdnss.1,
+            dnssl_lifetime: dnssl.0,
+            dnssl: dnssl.1,
+            captive_portal,
+            pref64,
+        }))
     } else {
         Err(Error::InvalidConfig(format!(
             "{} expected hash, got {} instead",
@@ -345,10 +342,39 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
 }
 
 pub fn parse(fragment: &yaml::Yaml) -> Result<Option<Config>, Error> {
-    Ok(Some(Config {
-        interfaces: parse_array("router-advertisements", fragment, parse_interface)?
-            .unwrap_or_else(Vec::new),
-    }))
+    let mut conf = Config::default();
+    if let Some(h) = fragment.as_hash() {
+        for (k, v) in h {
+            match (k.as_str(), v) {
+                /* You may wish to specify an interface, and accept _all_ the defaults.
+                 * So that means the type ends up being null, rewrite it to an empty hash.
+                 * This has the side effect that you can't force an interface to _not_ have a
+                 * config if you've also specified sufficient config for it at the top level.
+                 */
+                (Some(interface), yaml::Yaml::Null) => conf.interfaces.push(
+                    parse_interface(interface, &yaml::Yaml::Hash(Default::default()))?.unwrap(),
+                ),
+                (Some(interface), intf) => conf
+                    .interfaces
+                    .push(parse_interface(interface, intf)?.unwrap()),
+                (None, _) => {
+                    return Err(Error::InvalidConfig(format!(
+                        "router-advertisement keys should be names of interfaces, not {}",
+                        type_to_name(k)
+                    )))
+                }
+            }
+        }
+        Ok(Some(conf))
+    } else if fragment.is_array() {
+        Err(Error::InvalidConfig("router-advertisement is no longer a list of interfaces, but instead a hash indexed by interface name".into()
+        ))
+    } else {
+        Err(Error::InvalidConfig(format!(
+            "router-advertisement should be a hash, not {}",
+            type_to_name(fragment)
+        )))
+    }
 }
 
 #[test]
@@ -357,7 +383,7 @@ fn test_config_parse() -> Result<(), Error> {
     config::load_config_from_string_for_test(
         "---
 router-advertisements:
-    - interface: eth0
+    eth0:
       hop-limit: 64
       managed: false
       other: false

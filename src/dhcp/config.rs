@@ -532,35 +532,9 @@ impl Config {
         }
     }
 
-    fn parse_dhcp(fragment: &yaml::Yaml) -> Result<Vec<Policy>, Error> {
-        if let Some(h) = fragment.as_hash() {
-            let mut policies = Vec::new();
-            for (k, v) in h {
-                match k.as_str() {
-                    Some("policies") => policies = Config::parse_policies(v)?,
-                    Some(x) => {
-                        return Err(Error::InvalidConfig(format!(
-                            "Unexpected item {} in dhcp fragment",
-                            x
-                        )))
-                    }
-                    None => {
-                        return Err(Error::InvalidConfig(format!(
-                            "Unexpected key {:?} in dhcp fragment",
-                            k
-                        )))
-                    }
-                }
-            }
-            Ok(policies)
-        } else {
-            Err(Error::InvalidConfig("dhcp is expected to be a hash".into()))
-        }
-    }
-
     pub fn new(y: &yaml::Yaml) -> Result<Option<Self>, Error> {
         Ok(Some(Config {
-            policies: Config::parse_dhcp(y)?,
+            policies: Config::parse_policies(y)?,
         }))
     }
 }

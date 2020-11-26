@@ -672,8 +672,7 @@ async fn test_defaults() {
     let pkt = mk_dhcp_request();
     let conf = crate::config::load_config_from_string_for_test(
         "
-dhcp:
- policies:
+dhcp-policies:
   - match-subnet: 192.0.2.0/24
     apply-address: 192.0.2.1
     apply-netmask: null

@@ -642,7 +642,8 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut addresses = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
-                (Some("dhcp"), d) => dhcp = crate::dhcp::config::Config::new(d)?,
+                (Some("dhcp"), _) => return Err(Error::InvalidConfig("The dhcp section has been replaced with dhcp-policies section, please see the manpage for more details".into())),
+                (Some("dhcp-policies"), d) => dhcp = crate::dhcp::config::Config::new(d)?,
                 (Some("router-advertisements"), r) => ra = crate::radv::config::parse(r)?,
                 (Some("dns-servers"), s) => {
                     dns_servers = parse_array("dns-servers", s, parse_string_ip)?
@@ -728,46 +729,45 @@ pub async fn load_config_from_path(path: &std::path::Path) -> Result<SharedConfi
 fn test_config_parse() -> Result<(), Error> {
     load_config_from_string(
         "---
-dhcp:
+dhcp-policies:
+  - match-interface: eth0
+    apply-dns-servers: ['8.8.8.8', '8.8.4.4']
+    apply-subnet: 192.168.0.0/24
+    apply-time-offset: 3600
+    apply-domain-name: erbium.dev
+    apply-forward: false
+    apply-mtu: 1500
+    apply-broadcast: 192.168.255.255
+    apply-rebind-time: 120
+    apply-renewal-time: 90s
+    apply-arp-timeout: 1w
+    apply-routes:
+     - prefix: 192.0.2.0/24
+       next-hop: 192.0.2.254
+
+
     policies:
-      - match-interface: eth0
-        apply-dns-servers: ['8.8.8.8', '8.8.4.4']
-        apply-subnet: 192.168.0.0/24
-        apply-time-offset: 3600
-        apply-domain-name: erbium.dev
-        apply-forward: false
-        apply-mtu: 1500
-        apply-broadcast: 192.168.255.255
-        apply-rebind-time: 120
-        apply-renewal-time: 90s
-        apply-arp-timeout: 1w
-        apply-routes:
-         - prefix: 192.0.2.0/24
-           next-hop: 192.0.2.254
+       - { match-host-name: myhost, apply-address: 192.168.0.1 }
 
 
+  - match-interface: dmz
+    apply-dns-servers: ['8.8.8.8']
+    apply-subnet: 192.0.2.0/24
+
+    # Reserve some space from the pool for servers
+    policies:
+      - apply-range: {start: 192.0.2.10, end: 192.0.2.20}
+
+        # From the reserved pool, assign a static address.
         policies:
-           - { match-host-name: myhost, apply-address: 192.168.0.1 }
+          - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
 
-
-      - match-interface: dmz
-        apply-dns-servers: ['8.8.8.8']
-        apply-subnet: 192.0.2.0/24
-
-        # Reserve some space from the pool for servers
-        policies:
-          - apply-range: {start: 192.0.2.10, end: 192.0.2.20}
-
-            # From the reserved pool, assign a static address.
-            policies:
-              - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
-
-          # Reserve space for VPN endpoints
-          - match-user-class: VPN
-            apply-subnet: 192.0.2.128/25
+      # Reserve space for VPN endpoints
+      - match-user-class: VPN
+        apply-subnet: 192.0.2.128/25
 
 router-advertisements:
-    - interface: eth0
+    eth0:
 ",
     )?;
     Ok(())
@@ -782,8 +782,8 @@ dns-search: ['example.com']
 addresses: [192.0.2.0/24, 2001:db8::/64]
 
 router-advertisements:
-    - interface: eth0
-      lifetime: 1d
+    eth0:
+     lifetime: 1h
 ",
     )?;
     Ok(())

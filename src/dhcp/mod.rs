@@ -954,41 +954,40 @@ fn test_policy() {
 async fn test_config_parse() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = crate::config::load_config_from_string_for_test(
         "---
-dhcp:
+dhcp-policies:
+  - match-subnet: 192.168.0.0/24
+    apply-dns-servers: ['8.8.8.8', '8.8.4.4']
+    apply-subnet: 192.168.0.0/24
+    apply-time-offset: 3600
+    apply-domain-name: erbium.dev
+    apply-forward: false
+    apply-mtu: 1500
+    apply-broadcast: 192.168.255.255
+    apply-rebind-time: 120
+    apply-renewal-time: 90s
+    apply-arp-timeout: 1w
+
+
     policies:
-      - match-subnet: 192.168.0.0/24
-        apply-dns-servers: ['8.8.8.8', '8.8.4.4']
-        apply-subnet: 192.168.0.0/24
-        apply-time-offset: 3600
-        apply-domain-name: erbium.dev
-        apply-forward: false
-        apply-mtu: 1500
-        apply-broadcast: 192.168.255.255
-        apply-rebind-time: 120
-        apply-renewal-time: 90s
-        apply-arp-timeout: 1w
+       - { match-host-name: myhost, apply-address: 192.168.0.1 }
+       - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
 
 
+  - match-interface: dmz
+    apply-dns-servers: ['8.8.8.8']
+    apply-subnet: 192.0.2.0/24
+
+    # Reserve some space from the pool for servers
+    policies:
+      - apply-range: {start: 192.0.2.10, end: 192.0.2.20}
+
+        # From the reserved pool, assign a static address.
         policies:
-           - { match-host-name: myhost, apply-address: 192.168.0.1 }
-           - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
+          - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
 
-
-      - match-interface: dmz
-        apply-dns-servers: ['8.8.8.8']
-        apply-subnet: 192.0.2.0/24
-
-        # Reserve some space from the pool for servers
-        policies:
-          - apply-range: {start: 192.0.2.10, end: 192.0.2.20}
-
-            # From the reserved pool, assign a static address.
-            policies:
-              - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
-
-          # Reserve space for VPN endpoints
-          - match-user-class: VPN
-            apply-subnet: 192.0.2.128/25
+      # Reserve space for VPN endpoints
+      - match-user-class: VPN
+        apply-subnet: 192.0.2.128/25
         ",
     )?;
 
