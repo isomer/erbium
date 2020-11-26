@@ -33,11 +33,56 @@ appropriate for your environment (eg shellscript, python script, ELF binary
 etc).  This tooling could provide templating or whatever functionality is
 needed for the local environment.
 
+.SS Configuration wide options
+IP addresses can be specified as the string $self4 or $self6 which will use the
+local IPv4 or IPv6 address of the interface the request arrived on
+respectively.
+
+.SS Top level Configuration
+The top level configuration provides defaults for the other protocol
+implementations in erbium.
+For most networks, only the top level configuration is necessary, but for more
+advanced users per protocol configuration can be used to override these
+defaults (or disable them by setting their value to \fBnull\fP.
+Top level configuration is not required, you can instead configure each
+protocol individually, it is provided as a convenience measure.
+
+.IP "\fBaddresses:\fP \fIlist-of-subnets\fP"
+(defaults to no value)
+This provides both the list of interfaces to configure for router
+advertisements and DHCP, and the IP ranges to give out.
+The subnets must match exactly the subnets on the inteface (including the prefix length),
+and the network address.
+For DHCP this will give out addresses on this interface except for the network
+address, broadcast address, and the local interface IPv4 address.
+DHCP will also exclude any address given in a normal policy, in the same way
+that sub policies work below.
+For router advertisements, this will configure the IPv6 prefix for SLAAC
+addressing.
+
+.IP "\fBdns-servers:\fP \fIlist-of-ip-addresses\fP"
+(defaults to no value)
+This sets the default dns servers to be handed out by DHCP and Router
+Advertisements.
+DHCP is limited by the design of the protocol to only support
+handing out IPv4 addresses.
+Similarly router advertisements are limited by design to only support handing
+out IPv6 addresses.
+
+.IP "\fBdns-search:\fP \fIlist-of-domain-names\fP"
+(defaults to no value)
+This sets the default DNS search path.
+This is supported by both the DHCP and router advertisements protocols.
+
+.IP "\fBcaptive-portal:\fP \fIurl\fP"
+(defaults to no value)
+This sets the URL to the captive portal, as specified in RFC8910.
+This is used by both DHCP and router advertisements.
+
 .SS DHCP Configuration
 
-DHCP configuration for erbium is under a \fBdhcp\fP heading.
-The only subheading of dhcp is currently \fBpolicies\fP.
-Under the \fBpolicies\fP section is a list of policies to apply to incoming
+DHCP configuration for erbium is under a \fBdhcp-policies\fP heading.
+\fBdhcp-policies\fP is a a list of policies to apply to incoming
 DHCP packets.
 Each policy is considered in turn, with the first policy that successfully
 matches being the policy that is applied.
@@ -166,8 +211,11 @@ A simple string in any of YAMLs string formats.
 An integer, in any of YAMLs integer formats.
 .IP \fIip4\fP
 An IPv4 address.  eg: 192.0.2.0
+This can also be the keyword $self4.
 .IP "\fIip4 list\fP"
-A YAML list of IPv4 addresses.  eg: [192.0.2.1, 192.0.2.2].
+A YAML list of IPv4 addresses.
+This list can also contain the keyword $self4.
+eg: [$self4, 192.0.2.1, 192.0.2.2].
 .IP \fIseconds\fP
 This can be an integer number of seconds (in any of YAMLs integer formats), or it can be a string with numbers
 suffixed with "s" (for seconds), "m" (for minutes), "h" (for hours), or "d" (for days).
@@ -182,11 +230,9 @@ Routes are specified with a prefix and nexthop. eg: { prefix: 192.0.2.0/24, next
 .\"
 .SH Router Advertisement Configuration
 Router Advertisements can be configured in erbium under a \fBrouter-advertisements\fP section.
-This should be a yaml list of interfaces.
-Each interface is a yaml hash with some keywords configuring the announcements
-for an interface.
-.IP "\fBinterface:\fP \fIname\fP"
-(required) This is the name of interface to send the announcements.
+This should be a yaml hash of interfaces, keyed by the interface name, and the
+value being a a yaml hash with some keywords configuring the announcements for
+an interface.
 .IP "\fBhop-limit:\fP \fIinteger\fP"
 (default 0)
 Set the hop limit for hosts on this network.
@@ -203,10 +249,11 @@ This tells the hosts on this network that there is more configuration available
 via DHCPv6.
 (Hosts ignore this if the "managed" bit is set)
 .IP "\fBlifetime:\fP \fIduration\fP"
-(default 0s)
+(default 0s if there is no default route or if the default route points back
+out the same interface, 1h otherwise)
 This configures the "Router Lifetime".
 This configures how long this host should be considered a default router.
-Setting this to 0 means that the erbium router is not a default router.
+Setting this to 0 means that the erbium host is not a default router.
 .IP "\fBreachable:\fP \fIduration\fP"
 (default 0ms)
 This configures the "Reachable Time" for hosts on the network.
@@ -223,15 +270,18 @@ Setting this to 0 means that this is not specified by this router.
 This configures the MTU of the link.
 This can be set to \fBnull\fP so that this router will not specify this.
 .IP "\fBcaptive-portal:\fP \fIurl\fP"
-(defaults to unset)
+(defaults to \fBcaptive-portal\fP in the top level configuration)
 This configures a URL to the captive portal (RFC7710).
 This can be set to \fBnull\fP so that this router will not specify this.
 .IP "\fBdns-servers:\fP"
-(hash configuring the recusive DNS servers)
+(defaults based on \fBdns-servers\fP in the top level configuration)
+hash configuring the recusive DNS servers,
 .RS
 .IP "\fBaddresses:\fP \fIlist-of-ipv6-addresses\fP"
-(defaults to the empty list)
+(defaults to the IPv6 addresses listed in the \fBdns-servers\fP top level
+configuration)
 This sets the IPv6 addresses for the router addresses.
+It is possible to use $self6 here to refer to the local interface address.
 .IP "\fBlifetime:\fP \fIduration\fP"
 (defaults to the setting of the interface lifetime)
 This sets the amount of time that the recursive DNS servers addresses are
@@ -242,7 +292,8 @@ valid.
 (hash configuring the DNS search list)
 .RS
 .IP "\fBdomains:\fP \fIlist-of-domain-suffixes\fP"
-(defaults to the empty list)
+(defaults to the domains listed in the top level \fBdns-search\fI
+configuration)
 This sets the ordered list of domain suffixes that should be tried.
 .IP "\fBlifetime:\fP \fIduration\fP"
 (defaults to the setting of the interface lifetime)
@@ -285,58 +336,79 @@ autoconfiguration remain preferred, and should be used for new connections.
 
 .SH EXAMPLE
 .EX
-dhcp:
- policies:
-  - apply-dns-servers: [192.0.2.53]
-    apply-ntp-servers: [192.0.2.123]
+dns-servers: [$self4, $self6, 8.8.8.8, 2001:4860:4860::8888]
+dns-search: [example.com, example.org]
+addresses: [192.0.2.0/24, 2001:db8::/64]
+dhcp-policies:
+  - apply-ntp-servers: [192.0.2.123]
 
     policies:
-     - match-subnet: 192.0.2.0/24
-       apply-subnet: 192.0.2.0/24
+     - match-subnet: 198.51.100.0/24
+       apply-range:
+         start: 198.51.100.100
+         end: 198.51.100.199
        apply-routes:
-        - prefix: 198.51.100.0/24
-          next-hop: 192.0.2.254
+        - prefix: 203.0.113.0/24
+          next-hop: $self4
        policies:
-        - { match-hardware-address: 00:00:5E:00:53:01, apply-address: 192.0.2.1 }
-        - { match-hardware-address: 00:00:5E:00:53:02, apply-address: 192.0.2.2 }
+        - { match-hardware-address: 00:00:5E:00:53:01, apply-address: 198.51.100.110, dns-servers: null }
+        - { match-hardware-address: 00:00:5E:00:53:02, apply-address: 198.51.100.111, dns-servers: [8.8.8.8] }
 
-     - apply-subnet: 198.51.100.0/24
+     - apply-subnet: 203.0.113.0/24
        policies:
         - { match-hardware-address: 00:00:5E:00:53:F0 }
         - { match-hardware-address: 00:00:5E:00:53:F1 }
 
 router-advertisements:
- - interface: eth0
+ eth1:
    lifetime: 30m
    prefixes:
-    - prefix: 2001:db8::/64
+    - prefix: 2001:db8:0:1::/64
    dns-servers:
     addresses: [2001:db8::53]
-   dns-search:
-    domains: [example.net]
 .EE
 .PP
-A client with the mac address 00:00:5E:00:53:01 on an interface with an address
-in 192.0.2.0/24 will get given the IP address 192.0.2.1 (and no other).  It
-will get given the DNS server 192.0.2.53 and the NTP server 192.0.2.123 as
-these are both DHCP options and will be inherited from the top level
-configuration.
+Imagine a router with 3 interfaces.
+.IP eth0
+This has the addresses 192.0.2.254/24, and 2001:db8::1/64.
+.IP eth1
+This has the addresses 198.51.100.254/24, and 2001:db8:0:1::1/64.
+.IP eth2
+This has the address 203.0.113.254/24.
 .PP
-A client with the mac address 00:00:5E:00:53:03 on an interface with an address
-in 192.0.2.0/24 will get assigned some IP address between 192.0.2.3 and
-192.0.2.254 inclusive.  It will also get assigned the default DNS and NTP
-servers.
+A client on eth0 will be assigned an IP out of the range 192.0.2.1 to 192.0.2.253
+(192.0.2.0 being the network address, 192.0.2.254 being in use by the local
+interface, and 192.0.2.255 being the broadcast address, all are excluded).
 .PP
-A client with the mac address 00:00:5E:00:53:F0 on any interface will be
-assigned an IP address between 198.51.100.1 and 198.51.100.254 (inclusive).
+A client on eth1 with the mac address 00:00:5E:00:53:01 on eth1 will
+get given the IP address 198.51.100.110 (and no other).
+It will not be given any DNS servers (overriding the top level configuration),
 .PP
-Any other client that sends a query that is received on an interface that is
-not a member of 192.0.2.0/24 will not get a reply.  (This is what ISC DHCP
-server called "non-authoritative mode")
+A client on eth1 with the mac address 00:00:5E:00:53:02 on will get given the
+IP address 198.51.100.111.
+It will get assigned only 8.8.8.8 as the DNS server address.
 .PP
-Clients with IPv6 on eth0 will allocate themselves address in 2001:db8::/64.
-They will use 2001:db8::53 as their DNS server, and will use example.net for
-the domain suffix.
+Other clients on eth1 will get assigned an IPv4 address between 198.51.100.100
+and 198.51.100.200, but not 198.51.100.110 or 198.51.100.111, as these are
+reserved in a subpolicy.
+Other clients will get 192.0.2.254 and 8.8.8.8 as IPv4 DNS servers (Inherited
+from the top level configuration, IPv6 addresses filtered out).
+.PP
+On eth2, only the two hosts 00:00:5E:00:53:F0 and 00:00:5E:00:53:F1 will be
+allocated addresses between 203.0.113.1 and 203.0.113.254 (as the default
+allocated addresses is calculated from the match-address directive).
+.PP
+All IPv4 clients on all interfaces will get assigned the NTP server
+192.0.2.123.
+.PP
+Despite there being no explicit router configuration section for eth0, clients
+with IPv6 on eth0 will allocate themselves an address in 2001:db8::/64, due to
+addresses matching this interface being configured at the top level.
+They will have 2001:db8::1 and 2001:4860:4860::8888 as their DNS servers (again
+inherited from the top level), and a dns search path of example.com and example.org.
+.PP
+Clients with IPv6 on eth1 will allocate themselves an address in 2001:db8:0:1:/64, and
+will use the DNS server 2001:db8::53.
 .SH FILES
 erbium.conf
 .SH BUGS
