@@ -7,6 +7,7 @@ default-run = "erbium"
 description = "Network services for small/home networks"
 license = "Apache-2.0"
 repository = "https://github.com/isomer/erbium.git"
+build = "src/build.rs"
 
 [dependencies]
 async-std = { version = "1.6.2", features = ["tokio02"] }
@@ -34,4 +35,5 @@ path = "src/lib.rs"
 lto = "fat"
 codegen-units = 1
 
-
+[build-dependencies]
+vergen = "3"

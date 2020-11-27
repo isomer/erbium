@@ -79,6 +79,11 @@ async fn go() -> Result<(), Error> {
 
 #[tokio::main]
 async fn main() {
+    println!(
+        "erbium {} ({})",
+        env!("VERGEN_SEMVER"),
+        env!("VERGEN_SHA_SHORT")
+    );
     match go().await {
         Ok(()) => (),
         Err(x) => {
