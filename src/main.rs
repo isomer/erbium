@@ -97,7 +97,7 @@ async fn go() -> Result<(), Error> {
 async fn main() {
     println!(
         "erbium {} ({})",
-        env!("VERGEN_SEMVER"),
+        env!("CARGO_PKG_VERSION"),
         env!("VERGEN_SHA_SHORT")
     );
     match go().await {
