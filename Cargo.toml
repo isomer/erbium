@@ -23,8 +23,8 @@ futures-core = "0.3.5"
 futures-sink = "0.3.5"
 hostname = { version = "0.3" }
 mio = { version = "0.7" }
-netlink-packet-route = "0.5"
-netlink-sys = { version="0.4", features=["tokio_socket"] }
+netlink-packet-route = "0.6"
+netlink-sys = { version="0.5", features=["tokio_socket"] }
 nix = { version = "0.18" }
 rand = "0.7.3"
 rusqlite = { version = "0.23" }

@@ -1032,9 +1032,12 @@ dhcp-policies:
 
     assert_eq!(
         resp.address,
-        Some(std::collections::HashSet::from_iter(
-            [std::net::Ipv4Addr::new(192, 168, 0, 2)].iter().cloned()
-        ))
+        Some(
+            [std::net::Ipv4Addr::new(192, 168, 0, 2)]
+                .iter()
+                .cloned()
+                .collect()
+        )
     );
 
     Ok(())

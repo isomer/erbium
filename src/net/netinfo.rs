@@ -24,8 +24,8 @@ use netlink_packet_route::{
     constants::*, AddressMessage, LinkMessage, NetlinkHeader, NetlinkMessage, NetlinkPayload,
     RouteMessage, RtnlMessage,
 };
-use netlink_sys::constants::*;
-use netlink_sys::{Protocol, Socket, SocketAddr};
+use netlink_sys::TokioSocket as Socket;
+use netlink_sys::{protocols, SocketAddr};
 
 use tokio_compat_02::FutureExt;
 
@@ -445,7 +445,7 @@ impl NetLinkNetInfo {
     }
 
     async fn run(sni: SharedNetInfo, chan: tokio::sync::mpsc::Sender<()>) {
-        let mut socket = Socket::new(Protocol::Route).unwrap();
+        let mut socket = Socket::new(protocols::NETLINK_ROUTE).unwrap();
         let _port_number = socket.bind_auto().unwrap().port_number();
         let mut seq = 1;
         socket.connect(&SocketAddr::new(0, 0)).unwrap();
