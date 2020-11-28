@@ -549,9 +549,12 @@ impl PrefixOps for Prefix6 {
         (u128::from(self.addr) & u128::from(self.netmask())).into()
     }
     fn netmask(&self) -> std::net::Ipv6Addr {
-        (!(0xffffffff_ffffffff_fffffff_ffffffffu128 >> self.prefixlen)).into()
+        (!(0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffffu128 >> self.prefixlen)).into()
     }
     fn broadcast(&self) -> std::net::Ipv6Addr {
+        /* v6 addresses don't have a "broadcast".
+         * Perhaps this should be "all nodes multicast" instead.
+         */
         (u128::from(self.network()) | !u128::from(self.netmask())).into()
     }
 }

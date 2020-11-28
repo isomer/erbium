@@ -105,10 +105,10 @@ fn v6_scope(ip6: std::net::Ipv6Addr) -> Scope {
         == u128::from_be_bytes(Ipv6Addr::UNSPECIFIED.octets())
     {
         Scope::Unspecified
-    } else if (ip6.segments()[0] & 0xffff) == 0xfe80
-        && (ip6.segments()[1] & 0xffff) == 0
-        && (ip6.segments()[2] & 0xffff) == 0
-        && (ip6.segments()[3] & 0xffff) == 0
+    } else if ip6.segments()[0] == 0xfe80
+        && ip6.segments()[1] == 0
+        && ip6.segments()[2] == 0
+        && ip6.segments()[3] == 0
     {
         /* Follows the stricter definition in RFC4291 */
         Scope::Link
@@ -389,7 +389,7 @@ impl RaAdvService {
             } else {
                 let intf = config::Interface {
                     // TODO: should we fill in the interface name correctly here?
-                    prefixes: prefixes,
+                    prefixes,
                     ..Default::default()
                 };
                 Ok(self.build_announcement(ifidx, &intf).await)

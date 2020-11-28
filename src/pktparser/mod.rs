@@ -131,7 +131,7 @@ impl<'l> Buffer<'l> {
         let mut d = vec![];
         loop {
             let l = self.get_label()?;
-            if l == [] {
+            if l.is_empty() {
                 return Some(d);
             }
             d.push(String::from_utf8_lossy(l).to_string())

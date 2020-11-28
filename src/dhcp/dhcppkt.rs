@@ -1035,7 +1035,7 @@ impl Serialise for DhcpOptions {
         }
 
         /* Add end of options marker */
-        (255 as u8).serialise(v);
+        (255u8).serialise(v);
     }
 }
 

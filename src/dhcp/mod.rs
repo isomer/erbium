@@ -18,7 +18,6 @@
  */
 use std::collections;
 use std::convert::TryInto;
-use std::iter::FromIterator;
 use std::net;
 use std::ops::Sub as _;
 use std::sync::Arc;
@@ -193,15 +192,15 @@ fn apply_policy(req: &DHCPRequest, policy: &config::Policy, response: &mut Respo
     let pl: std::collections::HashSet<
         dhcppkt::DhcpOption,
         std::collections::hash_map::RandomState,
-    > = std::collections::HashSet::from_iter(
-        req.pkt
-            .options
-            .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
-            .unwrap_or_else(Vec::new)
-            .iter()
-            .cloned()
-            .map(dhcppkt::DhcpOption::from),
-    );
+    > = req
+        .pkt
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+        .unwrap_or_else(Vec::new)
+        .iter()
+        .cloned()
+        .map(dhcppkt::DhcpOption::from)
+        .collect();
 
     for (k, v) in &policy.apply_other {
         if pl.contains(k) {
@@ -744,18 +743,21 @@ impl DhcpService {
         };
 
         /* Log what we've got */
+        let if_mtu = self.netinfo.get_mtu_by_ifidx(intf).await;
+        let if_router = match self.netinfo.get_ipv4_default_route().await {
+            /* If the default route points out a different interface, then this is the default route */
+            Some((_, Some(rtridx))) if rtridx != intf => Some(optional_dst.unwrap()),
+            /* If it's the same interface, then the default router should be the nexthop */
+            Some((Some(nexthop), Some(rtridx))) if rtridx == intf => Some(nexthop),
+            _ => None,
+        };
+
         let request = DHCPRequest {
             pkt: req,
             serverip: optional_dst.unwrap(),
             ifindex: intf,
-            if_mtu: self.netinfo.get_mtu_by_ifidx(intf).await,
-            if_router: match self.netinfo.get_ipv4_default_route().await {
-                /* If the default route points out a different interface, then this is the default route */
-                Some((_, Some(rtridx))) if rtridx != intf => Some(optional_dst.unwrap()),
-                /* If it's the same interface, then the default router should be the nexthop */
-                Some((Some(nexthop), Some(rtridx))) if rtridx == intf => Some(nexthop),
-                _ => None,
-            },
+            if_mtu,
+            if_router,
         };
         log_pkt(&request, &self.netinfo).await;
 

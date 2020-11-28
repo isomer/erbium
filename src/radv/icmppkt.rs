@@ -110,10 +110,6 @@ fn parse_nd_rtr_solicit(buf: &mut Buffer) -> Result<Icmp6, Error> {
     Ok(Icmp6::RtrSolicit(options))
 }
 
-fn parse_nd_rtr_advert(_buf: &mut Buffer) -> Result<Icmp6, Error> {
-    Ok(Icmp6::Unknown)
-}
-
 pub fn parse(pkt: &[u8]) -> Result<Icmp6, Error> {
     /* Section 6.1.1: [..] MUST silently discard [.. unless .. ] length is 8 or more octets. */
     if pkt.len() < 8 {
@@ -126,7 +122,7 @@ pub fn parse(pkt: &[u8]) -> Result<Icmp6, Error> {
 
     match (ty, code) {
         (ND_ROUTER_SOLICIT, 0) => parse_nd_rtr_solicit(&mut buf),
-        (ND_ROUTER_ADVERT, 0) => parse_nd_rtr_advert(&mut buf),
+        (ND_ROUTER_ADVERT, 0) => Ok(Icmp6::Unknown),
         (ND_NEIGHBOR_SOLICIT, 0) => Ok(Icmp6::Unknown),
         (ND_NEIGHBOR_ADVERT, 0) => Ok(Icmp6::Unknown),
         (t, c) => {
