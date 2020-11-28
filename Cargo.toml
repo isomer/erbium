@@ -9,6 +9,12 @@ license = "Apache-2.0"
 repository = "https://github.com/isomer/erbium.git"
 build = "src/build.rs"
 
+[features]
+default=["dhcp", "radv"]
+dhcp=[]
+dns=[]
+radv=[]
+
 [dependencies]
 async-std = { version = "1.6.2", features = ["tokio02"] }
 bytes = "0.6.0"
@@ -26,6 +32,14 @@ tokio-compat-02 = "0.1"
 tokio-util = { version="0.5", features= ["codec"] }
 tokio = { version = "0.3", features = ["full"] }
 yaml-rust = { version = "0.4" }
+
+[[bin]]
+name="erbium-dns"
+required-features=["dns"]
+
+[[bin]]
+name="erbium-dhcp"
+required-features=["dhcp"]
 
 [lib]
 name = "erbium"

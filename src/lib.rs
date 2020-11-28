@@ -18,7 +18,9 @@
  */
 
 pub mod config;
+#[cfg(feature = "dhcp")]
 pub mod dhcp;
+#[cfg(feature = "dns")]
 pub mod dns;
 pub mod net;
 pub mod pktparser;

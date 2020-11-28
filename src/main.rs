@@ -41,12 +41,14 @@ impl std::fmt::Display for Error {
 }
 
 async fn go() -> Result<(), Error> {
+    /* Process the command line options.
+     * Currently we don't do anything smart with the command line.
+     */
     let args: Vec<_> = std::env::args_os().collect();
     if args.len() > 2 {
         println!("Usage: {} <configfile>", args[0].to_string_lossy());
         return Ok(());
     }
-    let netinfo = net::netinfo::SharedNetInfo::new().await;
     let config_file = if args.len() == 1 {
         std::path::Path::new("erbium.conf")
     } else {
@@ -56,21 +58,35 @@ async fn go() -> Result<(), Error> {
         .await
         .map_err(|e| Error::ConfigError(config_file.to_path_buf(), e))?;
 
-    let dhcp = std::sync::Arc::new(
-        dhcp::DhcpService::new(netinfo.clone(), conf.clone())
-            .await
-            .map_err(Error::ServiceError)?,
-    );
-    let radv = std::sync::Arc::new(
-        radv::RaAdvService::new(netinfo.clone(), conf.clone())
-            .map_err(|x| Error::ServiceError(x.to_string()))?,
-    );
+    /* Build the shared network information database that various systems depend on */
+    let netinfo = net::netinfo::SharedNetInfo::new().await;
 
+    /* Initialise each of the services, and record them */
     let mut services = futures::stream::FuturesUnordered::new();
+    #[cfg(feature = "dns")]
     services.push(tokio::spawn(dns::run()));
-    services.push(tokio::spawn(async move { dhcp.run().await }));
-    services.push(tokio::spawn(async move { radv.run().await }));
+    #[cfg(feature = "dhcp")]
+    {
+        let dhcp = std::sync::Arc::new(
+            dhcp::DhcpService::new(netinfo.clone(), conf.clone())
+                .await
+                .map_err(Error::ServiceError)?,
+        );
+        services.push(tokio::spawn(async move { dhcp.run().await }));
+    }
+    #[cfg(feature = "radv")]
+    {
+        let radv = std::sync::Arc::new(
+            radv::RaAdvService::new(netinfo.clone(), conf.clone())
+                .map_err(|x| Error::ServiceError(x.to_string()))?,
+        );
 
+        services.push(tokio::spawn(async move { radv.run().await }));
+    }
+
+    /* TODO: Perhaps drop some of the capabilities we don't need? */
+
+    /* Now start running them */
     let x = services.next().await.unwrap();
     println!("Service complete: {:?}", x);
 
