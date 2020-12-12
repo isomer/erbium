@@ -455,25 +455,29 @@ pub fn parse_string_ip(
     name: &str,
     fragment: &yaml::Yaml,
 ) -> Result<Option<std::net::IpAddr>, Error> {
-    parse_string(name, fragment).and_then(str_ip)
+    parse_string(name, fragment)
+        .and_then(|s| str_ip(s).map_err(|e| Error::InvalidConfig(format!("{}: {}", name, e))))
 }
 
 pub fn parse_string_ip4(
     name: &str,
     fragment: &yaml::Yaml,
 ) -> Result<Option<std::net::Ipv4Addr>, Error> {
-    parse_string(name, fragment).and_then(str_ip4)
+    parse_string(name, fragment)
+        .and_then(|s| str_ip4(s).map_err(|e| Error::InvalidConfig(format!("{}: {}", name, e))))
 }
 
 pub fn parse_string_ip6(
     name: &str,
     fragment: &yaml::Yaml,
 ) -> Result<Option<std::net::Ipv6Addr>, Error> {
-    parse_string(name, fragment).and_then(str_ip6)
+    parse_string(name, fragment)
+        .and_then(|s| str_ip6(s).map_err(|e| Error::InvalidConfig(format!("{}: {}", name, e))))
 }
 
 pub fn parse_string_prefix(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix>, Error> {
-    parse_string(name, fragment).and_then(str_prefix)
+    parse_string(name, fragment)
+        .and_then(|s| str_prefix(s).map_err(|e| Error::InvalidConfig(format!("{}: {}", name, e))))
 }
 
 pub fn parse_string_prefix4(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix4>, Error> {
@@ -481,7 +485,36 @@ pub fn parse_string_prefix4(name: &str, fragment: &yaml::Yaml) -> Result<Option<
 }
 
 pub fn parse_string_prefix6(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix6>, Error> {
-    parse_string(name, fragment).and_then(str_prefix6)
+    parse_string(name, fragment)
+        .and_then(|s| str_prefix6(s).map_err(|e| Error::InvalidConfig(format!("{}: {}", name, e))))
+}
+
+pub fn str_sockaddr(ost: Option<String>) -> Result<Option<nix::sys::socket::SockAddr>, Error> {
+    use nix::sys::socket::*;
+    ost.map(|st| match st.get(0..1) {
+        Some("@") => UnixAddr::new_abstract(&st[1..].as_bytes())
+            .map(SockAddr::Unix)
+            .map_err(|e| Error::InvalidConfig(format!("{} ({})", e, st))),
+        Some(_) if st.contains('/') => UnixAddr::new(st.as_bytes())
+            .map(SockAddr::Unix)
+            .map_err(|e| Error::InvalidConfig(format!("{} ({})", e, st))),
+        Some(_) => st
+            .parse::<std::net::SocketAddr>()
+            .map(|e| crate::net::socket::std_to_nix_sockaddr(&e))
+            .map_err(|e| Error::InvalidConfig(format!("{} ({})", e, st))),
+        None => Err(Error::InvalidConfig(
+            "Invalid socket address, expected unix socket or ip socket".into(),
+        )),
+    })
+    .transpose()
+}
+
+pub fn parse_string_sockaddr(
+    name: &str,
+    fragment: &yaml::Yaml,
+) -> Result<Option<nix::sys::socket::SockAddr>, Error> {
+    parse_string(name, fragment)
+        .and_then(|s| str_sockaddr(s).map_err(|e| Error::InvalidConfig(format!("{}: {}", name, e))))
 }
 
 pub fn parse_duration(
@@ -625,6 +658,7 @@ pub struct Config {
     pub dns_search: Vec<String>,
     pub captive_portal: Option<String>,
     pub addresses: Vec<Prefix>,
+    pub listeners: Vec<nix::sys::socket::SockAddr>,
 }
 
 pub type SharedConfig = std::sync::Arc<tokio::sync::RwLock<Config>>;
@@ -643,6 +677,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut dns_search = vec![];
         let mut captive_portal = None;
         let mut addresses = None;
+        let mut listeners = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
                 (Some("dhcp"), _) => return Err(Error::InvalidConfig("The dhcp section has been replaced with dhcp-policies section, please see the manpage for more details".into())),
@@ -661,6 +696,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 }
                 (Some("addresses"), s) => {
                     addresses = parse_array("addresses", s, parse_string_prefix)?;
+                }
+                (Some("api-listeners"), s) => {
+                    listeners = parse_array("api-listeners", s, parse_string_sockaddr)?;
                 }
                 (Some(x), _) => {
                     return Err(Error::InvalidConfig(format!(
@@ -682,6 +720,11 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             dns_servers,
             dns_search,
             captive_portal,
+            listeners: listeners.unwrap_or_else(|| {
+                vec![nix::sys::socket::SockAddr::Unix(
+                    nix::sys::socket::UnixAddr::new("/var/lib/erbium/control").unwrap(),
+                )]
+            }),
             addresses: addresses.unwrap_or_else(Vec::new),
         };
         Ok(std::sync::Arc::new(tokio::sync::RwLock::new(conf)))

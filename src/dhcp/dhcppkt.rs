@@ -45,6 +45,17 @@ impl std::fmt::Display for ParseError {
     }
 }
 
+impl ParseError {
+    pub fn get_variant_name(&self) -> &'static str {
+        use ParseError::*;
+        match self {
+            UnexpectedEndOfInput => "TRUNCATED_PACKET",
+            WrongMagic => "WRONG_MAGIC",
+            InvalidPacket => "INVALID_PACKET",
+        }
+    }
+}
+
 #[derive(PartialEq, Eq)]
 pub struct DhcpOp(u8);
 pub const OP_BOOTREQUEST: DhcpOp = DhcpOp(1);

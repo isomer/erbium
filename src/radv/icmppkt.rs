@@ -104,7 +104,7 @@ fn parse_nd_rtr_solicit(buf: &mut Buffer) -> Result<Icmp6, Error> {
             (SOURCE_LL_ADDR, value) => {
                 options.add_option(NDOptionValue::SourceLLAddr(value.to_vec()));
             }
-            o => println!("Unexpected ND RTR Solicit option {:?}", o),
+            o => log::warn!("Unexpected ND RTR Solicit option {:?}", o),
         }
     }
     Ok(Icmp6::RtrSolicit(options))
@@ -126,7 +126,7 @@ pub fn parse(pkt: &[u8]) -> Result<Icmp6, Error> {
         (ND_NEIGHBOR_SOLICIT, 0) => Ok(Icmp6::Unknown),
         (ND_NEIGHBOR_ADVERT, 0) => Ok(Icmp6::Unknown),
         (t, c) => {
-            println!("Unexpected ICMP6 message: {:?}/{}", t, c);
+            log::warn!("Unexpected ICMP6 message: {:?}/{}", t, c);
             Ok(Icmp6::Unknown) /* Ignore other ICMP codes */
         }
     }

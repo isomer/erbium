@@ -22,6 +22,8 @@ pub mod config;
 pub mod dhcp;
 #[cfg(feature = "dns")]
 pub mod dns;
+#[cfg(feature = "http")]
+pub mod http;
 pub mod net;
 pub mod pktparser;
 pub mod radv;

@@ -163,7 +163,7 @@ impl RecvMsg {
                 ControlMessageOwned::Ipv6PacketInfo(pi) => {
                     r.ipv6pktinfo = Some(pi);
                 }
-                x => println!("Unknown control message {:?}", x),
+                x => log::warn!("Unknown control message {:?}", x),
             }
         }
 

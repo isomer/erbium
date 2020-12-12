@@ -46,6 +46,20 @@ const ALL_ROUTERS: nix::sys::socket::Ipv6Addr = nix::sys::socket::Ipv6Addr(nix::
     ],
 });
 
+lazy_static::lazy_static! {
+    static ref RADV_RX_PACKETS: prometheus::IntCounterVec =
+        prometheus::register_int_counter_vec!("radv_received_packets", "Number of packets received", &["interface"])
+            .unwrap();
+    static ref RADV_SOLICITATIONS: prometheus::IntCounterVec =
+        prometheus::register_int_counter_vec!("radv_solicitations",
+            "Number of router solicitations received",
+            &["interface"])
+            .unwrap();
+    static ref RADV_TX_PACKETS: prometheus::IntCounterVec =
+        prometheus::register_int_counter_vec!("radv_sent_packets", "Number of packets sent", &["interface"])
+            .unwrap();
+}
+
 pub enum Error {
     Io(std::io::Error),
     Message(String),
@@ -418,13 +432,17 @@ impl RaAdvService {
             .send_msg(&s, &cmsg, socket::MsgFlags::empty(), Some(&dst))
             .await
         {
-            println!(
+            log::warn!(
                 "Failed to send router advertisement for {}(if#{}) ({}): {}",
                 self.netinfo.get_safe_name_by_ifidx(intf).await,
                 intf,
                 dst,
                 e
             );
+        } else {
+            RADV_TX_PACKETS
+                .with_label_values(&[&self.netinfo.get_safe_name_by_ifidx(intf).await])
+                .inc();
         }
         Ok(())
     }
@@ -435,15 +453,14 @@ impl RaAdvService {
         _in_opt: &icmppkt::NDOptions,
     ) -> Result<(), Error> {
         if let Some(ifidx) = rm.local_intf() {
-            let reply = self
-                .build_announcement_by_ifidx(ifidx.try_into().expect("Interface with ifidx"))
-                .await?;
             if let Some(dst) = rm
                 .address
                 .as_ref()
                 .map(crate::net::socket::std_to_nix_sockaddr)
             {
-                self.send_announcement(reply, dst, 0).await
+                let ifidx = ifidx.try_into().expect("Interface with ifidx");
+                let reply = self.build_announcement_by_ifidx(ifidx).await?;
+                self.send_announcement(reply, dst, ifidx).await
             } else {
                 Err(Error::Io(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -507,13 +524,19 @@ impl RaAdvService {
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(Error::Io(e)),
             }
+            let ifname = match rm.local_intf() {
+                Some(ifidx) => self.netinfo.get_safe_name_by_ifidx(ifidx as u32).await,
+                None => "<unknown>".into(),
+            };
+            RADV_RX_PACKETS.with_label_values(&[&ifname]).inc();
             let msg = icmppkt::parse(&rm.buffer);
             match msg {
                 Ok(icmppkt::Icmp6::Unknown) => (),
                 Err(_) => (),
                 Ok(icmppkt::Icmp6::RtrSolicit(opt)) => {
+                    RADV_SOLICITATIONS.with_label_values(&[&ifname]).inc();
                     if let Err(e) = self.handle_solicit(rm, &opt).await {
-                        println!("Failed to handle router solicitation: {}", e);
+                        log::warn!("Failed to handle router solicitation: {}", e);
                     }
                 }
                 Ok(icmppkt::Icmp6::RtrAdvert(_)) => (),
@@ -523,7 +546,7 @@ impl RaAdvService {
 
     pub async fn run(self: std::sync::Arc<Self>) -> Result<(), String> {
         use tokio::stream::StreamExt;
-        println!("Starting Router Advertisement service");
+        log::info!("Starting Router Advertisement service");
         let mut services = futures::stream::FuturesUnordered::new();
         let sol_self = self.clone();
         let unsol_self = self.clone();
@@ -541,7 +564,7 @@ impl RaAdvService {
                 Some(Ok(Err(e))) => e.to_string(), /* If the service failed */
                 Some(Err(e)) => e.to_string(),     /* If the spawn failed */
             };
-            println!("Router advertisement service shutdown: {}", ret);
+            log::error!("Router advertisement service shutdown: {}", ret);
         }
         Err("Router advertisement service shutdown".into())
     }

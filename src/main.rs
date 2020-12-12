@@ -17,6 +17,15 @@
  *  Thin wrapper to start all services.
  */
 
+use lazy_static::*;
+use log::{error, info};
+use prometheus::register_int_counter;
+
+lazy_static! {
+    static ref HIGH_FIVE_COUNTER: prometheus::IntCounter =
+        register_int_counter!("highfives", "Number of high fives received").unwrap();
+}
+
 use tokio::stream::StreamExt;
 
 use erbium::*;
@@ -46,7 +55,7 @@ async fn go() -> Result<(), Error> {
      */
     let args: Vec<_> = std::env::args_os().collect();
     if args.len() > 2 {
-        println!("Usage: {} <configfile>", args[0].to_string_lossy());
+        error!("Usage: {} <configfile>", args[0].to_string_lossy());
         return Ok(());
     }
     let config_file = if args.len() == 1 {
@@ -65,14 +74,17 @@ async fn go() -> Result<(), Error> {
     let mut services = futures::stream::FuturesUnordered::new();
     #[cfg(feature = "dns")]
     services.push(tokio::spawn(dns::run()));
+
+    let dhcp;
     #[cfg(feature = "dhcp")]
     {
-        let dhcp = std::sync::Arc::new(
+        dhcp = std::sync::Arc::new(
             dhcp::DhcpService::new(netinfo.clone(), conf.clone())
                 .await
                 .map_err(Error::ServiceError)?,
         );
-        services.push(tokio::spawn(async move { dhcp.run().await }));
+        let dhcp_copy = dhcp.clone();
+        services.push(tokio::spawn(async move { dhcp_copy.run().await }));
     }
     #[cfg(feature = "radv")]
     {
@@ -83,19 +95,25 @@ async fn go() -> Result<(), Error> {
 
         services.push(tokio::spawn(async move { radv.run().await }));
     }
+    #[cfg(feature = "http")]
+    http::run(dhcp, conf.clone())
+        .await
+        .map_err(|x| Error::ServiceError(x.to_string()))?;
 
     /* TODO: Perhaps drop some of the capabilities we don't need? */
 
     /* Now start running them */
     let x = services.next().await.unwrap();
-    println!("Service complete: {:?}", x);
+    error!("Service complete: {:?}", x);
 
     Ok(())
 }
 
 #[tokio::main]
 async fn main() {
-    println!(
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    info!(
         "erbium {} ({})",
         env!("CARGO_PKG_VERSION"),
         env!("VERGEN_SHA_SHORT")
@@ -103,7 +121,7 @@ async fn main() {
     match go().await {
         Ok(()) => (),
         Err(x) => {
-            println!("Error: {}", x);
+            error!("Error: {}", x);
             std::process::exit(1);
         }
     }

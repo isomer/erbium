@@ -27,37 +27,56 @@ pub const DEFAULT_MAX_LEASE: std::time::Duration = std::time::Duration::from_sec
 pub type PoolAddresses = std::collections::HashSet<std::net::Ipv4Addr>;
 
 #[derive(Debug)]
+pub enum LeaseType {
+    NewAddress,
+    ReusingLease,
+    Requested,
+    Revived,
+}
+
+#[derive(Debug)]
 pub struct Lease {
     pub ip: std::net::Ipv4Addr,
     pub expire: std::time::Duration,
+    pub lease_type: LeaseType,
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
+pub struct LeaseInfo {
+    pub ip: std::net::Ipv4Addr,
+    pub client_id: Vec<u8>,
+    pub start: u32,
+    pub expire: u32,
 }
 
 pub struct Pool {
     conn: rusqlite::Connection,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
-    DbError(String, rusqlite::Error),
-    NoSuchPool(String),
+    DbError(String),
     CorruptDatabase(String),
     NoAssignableAddress,
+    RequestedAddressInUse,
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::DbError(reason, e) => write!(f, "{}: {}", reason, e),
-            Error::NoSuchPool(s) => write!(f, "No Such Pool: {}", s),
+            Error::DbError(reason) => write!(f, "{}", reason),
             Error::CorruptDatabase(s) => write!(f, "Corrupt Database: {}", s),
             Error::NoAssignableAddress => write!(f, "No Assignable Address"),
+            Error::RequestedAddressInUse => write!(f, "Requested address is in use"),
         }
     }
 }
 
+impl std::error::Error for Error {}
+
 impl Error {
     fn emit(reason: String, e: rusqlite::Error) -> Error {
-        Error::DbError(reason, e)
+        Error::DbError(format!("{} ({})", reason, e))
     }
 }
 
@@ -107,6 +126,51 @@ impl Pool {
         Self::new_with_conn(conn)
     }
 
+    pub fn get_pool_metrics(&mut self) -> Result<(u32, u32), Error> {
+        let ts: u32 = std::time::SystemTime::now()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .expect("clock failure")
+            .as_secs() as u32;
+        self.conn
+            .query_row(
+                "SELECT
+             SUM(CASE WHEN expiry < ?1 THEN 1 ELSE 0 END) as active,
+             SUM(CASE WHEN expiry >= ?1 THEN 1 ELSE 0 END) as expired
+             FROM leases",
+                rusqlite::params![ts],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .map_err(|e| Error::DbError(e.to_string()))
+    }
+
+    pub fn get_leases(&mut self) -> Result<Vec<LeaseInfo>, Error> {
+        self.conn
+            .prepare_cached(
+                "SELECT
+                  address,
+                  clientid,
+                  start,
+                  expiry
+                 FROM
+                  leases",
+            )
+            .map_err(|e| Error::DbError(e.to_string()))?
+            .query_map(rusqlite::NO_PARAMS, |row| {
+                Ok(LeaseInfo {
+                    ip: row
+                        .get::<_, String>(0)?
+                        .parse::<std::net::Ipv4Addr>()
+                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?,
+                    client_id: row.get(1)?,
+                    start: row.get(2)?,
+                    expire: row.get(3)?,
+                })
+            })
+            .map_err(|e| Error::DbError(e.to_string()))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| Error::DbError(e.to_string()))
+    }
+
     fn select_requested_address(
         &mut self,
         requested: std::net::Ipv4Addr,
@@ -130,14 +194,13 @@ impl Pool {
             .or_else(map_no_row_to_none)?
             == None
         {
-            println!("Using requested {:?}", requested);
             Ok(Lease {
                 ip: requested,
                 expire: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
+                lease_type: LeaseType::Requested,
             })
         } else {
-            println!("Requested address is already in use in pool");
-            Err(Error::NoAssignableAddress)
+            Err(Error::RequestedAddressInUse)
         }
     }
 
@@ -147,7 +210,6 @@ impl Pool {
         addresses: &PoolAddresses,
         clientid: &[u8],
     ) -> Result<Lease, Error> {
-        println!("Assigning new lease");
         /* This performs a consistent hash of the clientid and the IP addresses
          * then orders by the distance from the hash of the clientid
          */
@@ -182,6 +244,7 @@ impl Pool {
                 return Ok(Lease {
                     ip: *i,
                     expire: std::time::Duration::from_secs(0), /* We rely on the min_lease_time below */
+                    lease_type: LeaseType::NewAddress,
                 });
             }
         }
@@ -227,7 +290,6 @@ impl Pool {
         {
             if let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>() {
                 if addresses.contains(&ip) {
-                    println!("Reusing existing lease: {:?}", lease);
                     // We want leases to double in size.  But normally you renew your
                     // lease at ½ the duration.  We don't want to always just double
                     // the lease, because you can accidentally end up with a ridiculously
@@ -237,6 +299,7 @@ impl Pool {
                     return Ok(Lease {
                         ip,
                         expire: std::time::Duration::from_secs(expiry.into()),
+                        lease_type: LeaseType::ReusingLease,
                     });
                 }
             }
@@ -270,7 +333,6 @@ impl Pool {
         {
             if let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>() {
                 if addresses.contains(&ip) {
-                    println!("Reviving old lease: {:?}", lease);
                     return Ok(Lease {
                         ip,
                         /* If a device is constantly asking for the same lease, we should double
@@ -278,6 +340,7 @@ impl Pool {
                          * devices that are more permanent get longer leases.
                          */
                         expire: std::time::Duration::from_secs(2 * (lease.2 - lease.1) as u64),
+                        lease_type: LeaseType::Revived,
                     });
                 }
             }
@@ -289,6 +352,7 @@ impl Pool {
         if let Some(addr) = requested {
             match self.select_requested_address(addr, ts as u32, addresses) {
                 Err(Error::NoAssignableAddress) => (),
+                Err(Error::RequestedAddressInUse) => (),
                 x => return x,
             }
         }

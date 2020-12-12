@@ -35,9 +35,7 @@ pub mod config;
 pub mod dhcppkt;
 #[cfg(not(fuzzing))]
 mod dhcppkt;
-
 pub mod pool;
-
 #[cfg(test)]
 mod test;
 
@@ -45,11 +43,43 @@ type UdpSocket = udp::UdpSocket;
 type ServerIds = std::collections::HashSet<net::Ipv4Addr>;
 pub type SharedServerIds = Arc<sync::Mutex<ServerIds>>;
 
+lazy_static::lazy_static! {
+    static ref DHCP_RX_PACKETS: prometheus::IntCounter =
+        prometheus::register_int_counter!("dhcp_received_packets", "Number of DHCP packets received")
+            .unwrap();
+    static ref DHCP_TX_PACKETS: prometheus::IntCounter =
+        prometheus::register_int_counter!("dhcp_sent_packets", "Number of DHCP packets sent")
+            .unwrap();
+    static ref DHCP_ERRORS: prometheus::IntCounterVec = prometheus::register_int_counter_vec!(
+        "dhcp_errors",
+        "Counts of reasons that replies cannot be sent",
+        &["reason"]
+    )
+    .unwrap();
+    static ref DHCP_ALLOCATIONS: prometheus::IntCounterVec = prometheus::register_int_counter_vec!(
+        "dhcp_allocations",
+        "Counts of address allocation types",
+        &["reason"]
+    )
+    .unwrap();
+    static ref DHCP_ACTIVE_LEASES: prometheus::IntGauge = prometheus::register_int_gauge!(
+        "dhcp_active_leases",
+        "Counts of leases that are currently in use"
+    )
+    .unwrap();
+    static ref DHCP_EXPIRED_LEASES: prometheus::IntGauge = prometheus::register_int_gauge!(
+        "dhcp_expired_leases",
+        "Counts of leases that are currently expired"
+    )
+    .unwrap();
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum DhcpError {
     UnknownMessageType(dhcppkt::MessageType),
-    NoLeasesAvailable,
+    NoLeasesConfigured,
     ParseError(dhcppkt::ParseError),
+    PoolError(pool::Error),
     InternalError(String),
     OtherServer(std::net::Ipv4Addr),
     NoPolicyConfigured,
@@ -65,11 +95,29 @@ impl std::fmt::Display for DhcpError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DhcpError::UnknownMessageType(m) => write!(f, "Unknown Message Type: {:?}", m),
-            DhcpError::NoLeasesAvailable => write!(f, "No Leases Available"),
+            DhcpError::NoLeasesConfigured => write!(f, "No Leases Configured"),
             DhcpError::ParseError(e) => write!(f, "Parse Error: {:?}", e),
             DhcpError::InternalError(e) => write!(f, "Internal Error: {:?}", e),
             DhcpError::OtherServer(s) => write!(f, "Packet for a different DHCP server: {}", s),
             DhcpError::NoPolicyConfigured => write!(f, "No policy configured for client"),
+            DhcpError::PoolError(p) => write!(f, "Pool Error: {:?}", p),
+        }
+    }
+}
+
+impl DhcpError {
+    fn get_variant_name(&self) -> &'static str {
+        use DhcpError::*;
+        match self {
+            UnknownMessageType(_) => "UNKNOWN_MESSAGE_TYPE",
+            NoLeasesConfigured => "NO_LEASES_CONFIGURED",
+            ParseError(_) => "PARSE_ERROR",
+            InternalError(_) => "INTERNAL_ERROR",
+            OtherServer(_) => "OTHER_SERVER",
+            NoPolicyConfigured => "NO_POLICY",
+            PoolError(pool::Error::NoAssignableAddress) => "NO_ADDRESS",
+            PoolError(pool::Error::RequestedAddressInUse) => "ADDRESS_IN_USE",
+            PoolError(_) => "INTERNAL_POOL_ERROR",
         }
     }
 }
@@ -355,35 +403,45 @@ fn handle_discover<'l>(
             response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
         ) {
             /* Now we have an address, build the reply */
-            Ok(lease) => Ok(dhcppkt::DHCP {
-                op: dhcppkt::OP_BOOTREPLY,
-                htype: dhcppkt::HWTYPE_ETHERNET,
-                hlen: 6,
-                hops: 0,
-                xid: req.pkt.xid,
-                secs: 0,
-                flags: req.pkt.flags,
-                ciaddr: net::Ipv4Addr::UNSPECIFIED,
-                yiaddr: lease.ip,
-                siaddr: net::Ipv4Addr::UNSPECIFIED,
-                giaddr: req.pkt.giaddr,
-                chaddr: req.pkt.chaddr.clone(),
-                sname: vec![],
-                file: vec![],
-                options: response
-                    .options
-                    .clone()
-                    .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
-                    .to_options(),
-            }),
-            /* There was an address pool assigned, but there were no available addresses in it */
-            Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
-            /* Some other error occurred, document it. */
-            Err(e) => Err(DhcpError::InternalError(e.to_string())),
+            Ok(lease) => {
+                DHCP_ALLOCATIONS
+                    .with_label_values(&[&format!("{:?}", lease.lease_type)])
+                    .inc();
+                log::info!(
+                    "Allocated Lease: {} for {:?} ({:?})",
+                    lease.ip,
+                    lease.expire,
+                    lease.lease_type
+                );
+
+                Ok(dhcppkt::DHCP {
+                    op: dhcppkt::OP_BOOTREPLY,
+                    htype: dhcppkt::HWTYPE_ETHERNET,
+                    hlen: 6,
+                    hops: 0,
+                    xid: req.pkt.xid,
+                    secs: 0,
+                    flags: req.pkt.flags,
+                    ciaddr: net::Ipv4Addr::UNSPECIFIED,
+                    yiaddr: lease.ip,
+                    siaddr: net::Ipv4Addr::UNSPECIFIED,
+                    giaddr: req.pkt.giaddr,
+                    chaddr: req.pkt.chaddr.clone(),
+                    sname: vec![],
+                    file: vec![],
+                    options: response
+                        .options
+                        .clone()
+                        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
+                        .to_options(),
+                })
+            }
+            /* Some error occurred, document it. */
+            Err(e) => Err(DhcpError::PoolError(e)),
         }
     } else {
         /* There were no addresses assigned to this match */
-        Err(DhcpError::NoLeasesAvailable)
+        Err(DhcpError::NoLeasesConfigured)
     }
 }
 
@@ -423,36 +481,46 @@ fn handle_request(
             response.minlease.unwrap_or(pool::DEFAULT_MIN_LEASE),
             response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
         ) {
-            Ok(lease) => Ok(dhcppkt::DHCP {
-                op: dhcppkt::OP_BOOTREPLY,
-                htype: dhcppkt::HWTYPE_ETHERNET,
-                hlen: 6,
-                hops: 0,
-                xid: req.pkt.xid,
-                secs: 0,
-                flags: req.pkt.flags,
-                ciaddr: req.pkt.ciaddr,
-                yiaddr: lease.ip,
-                siaddr: net::Ipv4Addr::UNSPECIFIED,
-                giaddr: req.pkt.giaddr,
-                chaddr: req.pkt.chaddr.clone(),
-                sname: vec![],
-                file: vec![],
-                options: response
-                    .options
-                    .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPACK)
-                    .set_option(
-                        &dhcppkt::OPTION_SERVERID,
-                        &req.pkt.options.get_serverid().unwrap_or(req.serverip),
-                    )
-                    .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32))
-                    .to_options(),
-            }),
-            Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
-            Err(e) => Err(DhcpError::InternalError(e.to_string())),
+            Ok(lease) => {
+                DHCP_ALLOCATIONS
+                    .with_label_values(&[&format!("{:?}", lease.lease_type)])
+                    .inc();
+                log::info!(
+                    "Allocated Lease: {} for {:?} ({:?})",
+                    lease.ip,
+                    lease.expire,
+                    lease.lease_type
+                );
+                Ok(dhcppkt::DHCP {
+                    op: dhcppkt::OP_BOOTREPLY,
+                    htype: dhcppkt::HWTYPE_ETHERNET,
+                    hlen: 6,
+                    hops: 0,
+                    xid: req.pkt.xid,
+                    secs: 0,
+                    flags: req.pkt.flags,
+                    ciaddr: req.pkt.ciaddr,
+                    yiaddr: lease.ip,
+                    siaddr: net::Ipv4Addr::UNSPECIFIED,
+                    giaddr: req.pkt.giaddr,
+                    chaddr: req.pkt.chaddr.clone(),
+                    sname: vec![],
+                    file: vec![],
+                    options: response
+                        .options
+                        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPACK)
+                        .set_option(
+                            &dhcppkt::OPTION_SERVERID,
+                            &req.pkt.options.get_serverid().unwrap_or(req.serverip),
+                        )
+                        .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32))
+                        .to_options(),
+                })
+            }
+            Err(e) => Err(DhcpError::PoolError(e)),
         }
     } else {
-        Err(DhcpError::NoLeasesAvailable)
+        Err(DhcpError::NoLeasesConfigured)
     }
 }
 
@@ -476,7 +544,7 @@ fn format_client(req: &dhcppkt::DHCP) -> String {
 }
 
 fn log_options(req: &dhcppkt::DHCP) {
-    println!(
+    log::info!(
         "{}: Options: {}",
         format_client(&req),
         req.options
@@ -499,7 +567,10 @@ fn log_options(req: &dhcppkt::DHCP) {
 }
 
 async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNetInfo) {
-    print!(
+    use std::fmt::Write as _;
+    let mut s = "".to_string();
+    write!(
+        s,
         "{}: {} on {}",
         format_client(&request.pkt),
         request
@@ -509,22 +580,25 @@ async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNet
             .map(|x| x.to_string())
             .unwrap_or_else(|| "[unknown]".into()),
         netinfo.get_safe_name_by_ifidx(request.ifindex).await
-    );
+    )
+    .unwrap();
     if !request.serverip.is_unspecified() {
-        print!(" ({})", request.serverip);
+        write!(s, " ({})", request.serverip).unwrap();
     }
     if !request.pkt.ciaddr.is_unspecified() {
-        print!(", using {}", request.pkt.ciaddr);
+        write!(s, ", using {}", request.pkt.ciaddr).unwrap();
     }
     if !request.pkt.giaddr.is_unspecified() {
-        print!(
+        write!(
+            s,
             ", relayed via {} hops from {}",
             request.pkt.hops, request.pkt.giaddr
-        );
+        )
+        .unwrap();
     }
-    println!();
+    log::info!("{}", s);
     log_options(&request.pkt);
-    println!(
+    log::info!(
         "{}: Requested: {}",
         format_client(&request.pkt),
         request
@@ -662,6 +736,7 @@ pub async fn handle_pkt(
 }
 
 async fn send_raw(raw: Arc<raw::RawSocket>, buf: &[u8], intf: i32) -> Result<(), std::io::Error> {
+    DHCP_TX_PACKETS.inc();
     raw.send_msg(
         buf,
         &raw::ControlMessage::new(),
@@ -721,22 +796,32 @@ impl DhcpService {
         let ip4 = if let net::SocketAddr::V4(f) = src {
             f
         } else {
-            println!("from={:?}", src);
-            unimplemented!()
+            DHCP_ERRORS
+                .with_label_values(&["UNEXPECTED_IP_PROTOCOL"])
+                .inc();
+            log::warn!(
+                "Query from unexpected source protocol ({:?}), ignoring.",
+                src
+            );
+            return;
         };
         let optional_dst = self.netinfo.get_ipv4_by_ifidx(intf).await;
         if optional_dst.is_none() {
-            println!(
+            log::warn!(
                 "No IPv4 found on interface {}",
                 self.netinfo.get_safe_name_by_ifidx(intf).await
             );
+            DHCP_ERRORS
+                .with_label_values(&["NO_IPV4_ON_INTERFACE"])
+                .inc();
             return;
         }
 
         /* Now lets decode the packet, and if it fails decode, fail the function early */
         let req = match dhcppkt::parse(pkt) {
             Err(e) => {
-                println!("Failed to parse packet: {}", e);
+                log::warn!("Failed to parse packet: {}", e);
+                DHCP_ERRORS.with_label_values(&[e.get_variant_name()]).inc();
                 return;
             }
             Ok(req) => req,
@@ -777,7 +862,7 @@ impl DhcpService {
             .await
             {
                 Err(e) => {
-                    println!(
+                    log::warn!(
                         "{}: Failed to handle {}: {}",
                         format_client(&request.pkt),
                         request
@@ -788,6 +873,7 @@ impl DhcpService {
                             .unwrap_or_else(|| "packet".into()),
                         e
                     );
+                    DHCP_ERRORS.with_label_values(&[e.get_variant_name()]).inc();
                     return;
                 }
                 Ok(r) => r,
@@ -803,7 +889,7 @@ impl DhcpService {
         }
 
         /* Log what we're sending */
-        println!(
+        log::info!(
             "{}: Sending {} on {} with {} for {}",
             format_client(&reply),
             reply
@@ -829,18 +915,20 @@ impl DhcpService {
         {
             srcll
         } else {
-            println!("{}: Not a usable LinkLayer?!", format_client(&reply));
+            log::warn!("{}: Not a usable LinkLayer?!", format_client(&reply));
+            DHCP_ERRORS.with_label_values(&["UNUSABLE_LINKLAYER"]).inc();
             return;
         };
 
         let chaddr = if let Some(chaddr) = to_array(&reply.chaddr) {
             chaddr
         } else {
-            println!(
-                "{}: Cannot send reply to invalid address {:?}",
+            log::warn!(
+                "{}: Cannot send reply to invalid client hardware addr {:?}",
                 format_client(&reply),
                 reply.chaddr
             );
+            DHCP_ERRORS.with_label_values(&["INVALID_CHADDR"]).inc();
             return;
         };
 
@@ -856,7 +944,8 @@ impl DhcpService {
         .flatten();
 
         if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
-            println!("{}: Failed to send reply: {:?}", format_client(&reply), e);
+            log::warn!("{}: Failed to send reply: {:?}", format_client(&reply), e);
+            DHCP_ERRORS.with_label_values(&["SEND_ERROR"]).inc();
         }
     }
 
@@ -881,7 +970,7 @@ impl DhcpService {
         listener
             .set_opt_ipv4_packet_info(true)
             .map_err(RunError::Io)?;
-        println!(
+        log::info!(
             "Listening for DHCP on {}",
             listener.local_addr().map_err(RunError::Io)?
         );
@@ -906,7 +995,7 @@ impl DhcpService {
     }
 
     async fn run_internal(self: std::sync::Arc<Self>) -> Result<(), RunError> {
-        println!("Starting DHCP service");
+        log::info!("Starting DHCP service");
         loop {
             let rm;
             match self.listener.recv_msg(65536, udp::MsgFlags::empty()).await {
@@ -915,6 +1004,7 @@ impl DhcpService {
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(RunError::Io(e)),
             }
+            DHCP_RX_PACKETS.inc();
             let self2 = self.clone();
             tokio::spawn(async move {
                 self2
@@ -932,6 +1022,27 @@ impl DhcpService {
         match self.run_internal().await {
             Ok(_) => Ok(()),
             Err(e) => Err(e.to_string()),
+        }
+    }
+
+    pub async fn update_metrics(self: &std::sync::Arc<Self>) {
+        match self.pool.lock().await.get_pool_metrics() {
+            Ok((in_use, expired)) => {
+                DHCP_ACTIVE_LEASES.set(in_use.into());
+                DHCP_EXPIRED_LEASES.set(expired.into());
+            }
+            Err(e) => log::warn!("Failed to update metrics: {}", e),
+        }
+    }
+
+    pub async fn get_leases(self: &std::sync::Arc<Self>) -> Vec<pool::LeaseInfo> {
+        let ret = self.pool.lock().await.get_leases();
+        match ret {
+            Ok(l) => l,
+            Err(e) => {
+                log::warn!("Failed to get leases: {}", e);
+                Vec::new()
+            }
         }
     }
 }
@@ -1028,7 +1139,7 @@ dhcp-policies:
         panic!("No policies applied");
     }
 
-    println!("{:?}", cfg.read().await);
+    log::info!("{:?}", cfg.read().await);
 
     assert_eq!(
         resp.address,

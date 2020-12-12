@@ -142,7 +142,7 @@ impl NetLinkNetInfo {
             ARPHRD_LOOPBACK => LinkLayer::None,
             ARPHRD_SIT => LinkLayer::None, // Actually this is a IpAddr, but we don't do DHCP over it, so...
             l => {
-                println!("Unknown Linklayer: {:?}", l);
+                log::warn!("Unknown Linklayer: {:?}", l);
                 LinkLayer::None
             }
         }
@@ -172,9 +172,13 @@ impl NetLinkNetInfo {
              */
             ii.addresses.push(ifaddr);
             let (ip, prefixlen) = ifaddr;
-            println!(
+            log::trace!(
                 "Found addr {}/{} for {}(#{}), now {:?}",
-                ip, prefixlen, ii.name, ifindex, ii.addresses
+                ip,
+                prefixlen,
+                ii.name,
+                ifindex,
+                ii.addresses
             );
         }
     }
@@ -186,9 +190,13 @@ impl NetLinkNetInfo {
         let ii = ni.intf.get_mut(&ifindex).unwrap(); // TODO: Error?
         ii.addresses.retain(|&x| x != ifaddr);
         let (ip, prefixlen) = ifaddr;
-        println!(
+        log::trace!(
             "Lost addr {}/{} for {}(#{}), now {:?}",
-            ip, prefixlen, ii.name, ifindex, ii.addresses
+            ip,
+            prefixlen,
+            ii.name,
+            ifindex,
+            ii.addresses
         );
     }
 
@@ -234,9 +242,12 @@ impl NetLinkNetInfo {
             flags: IfFlags(ifflags),
         };
 
-        println!(
+        log::trace!(
             "Found new interface {}(#{}) {:?} ({:?})",
-            ifinfo.name, ifidx, ifinfo, link
+            ifinfo.name,
+            ifidx,
+            ifinfo,
+            link
         );
         netinfo.add_interface(ifidx, ifinfo);
     }
@@ -291,14 +302,14 @@ impl NetLinkNetInfo {
 
     async fn process_newroute(sni: &SharedNetInfo, route: &RouteMessage) {
         if let Some(ri) = NetLinkNetInfo::decode_route(route) {
-            println!("New Route: {}", ri);
+            log::trace!("New Route: {}", ri);
             sni.0.write().await.routeinfo.push(ri);
         }
     }
 
     async fn process_delroute(sni: &SharedNetInfo, route: &RouteMessage) {
         if let Some(ri) = NetLinkNetInfo::decode_route(route) {
-            println!("Del Route: {}", ri);
+            log::trace!("Del Route: {}", ri);
             /* We basically assume there will only ever be one route for each prefix.
              * We'd have to be a lot more careful if we were to support multiple routes to a
              * particular prefix
@@ -332,7 +343,7 @@ impl NetLinkNetInfo {
         socket.add_membership(RTNLGRP_LINK).unwrap();
 
         if let Err(e) = socket.send(&buf[..]).await {
-            println!("SEND ERROR {}", e);
+            log::warn!("SEND ERROR {}", e);
         }
     }
 
@@ -373,7 +384,7 @@ impl NetLinkNetInfo {
         }
 
         if let Err(e) = socket.send(&buf[..]).await {
-            println!("SEND ERROR {}", e);
+            log::warn!("SEND ERROR {}", e);
         }
     }
 
@@ -410,7 +421,7 @@ impl NetLinkNetInfo {
         socket.add_membership(RTNLGRP_IPV6_IFADDR).unwrap();
 
         if let Err(e) = socket.send(&buf[..]).await {
-            println!("SEND ERROR {}", e);
+            log::warn!("SEND ERROR {}", e);
         }
     }
 
@@ -438,7 +449,7 @@ impl NetLinkNetInfo {
             }
             NetlinkPayload::Done => true,
             e => {
-                println!("Unknown: {:?}", e);
+                log::warn!("Unknown: {:?}", e);
                 false
             }
         }
