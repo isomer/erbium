@@ -27,3 +27,6 @@ pub mod http;
 pub mod net;
 pub mod pktparser;
 pub mod radv;
+
+#[cfg(test)]
+mod test_man_configs;

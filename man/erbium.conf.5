@@ -361,8 +361,8 @@ dhcp-policies:
         - prefix: 203.0.113.0/24
           next-hop: $self4
        policies:
-        - { match-hardware-address: 00:00:5E:00:53:01, apply-address: 198.51.100.110, dns-servers: null }
-        - { match-hardware-address: 00:00:5E:00:53:02, apply-address: 198.51.100.111, dns-servers: [8.8.8.8] }
+        - { match-hardware-address: 00:00:5E:00:53:01, apply-address: 198.51.100.110, apply-dns-servers: null }
+        - { match-hardware-address: 00:00:5E:00:53:02, apply-address: 198.51.100.111, apply-dns-servers: [8.8.8.8] }
 
      - apply-subnet: 203.0.113.0/24
        policies:
