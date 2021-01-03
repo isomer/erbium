@@ -33,6 +33,7 @@ use erbium::*;
 enum Error {
     ConfigError(std::path::PathBuf, erbium::config::Error),
     ServiceError(String),
+    CommandLineError(String),
 }
 
 impl std::fmt::Display for Error {
@@ -45,6 +46,7 @@ impl std::fmt::Display for Error {
                 e
             ),
             Error::ServiceError(msg) => write!(f, "{}", msg),
+            Error::CommandLineError(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -54,9 +56,11 @@ async fn go() -> Result<(), Error> {
      * Currently we don't do anything smart with the command line.
      */
     let args: Vec<_> = std::env::args_os().collect();
-    if args.len() > 2 {
-        error!("Usage: {} <configfile>", args[0].to_string_lossy());
-        return Ok(());
+    if args.len() > 2 || args[1].to_string_lossy().starts_with("-") {
+        return Err(Error::CommandLineError(format!(
+            "Usage: {} <configfile>",
+            args[0].to_string_lossy()
+        )));
     }
     let config_file = if args.len() == 1 {
         std::path::Path::new("erbium.conf")
