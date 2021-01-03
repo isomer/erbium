@@ -56,7 +56,7 @@ async fn go() -> Result<(), Error> {
      * Currently we don't do anything smart with the command line.
      */
     let args: Vec<_> = std::env::args_os().collect();
-    if args.len() > 2 || args[1].to_string_lossy().starts_with("-") {
+    if args.len() > 2 || (args.len() == 2 && args[1].to_string_lossy().starts_with("-")) {
         return Err(Error::CommandLineError(format!(
             "Usage: {} <configfile>",
             args[0].to_string_lossy()
