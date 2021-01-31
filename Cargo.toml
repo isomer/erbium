@@ -1,6 +1,6 @@
 [package]
 name = "erbium"
-version = "0.2.6"
+version = "0.2.7"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2018"
 default-run = "erbium"
@@ -10,18 +10,20 @@ repository = "https://github.com/isomer/erbium.git"
 build = "src/build.rs"
 
 [features]
-full=["dhcp", "radv", "http"]
-default=["dhcp", "radv"]
+full=["dhcp", "radv", "http", "dns"]
+default=["dhcp", "radv", "http"]
 dhcp=[]
 dns=[] # Partially complete, not ready for use.
 radv=[]
 http=["hyper", "dhcp"] # Currently can't compile http without dhcp.
 
 [dependencies]
+arbitrary = { version = "0.4", features = [ "derive" ]}
 async-std = { version = "1.6.2", features = ["tokio02"] }
-bytes = "0.6.0"
+async-trait = { version = "0.1.42" }
+bytes = "1.0"
 env_logger = "0.8.2"
-futures = "0.3.5"
+futures = "0.3.8"
 futures-core = "0.3.5"
 futures-sink = "0.3.5"
 hostname = { version = "0.3" }
@@ -31,14 +33,15 @@ log = "0.4"
 mio = { version = "0.7" }
 netlink-packet-route = "0.6"
 netlink-sys = { version="0.5", features=["tokio_socket"] }
-nix = { version = "0.18" }
-prometheus = { version="0.10.0", features=["process"] }
-rand = "0.7.3"
-rusqlite = { version = "0.23" }
-tokio-compat-02 = "0.1"
-tokio-util = { version="0.5", features= ["codec"] }
-tokio = { version = "0.3", features = ["full"] }
+nix = { version = "0.19" }
+prometheus = { version="0.11.0", features=["process"] }
+rand = "0.8"
+rusqlite = { version = "0.24" }
+tokio-compat-02 = "0.2"
+tokio-util = { version="0.6", features= ["codec"] }
+tokio = { version = "1.0", features = ["full"] }
 yaml-rust = { version = "0.4" }
+
 
 
 [[bin]]
@@ -60,5 +63,3 @@ codegen-units = 1
 [build-dependencies]
 vergen = "3"
 
-[patch.crates-io]
-hyper = { git = "https://github.com/hyperium/hyper" }

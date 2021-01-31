@@ -17,6 +17,7 @@
  *  This allows using erbium as a library.
  */
 
+pub mod acl;
 pub mod config;
 #[cfg(feature = "dhcp")]
 pub mod dhcp;

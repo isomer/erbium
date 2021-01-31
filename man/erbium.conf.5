@@ -13,7 +13,7 @@
 .\"  limitations under the License.
 .\"
 .\"  SPDX-License-Identifier: Apache-2.0
-.TH erbium.conf 5 2021-01-04 Linux "File formats and configuration files"
+.TH erbium.conf 5 2021-01-31 Linux "File formats and configuration files"
 .SH NAME
 erbium.conf \- Configuration for erbium
 .SH DESCRIPTION
@@ -88,6 +88,10 @@ You may wish to use ["/var/lib/erbium/control", "[::1]:9968"] to allow scraping
 prometheus metrics from ip6-localhost.
 This is currently an experimental feature and only enabled with
 \fB\-\-features=http\fP on the cargo build command line.
+
+.IP "\fBacls:\fP \fIarray-of-acls\fP"
+(default see the ACLs section below)
+This introduces the array of ACLs.
 
 .SS DHCP Configuration
 
@@ -343,6 +347,55 @@ This configures how long this prefix is considered valid and usable.
 The duration that addresses generated from the prefix via stateless address
 autoconfiguration remain preferred, and should be used for new connections.
 .RE
+.SH ACLs (Access Control Lists)
+To change which clients can do what, erbium has a customisable ACL system.
+ACLs are defined under the heading "acls:" at the top level, and are an ordered list of rules of which clients this
+particular ACL applies to, and what access this client has.
+ACLs are applied in a strict first-match basis.
+Any client that does not match any ACL will not be granted any access.
+
+.IP "\fBmatch-subnets:\fP \fIarray-of-subnets\fP"
+If specified, this requires that the access granted by this ACL applies only to clients that have a source
+address that matches one of subnets provided.
+If not specified, then the source address is not matched.
+.IP "\fBmatch-unix:\fP \fIboolean\fP"
+If specified, this requires that the access granted by this ACL applies only to clients over a unix domain socket (if
+true), otherwise must not be a unix domain socket (if false).
+If not specified, then if the client arrives over a unix domain socket is not matched.
+.IP "\fBapply-access:\fP \fIarray-of-access-strings\fP"
+(default: empty list)
+This specifies which accesses the matched clients are permitted.
+.RS
+.IP "\fBdns-recursion\fP"
+Allows DNS recursion.
+.IP "\fBhttp\fP"
+Allows access to the non-API parts of the HTTP server.
+.IP "\fBhttp-metrics\fP"
+Allows access to the /metrics endpoint of the HTTP server.
+.IP "\fBhttp-leases\fP"
+Allows access to the list of active leases over HTTP.
+.IP "\fBhttp-ro\fP"
+An alias for "http-metrics" and "http-leases".
+This is used to support future versions that may add additional read only HTTP end points that users can use
+to collect information.
+By using "http-ro" instead of "http-metrics" and "http-leases" independently, as new accesses are added then
+this configuration will include them.
+.RE
+
+If you specify any ACLs then all the defaults are overridden and need to be specified.
+The defaults for ACLs are as follows:
+.EX
+acls:
+ # Allow DHCP clients to perform DNS queries, and talk to the HTTP API server (if enabled)
+ - match-subnets: [\fIthe-contents-of-the-top-level-addresses-field\fP]
+   apply-access: ["dns-recursion", "http-ro"]
+ # Allow localhost to perform DNS queries, any talk to the HTTP API server (if enabled)
+ - match-subnets: [127.0.0.0/8, ::1/128]
+   apply-access: ["dns-recursion", "http-ro"]
+ # Allow all users via Unix domain sockets to talk to the HTTP API server (if enabled)
+ - match-unix: true
+   apply-access: ["http-ro"]
+.EE
 
 .SH EXAMPLE
 .EX

@@ -181,7 +181,7 @@ impl RaAdvService {
         //rawsock
         //    .set_socket_option(crate::net::Ipv6UnicastHops, &255)
         //    .map_err(Error::Io)?;
-        use std::os::unix::io::AsRawFd;
+        use std::os::unix::io::AsRawFd as _;
         crate::net::socket::set_ipv6_unicast_hoplimit(rawsock.as_raw_fd(), 255)
             .map_err(crate::net::socket::nix_to_io_error)
             .map_err(Error::Io)?;
@@ -493,8 +493,7 @@ impl RaAdvService {
         loop {
             /* Update the time with jitter */
             let timeout = std::time::Duration::from_secs(rand::thread_rng().gen_range(
-                DEFAULT_MIN_RTR_ADV_INTERVAL.as_secs(),
-                DEFAULT_MAX_RTR_ADV_INTERVAL.as_secs(),
+                DEFAULT_MIN_RTR_ADV_INTERVAL.as_secs()..DEFAULT_MAX_RTR_ADV_INTERVAL.as_secs(),
             ));
             tokio::time::sleep(timeout).await;
             for idx in self.netinfo.get_ifindexes().await {
@@ -545,7 +544,7 @@ impl RaAdvService {
     }
 
     pub async fn run(self: std::sync::Arc<Self>) -> Result<(), String> {
-        use tokio::stream::StreamExt;
+        use futures::StreamExt as _;
         log::info!("Starting Router Advertisement service");
         let mut services = futures::stream::FuturesUnordered::new();
         let sol_self = self.clone();

@@ -27,7 +27,7 @@ use std::convert::TryFrom;
 use std::io;
 use std::net;
 use std::net::SocketAddr;
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::AsRawFd as _;
 use tokio::io::unix::AsyncFd;
 
 use nix::libc;

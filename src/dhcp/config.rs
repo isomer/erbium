@@ -17,7 +17,7 @@
  *  DHCP Configuration parsing.
  */
 use super::dhcppkt;
-use std::convert::TryFrom;
+use std::convert::TryFrom as _;
 use std::ops::Sub;
 use yaml_rust::yaml;
 

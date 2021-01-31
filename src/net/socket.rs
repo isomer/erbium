@@ -174,7 +174,7 @@ impl RecvMsg {
     ///
     /// This is primarily used by UDP sockets to tell you which address a packet arrived on when
     /// the UDP socket is bound to INADDR_ANY or IN6ADDR_ANY.
-    pub fn local_addr(&self) -> Option<std::net::IpAddr> {
+    pub fn local_ip(&self) -> Option<std::net::IpAddr> {
         // This function can be overridden to provide different implementations for different
         // platforms.
         //

@@ -17,8 +17,8 @@
  *  Erbium Configuration parsing.
  */
 use std::convert::TryFrom;
-use std::os::unix::fs::PermissionsExt;
-use tokio::io::AsyncReadExt;
+use std::os::unix::fs::PermissionsExt as _;
+use tokio::io::AsyncReadExt as _;
 use yaml_rust::yaml;
 
 #[derive(Debug)]
@@ -200,7 +200,7 @@ where
     match fragment {
         yaml::Yaml::Null => Ok(None),
         yaml::Yaml::Array(a) => {
-            let v = a
+            let mut v = a
                 .iter()
                 .map(|it| parser(name, it))
                 .collect::<Result<Vec<_>, _>>()?
@@ -211,7 +211,7 @@ where
                     })
                 })
                 .collect::<Result<Vec<T>, _>>()?;
-
+            v.shrink_to_fit();
             Ok(Some(v))
         }
         e => Err(Error::InvalidConfig(format!(
@@ -539,10 +539,17 @@ pub trait Match<Ip> {
     fn contains(&self, ip: Ip) -> bool;
 }
 
-#[derive(Debug, Eq)]
+#[derive(Debug, Eq, Clone)]
 pub struct Prefix4 {
     pub addr: std::net::Ipv4Addr,
     pub prefixlen: u8,
+}
+
+impl Prefix4 {
+    pub fn new(addr: std::net::Ipv4Addr, prefixlen: u8) -> Self {
+        assert!(prefixlen <= 32);
+        Self { addr, prefixlen }
+    }
 }
 
 impl PrefixOps for Prefix4 {
@@ -551,7 +558,10 @@ impl PrefixOps for Prefix4 {
         (u32::from(self.addr) & u32::from(self.netmask())).into()
     }
     fn netmask(&self) -> std::net::Ipv4Addr {
-        (!(0xffffffffu32 >> self.prefixlen) as u32).into()
+        (!0xffffffffu32
+            .checked_shr(self.prefixlen as u32)
+            .unwrap_or(0))
+        .into()
     }
     fn broadcast(&self) -> std::net::Ipv4Addr {
         (u32::from(self.network()) | !u32::from(self.netmask())).into()
@@ -564,16 +574,35 @@ impl Match<std::net::Ipv4Addr> for Prefix4 {
     }
 }
 
+impl Match<std::net::Ipv6Addr> for Prefix4 {
+    fn contains(&self, ip: std::net::Ipv6Addr) -> bool {
+        match ip.octets() {
+            // If this is a ::ffff:a.b.c.d address, check it against the v4 equivalent.
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, a, b, c, d] => {
+                self.contains(std::net::Ipv4Addr::new(a, b, c, d))
+            }
+            _ => false,
+        }
+    }
+}
+
 impl PartialEq for Prefix4 {
     fn eq(&self, other: &Self) -> bool {
         self.network() == other.network() && self.netmask() == other.netmask()
     }
 }
 
-#[derive(Debug, Eq)]
+#[derive(Debug, Eq, Clone)]
 pub struct Prefix6 {
     pub addr: std::net::Ipv6Addr,
     pub prefixlen: u8,
+}
+
+impl Prefix6 {
+    pub fn new(addr: std::net::Ipv6Addr, prefixlen: u8) -> Self {
+        assert!(prefixlen <= 128);
+        Self { addr, prefixlen }
+    }
 }
 
 impl PrefixOps for Prefix6 {
@@ -582,7 +611,10 @@ impl PrefixOps for Prefix6 {
         (u128::from(self.addr) & u128::from(self.netmask())).into()
     }
     fn netmask(&self) -> std::net::Ipv6Addr {
-        (!(0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffffu128 >> self.prefixlen)).into()
+        (!(0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffffu128
+            .checked_shr(self.prefixlen as u32)
+            .unwrap_or(0)))
+        .into()
     }
     fn broadcast(&self) -> std::net::Ipv6Addr {
         /* v6 addresses don't have a "broadcast".
@@ -598,16 +630,52 @@ impl Match<std::net::Ipv6Addr> for Prefix6 {
     }
 }
 
+impl Match<std::net::Ipv4Addr> for Prefix6 {
+    fn contains(&self, ip: std::net::Ipv4Addr) -> bool {
+        match self.network().octets() {
+            // If this is a ::ffff:a.b.c.d prefix, check it against the v4 equivalent.
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, a, b, c, d] => Prefix4::new(
+                std::net::Ipv4Addr::new(a, b, c, d),
+                self.prefixlen - (128 - 32),
+            )
+            .contains(ip),
+            _ => false,
+        }
+    }
+}
+
 impl PartialEq for Prefix6 {
     fn eq(&self, other: &Self) -> bool {
         self.network() == other.network() && self.netmask() == other.netmask()
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum Prefix {
     V4(Prefix4),
     V6(Prefix6),
+}
+
+impl From<Prefix4> for Prefix {
+    fn from(p: Prefix4) -> Self {
+        Self::V4(p)
+    }
+}
+
+impl From<Prefix6> for Prefix {
+    fn from(p: Prefix6) -> Self {
+        Self::V6(p)
+    }
+}
+
+impl Prefix {
+    pub fn new(ip: std::net::IpAddr, prefixlen: u8) -> Self {
+        use std::net::IpAddr::*;
+        match ip {
+            V4(ip4) => Self::V4(Prefix4::new(ip4, prefixlen)),
+            V6(ip6) => Self::V6(Prefix6::new(ip6, prefixlen)),
+        }
+    }
 }
 
 impl PrefixOps for Prefix {
@@ -635,23 +703,33 @@ impl PrefixOps for Prefix {
     }
 }
 
-impl Prefix {
-    pub fn new(addr: std::net::IpAddr, prefixlen: u8) -> Self {
-        match addr {
-            std::net::IpAddr::V4(ip4) => Prefix::V4(Prefix4 {
-                addr: ip4,
-                prefixlen,
-            }),
-            std::net::IpAddr::V6(ip6) => Prefix::V6(Prefix6 {
-                addr: ip6,
-                prefixlen,
-            }),
+impl Match<std::net::IpAddr> for Prefix {
+    fn contains(&self, ip: std::net::IpAddr) -> bool {
+        match (self, ip) {
+            (Prefix::V4(p4), std::net::IpAddr::V4(ip4)) => p4.contains(ip4),
+            (Prefix::V6(p6), std::net::IpAddr::V6(ip6)) => p6.contains(ip6),
+            // For ::ffff:a.b.c.d matches.
+            (Prefix::V4(p4), std::net::IpAddr::V6(ip6)) => p4.contains(ip6),
+            (Prefix::V6(p6), std::net::IpAddr::V4(ip4)) => p6.contains(ip4),
         }
+    }
+}
+
+impl Match<std::net::Ipv4Addr> for Prefix {
+    fn contains(&self, ip: std::net::Ipv4Addr) -> bool {
+        self.contains(std::net::IpAddr::V4(ip))
+    }
+}
+
+impl Match<std::net::Ipv6Addr> for Prefix {
+    fn contains(&self, ip: std::net::Ipv6Addr) -> bool {
+        self.contains(std::net::IpAddr::V6(ip))
     }
 }
 
 #[derive(Debug, Default)]
 pub struct Config {
+    #[cfg(feature = "dhcp")]
     pub dhcp: crate::dhcp::config::Config,
     pub ra: crate::radv::config::Config,
     pub dns_servers: Vec<std::net::IpAddr>,
@@ -659,6 +737,7 @@ pub struct Config {
     pub captive_portal: Option<String>,
     pub addresses: Vec<Prefix>,
     pub listeners: Vec<nix::sys::socket::SockAddr>,
+    pub acls: Vec<crate::acl::Acl>,
 }
 
 pub type SharedConfig = std::sync::Arc<tokio::sync::RwLock<Config>>;
@@ -672,16 +751,21 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
     }
     if let Some(fragment) = y[0].as_hash() {
         let mut ra = None;
+        #[cfg(feature = "dhcp")]
         let mut dhcp = None;
         let mut dns_servers = vec![];
         let mut dns_search = vec![];
         let mut captive_portal = None;
         let mut addresses = None;
         let mut listeners = None;
+        let mut acls = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
                 (Some("dhcp"), _) => return Err(Error::InvalidConfig("The dhcp section has been replaced with dhcp-policies section, please see the manpage for more details".into())),
+                #[cfg(feature = "dhcp")]
                 (Some("dhcp-policies"), d) => dhcp = crate::dhcp::config::Config::new(d)?,
+                #[cfg(not(feature = "dhcp"))]
+                (Some("dhcp-policies"), _) => (),
                 (Some("router-advertisements"), r) => ra = crate::radv::config::parse(r)?,
                 (Some("dns-servers"), s) => {
                     dns_servers = parse_array("dns-servers", s, parse_string_ip)?
@@ -700,6 +784,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 (Some("api-listeners"), s) => {
                     listeners = parse_array("api-listeners", s, parse_string_sockaddr)?;
                 }
+                (Some("acls"), s) => {
+                    acls = parse_array("acls", s, crate::acl::parse_acl)?;
+                }
                 (Some(x), _) => {
                     return Err(Error::InvalidConfig(format!(
                         "Unknown configuration option {}",
@@ -714,7 +801,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 }
             }
         }
+        let addresses = addresses.unwrap_or_else(Vec::new);
         let conf = Config {
+            #[cfg(feature = "dhcp")]
             dhcp: dhcp.unwrap_or_else(crate::dhcp::config::Config::default),
             ra: ra.unwrap_or_else(crate::radv::config::Config::default),
             dns_servers,
@@ -725,7 +814,8 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                     nix::sys::socket::UnixAddr::new("/var/lib/erbium/control").unwrap(),
                 )]
             }),
-            addresses: addresses.unwrap_or_else(Vec::new),
+            acls: acls.unwrap_or_else(|| crate::acl::default_acls(&addresses)),
+            addresses,
         };
         Ok(std::sync::Arc::new(tokio::sync::RwLock::new(conf)))
     } else {
@@ -854,4 +944,39 @@ fn test_prefix() {
     let p1 = "2001:db8::1".parse().unwrap();
     let p2 = "2001:db8::".parse().unwrap();
     assert_eq!(Prefix::new(p1, 64), Prefix::new(p2, 64));
+}
+
+#[test]
+fn test_prefix6_contains() {
+    let net1 = "::ffff:192.0.2.0".parse().unwrap();
+    let ip1: std::net::Ipv6Addr = "::ffff:192.0.2.1".parse().unwrap();
+    let ip2: std::net::Ipv6Addr = "::ffff:192.168.0.1".parse().unwrap();
+    assert!(Prefix6::new(net1, 120).contains(ip1));
+    assert!(!Prefix6::new(net1, 120).contains(ip2));
+}
+
+#[test]
+fn test_cross_ip_version_contains() {
+    let net6 = "::ffff:192.0.2.0".parse().unwrap();
+    let net4 = "192.0.2.0".parse().unwrap();
+    let ip6: std::net::Ipv6Addr = "::ffff:192.0.2.1".parse().unwrap();
+    let ip4: std::net::Ipv4Addr = "192.0.2.1".parse().unwrap();
+    let bad6: std::net::Ipv6Addr = "::ffff:10.0.0.1".parse().unwrap();
+    let bad4: std::net::Ipv6Addr = "::ffff:10.0.0.1".parse().unwrap();
+    assert!(Prefix6::new(net6, 120).contains(ip4));
+    assert!(Prefix6::new(net6, 120).contains(ip6));
+    assert!(Prefix4::new(net4, 24).contains(ip4));
+    assert!(Prefix4::new(net4, 24).contains(ip6));
+    assert!(!Prefix6::new(net6, 120).contains(bad4));
+    assert!(!Prefix6::new(net6, 120).contains(bad6));
+    assert!(!Prefix4::new(net4, 24).contains(bad4));
+    assert!(!Prefix4::new(net4, 24).contains(bad6));
+    assert!(Prefix::new(net6.into(), 120).contains(ip4));
+    assert!(Prefix::new(net6.into(), 120).contains(ip6));
+    assert!(Prefix::new(net4.into(), 24).contains(ip4));
+    assert!(Prefix::new(net4.into(), 24).contains(ip6));
+    assert!(!Prefix::new(net6.into(), 120).contains(bad4));
+    assert!(!Prefix::new(net6.into(), 120).contains(bad6));
+    assert!(!Prefix::new(net4.into(), 24).contains(bad4));
+    assert!(!Prefix::new(net4.into(), 24).contains(bad6));
 }

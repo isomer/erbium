@@ -17,7 +17,7 @@
  *  Main DHCP Code.
  */
 use std::collections;
-use std::convert::TryInto;
+use std::convert::TryInto as _;
 use std::net;
 use std::ops::Sub as _;
 use std::sync::Arc;

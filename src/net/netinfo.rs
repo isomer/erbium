@@ -471,7 +471,7 @@ impl NetLinkNetInfo {
             ReadingRoute4,
             ReadingRoute6,
             Done,
-        };
+        }
         let mut state = State::ReadingLink;
         // we set the NLM_F_DUMP flag so we expect a multipart rx_packet in response.
         while let Ok(size) = socket.recv(&mut receive_buffer[..]).await {

@@ -23,6 +23,10 @@ async fn man_page_example_configs() {
             example = "".into();
             in_example = true;
         } else if line == ".EE" {
+            example = example.replace(
+                "\\fIthe-contents-of-the-top-level-addresses-field\\fP",
+                "192.0.2.0/24",
+            );
             println!("Parsing example: {}", example);
             super::config::load_config_from_string_for_test(&example).unwrap();
             in_example = false;

@@ -17,7 +17,7 @@
  *  API to make parsing packets easier.
  */
 
-use std::convert::TryInto;
+use std::convert::TryInto as _;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
@@ -159,7 +159,7 @@ fn test_get_u8() {
 
 #[test]
 fn test_get_bytes() {
-    use std::convert::TryFrom;
+    use std::convert::TryFrom as _;
     let data = [1, 2, 3, 4];
     let mut buffer = Buffer::new(&data);
     assert_eq!(

@@ -17,7 +17,7 @@
  *  Thin wrapper to start DHCP services only.
  */
 
-use tokio::stream::StreamExt;
+use futures::StreamExt as _;
 
 extern crate erbium;
 
