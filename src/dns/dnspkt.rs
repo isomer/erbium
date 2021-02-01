@@ -908,7 +908,7 @@ impl DNSPkt {
         self.serialise_with_size(65536)
     }
     pub fn serialise_with_size(&self, size: usize) -> Vec<u8> {
-        assert!(size > 512);
+        assert!(size >= 512);
         let mut ret: Vec<u8> = Vec::new();
         let mut offsets = DomainOffsets::new();
         assert!(self.rcode.0 <= 0b1111_1111_1111);
