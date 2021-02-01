@@ -27,6 +27,14 @@ use tokio::sync::RwLock;
 use crate::dns::dnspkt;
 use crate::dns::outquery;
 
+lazy_static::lazy_static! {
+    static ref DNS_CACHE: prometheus::IntCounterVec =
+        prometheus::register_int_counter_vec!("dns_cache",
+            "Cache statistics",
+            &["result"])
+            .unwrap();
+}
+
 #[derive(Eq, PartialEq, Hash)]
 struct CacheKey {
     qname: dnspkt::Domain,
@@ -112,6 +120,7 @@ impl CacheHandler {
         /* Only do caching for IN queries */
         if q.qclass != dnspkt::CLASS_IN {
             log::trace!("Not caching non-IN query");
+            DNS_CACHE.with_label_values(&[&"UNCACHABLE_CLASS"]).inc();
             return self.next.handle_query(msg).await;
         }
 
@@ -126,12 +135,15 @@ impl CacheHandler {
             if entry.birth + entry.lifetime > now {
                 let remaining = (entry.birth + entry.lifetime) - now;
                 log::trace!("Cache hit ({:?} remaining)", remaining);
+                DNS_CACHE.with_label_values(&[&"HIT"]).inc();
                 return clone_with_ttl_decrement_out_reply(&entry.reply, now - entry.birth);
             } else {
                 log::trace!("Cache miss: Cache expired");
+                DNS_CACHE.with_label_values(&[&"EXPIRED"]).inc();
             }
         } else {
             log::trace!("Cache miss: Entry not present");
+            DNS_CACHE.with_label_values(&[&"MISS"]).inc();
         }
 
         /* Cache miss: Go attempt the resolve, and return the result */

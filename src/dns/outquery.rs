@@ -42,21 +42,9 @@ lazy_static::lazy_static! {
     static ref NAMESERVER_INFO: tokio::sync::Mutex<std::collections::HashMap<std::net::SocketAddr,TcpNameserverChannel>> = Default::default();
 
     static ref DNS_SENT_QUERIES: prometheus::IntCounterVec =
-        prometheus::register_int_counter_vec!("dns_out_queries_packets_sent",
+        prometheus::register_int_counter_vec!("dns_out_query_packets_sent",
             "Number of DNS out queries packets sent",
             &["dns_server", "protocol"]
-            )
-            .unwrap();
-
-    static ref KAMINSKY_MITIGATIONS: prometheus::IntCounter =
-        prometheus::register_int_counter!("dns_kaminsky_mitigations",
-                                            "Number of times kaminsky mitigations were triggered")
-            .unwrap();
-
-    static ref TRUNCATED_RETRY: prometheus::IntCounterVec =
-        prometheus::register_int_counter_vec!("dns_out_query_truncated_retry",
-            "Number of times a UDP out query was upgraded to a TCP out query due to truncation",
-            &["dns_server"]
             )
             .unwrap();
 
@@ -70,6 +58,12 @@ lazy_static::lazy_static! {
         prometheus::register_int_counter_vec!("dns_out_query_result",
             "DNS out query results",
             &["dns_server", "result"])
+        .unwrap();
+
+    static ref OUT_QUERY_RETRY: prometheus::IntCounterVec =
+        prometheus::register_int_counter_vec!("dns_out_query_retries",
+            "DNS out query retry reasons",
+            &["dns_server", "reason"])
         .unwrap();
 
     static ref OUT_QUERY_OUTSTANDING: prometheus::IntGaugeVec =
@@ -286,7 +280,7 @@ impl TcpNameserver {
             let last_recv_activity = self.tcp_last_recv_activity;
             if self.tcp.is_some() {
                 /* We have an open TCP connection, so listen on both the TCP connection and the request
-                 * channel. (TODO: Also timeout the TCP channel)
+                 * channel.
                  */
                 use futures::FutureExt as _;
                 futures::select! {
@@ -428,6 +422,9 @@ impl OutQuery {
                     if attempts > 3 {
                         return Err(Error::Timeout);
                     }
+                    OUT_QUERY_RETRY
+                        .with_label_values(&[&addr.to_string(), "TIMEOUT"])
+                        .inc();
                     // We want to retry, with exponential backoff and jitter.
                     // This gives us the fastest possible retry behaviour, but still avoids
                     // overloading the nameserver.
@@ -473,15 +470,17 @@ impl OutQuery {
                     /* This smells dangerously like a kaminisky attack.  Disregard the message, and immediately
                      * retry over TCP.
                      */
-                    KAMINSKY_MITIGATIONS.inc();
+                    OUT_QUERY_RETRY
+                        .with_label_values(&[&addr.to_string(), "KAMINSKY"])
+                        .inc();
                     out_reply = TcpNameserver::send_query_to(&addr, oq).await?;
                 } else if reply.tc {
                     /* If it's a truncated reply, then retry again over TCP, so we can get the full
                      * reply.  Truncated replies are also used by servers that suspect that we are
                      * spoofing to get us to prove that we can perform a 3 way handshake.
                      */
-                    TRUNCATED_RETRY
-                        .with_label_values(&[&addr.to_string()])
+                    OUT_QUERY_RETRY
+                        .with_label_values(&[&addr.to_string(), "TRUNCATED"])
                         .inc();
                     out_reply = TcpNameserver::send_query_to(&addr, oq).await?;
                 } else {

@@ -113,9 +113,26 @@ pub const BADCOOKIE: RCode = RCode(23);
 impl fmt::Display for RCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &FORMERR => write!(f, "FORMERR"),
             &NOERROR => write!(f, "NOERROR"),
+            &FORMERR => write!(f, "FORMERR"),
+            &SERVFAIL => write!(f, "SERVFAIL"),
             &NXDOMAIN => write!(f, "NXDOMAIN"),
+            &NOTIMP => write!(f, "NOTIMP"),
+            &REFUSED => write!(f, "REFUSED"),
+            &YXDOMAIN => write!(f, "YXDOMAIN"),
+            &YXRRSET => write!(f, "YXRRSET"),
+            &NXRRSET => write!(f, "NXRRSET"),
+            &NOTAUTH => write!(f, "NOTAUTH"),
+            &NOTZONE => write!(f, "NOTZONE"),
+            &DSOTYPENI => write!(f, "DSOTYPENI"),
+            &BADVERS => write!(f, "BADVERS/BADSIG"),
+            &BADKEY => write!(f, "BADKEY"),
+            &BADTIME => write!(f, "BADTIME"),
+            &BADMODE => write!(f, "BADMODE"),
+            &BADNAME => write!(f, "BADNAME"),
+            &BADALG => write!(f, "BADALG"),
+            &BADTRUNC => write!(f, "BADTRUNC"),
+            &BADCOOKIE => write!(f, "BADCOOKIE"),
             RCode(x) => write!(f, "RCode#{}", x),
         }
     }

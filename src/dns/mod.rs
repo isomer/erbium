@@ -39,6 +39,22 @@ mod router;
 use bytes::BytesMut;
 use tokio_util::codec::Decoder;
 
+lazy_static::lazy_static! {
+    static ref IN_QUERY_LATENCY: prometheus::HistogramVec =
+        prometheus::register_histogram_vec!("dns_in_query_latency",
+            "DNS latency for in queries",
+            &["protocol"])
+        .unwrap();
+
+    /* Result is "RCode" or "RCode (EdeCode)" */
+    static ref IN_QUERY_RESULT: prometheus::IntCounterVec =
+        prometheus::register_int_counter_vec!("dns_in_query_latency",
+            "DNS latency for in queries",
+            &["protocol", "result"])
+        .unwrap();
+
+}
+
 #[cfg_attr(test, derive(Debug))]
 pub enum Error {
     ListenError(std::io::Error),
@@ -315,6 +331,7 @@ impl DnsListenerHandler {
             Err(err) if err.kind() == std::io::ErrorKind::Interrupted => return Ok(()),
             Err(err) => return Err(Error::RecvError(err)),
         };
+        let timer = IN_QUERY_LATENCY.with_label_values(&["UDP"]).start_timer();
 
         let q = s.clone();
 
@@ -336,6 +353,21 @@ impl DnsListenerHandler {
                     match Self::recv_in_query(&q, &msg).await {
                         Ok(in_reply) => {
                             let cmsg = udp::ControlMessage::new().set_send_from(rm.local_ip());
+                            IN_QUERY_RESULT
+                                .with_label_values(&[
+                                    &"UDP",
+                                    &format!(
+                                        "{}{}",
+                                        in_reply.rcode.to_string(),
+                                        in_reply
+                                            .edns
+                                            .as_ref()
+                                            .and_then(|edns| edns.get_extended_dns_error())
+                                            .map(|ede| format!(" ({})", ede.0.to_string()))
+                                            .unwrap_or_else(|| "".into())
+                                    ),
+                                ])
+                                .inc();
                             local_listener
                                 .send_msg(
                                     in_reply.serialise().as_slice(),
@@ -348,11 +380,20 @@ impl DnsListenerHandler {
                         }
                         Err(err) => {
                             log::warn!("Failed to handle query: {}", err);
+                            IN_QUERY_RESULT
+                                .with_label_values(&[&"UDP", &"failed"])
+                                .inc();
                         }
                     }
                 }
-                Err(err) => log::warn!("Failed to handle request: {}", err),
+                Err(err) => {
+                    log::warn!("Failed to handle request: {}", err);
+                    IN_QUERY_RESULT
+                        .with_label_values(&[&"UDP", &"parse fail"])
+                        .inc();
+                }
             }
+            drop(timer);
         });
         Ok(())
     }
@@ -387,6 +428,7 @@ impl DnsListenerHandler {
         sock.read_exact(&mut buffer[..])
             .await
             .map_err(Error::RecvError)?;
+        let timer = IN_QUERY_LATENCY.with_label_values(&["TCP"]).start_timer();
 
         let q = s.clone();
 
@@ -410,9 +452,27 @@ impl DnsListenerHandler {
                         Ok(in_reply) => in_reply,
                         Err(msg) => {
                             log::warn!("Failed to handle DNS query: {}", msg);
+                            IN_QUERY_RESULT
+                                .with_label_values(&[&"TCP", &"failed"])
+                                .inc();
                             return;
                         }
                     };
+                    IN_QUERY_RESULT
+                        .with_label_values(&[
+                            &"TCP",
+                            &format!(
+                                "{}{}",
+                                in_reply.rcode.to_string(),
+                                in_reply
+                                    .edns
+                                    .as_ref()
+                                    .and_then(|edns| edns.get_extended_dns_error())
+                                    .map(|ede| format!(" ({})", ede.0.to_string()))
+                                    .unwrap_or_else(|| "".into())
+                            ),
+                        ])
+                        .inc();
                     let serialised =
                         Self::prepare_to_send(&in_reply, msg.in_query.bufsize as usize);
                     let mut in_reply_bytes = vec![];
@@ -421,9 +481,18 @@ impl DnsListenerHandler {
                     in_reply_bytes.extend(serialised);
                     if let Err(msg) = sock.write(&in_reply_bytes).await {
                         log::warn!("Failed to send DNS reply: {}", msg);
+                        IN_QUERY_RESULT
+                            .with_label_values(&[&"TCP", &"send fail"])
+                            .inc();
                     }
+                    drop(timer);
                 }
-                Err(err) => log::warn!("Failed to handle request: {}", err),
+                Err(err) => {
+                    IN_QUERY_RESULT
+                        .with_label_values(&[&"TCP", &"parse fail"])
+                        .inc();
+                    log::warn!("Failed to handle request: {}", err);
+                }
             }
         });
 
