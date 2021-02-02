@@ -12,5 +12,5 @@ Erbium is in early development.
 
 
 
-[^0] Erbium is the 68th element in the periodic table, the same as the client
+[^0]: Erbium is the 68th element in the periodic table, the same as the client
 port number for DHCP.
