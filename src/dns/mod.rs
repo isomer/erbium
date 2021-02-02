@@ -48,8 +48,8 @@ lazy_static::lazy_static! {
 
     /* Result is "RCode" or "RCode (EdeCode)" */
     static ref IN_QUERY_RESULT: prometheus::IntCounterVec =
-        prometheus::register_int_counter_vec!("dns_in_query_latency",
-            "DNS latency for in queries",
+        prometheus::register_int_counter_vec!("dns_in_query_result",
+            "DNS response codes for in queries",
             &["protocol", "result"])
         .unwrap();
 
