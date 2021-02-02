@@ -353,20 +353,9 @@ impl DnsListenerHandler {
                     match Self::recv_in_query(&q, &msg).await {
                         Ok(in_reply) => {
                             let cmsg = udp::ControlMessage::new().set_send_from(rm.local_ip());
+                            // TODO: Add EDE
                             IN_QUERY_RESULT
-                                .with_label_values(&[
-                                    &"UDP",
-                                    &format!(
-                                        "{}{}",
-                                        in_reply.rcode.to_string(),
-                                        in_reply
-                                            .edns
-                                            .as_ref()
-                                            .and_then(|edns| edns.get_extended_dns_error())
-                                            .map(|ede| format!(" ({})", ede.0.to_string()))
-                                            .unwrap_or_else(|| "".into())
-                                    ),
-                                ])
+                                .with_label_values(&[&"UDP", &in_reply.rcode.to_string()])
                                 .inc();
                             local_listener
                                 .send_msg(
