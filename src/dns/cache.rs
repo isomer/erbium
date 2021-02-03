@@ -33,6 +33,11 @@ lazy_static::lazy_static! {
             "Cache statistics",
             &["result"])
             .unwrap();
+
+    static ref DNS_CACHE_SIZE: prometheus::IntGauge =
+        prometheus::register_int_gauge!("dns_cache_size",
+            "Number of entries in the cache")
+        .unwrap();
 }
 
 #[derive(Eq, PartialEq, Hash)]
@@ -116,6 +121,7 @@ impl CacheHandler {
     }
 
     pub async fn handle_query(&self, msg: &super::DnsMessage) -> Result<dnspkt::DNSPkt, Error> {
+        use std::convert::TryInto as _;
         let q = &msg.in_query.question;
         /* Only do caching for IN queries */
         if q.qclass != dnspkt::CLASS_IN {
@@ -173,6 +179,8 @@ impl CacheHandler {
                 lifetime: expiry,
             },
         );
+
+        DNS_CACHE_SIZE.set(self.cache.read().await.len().try_into().unwrap_or(i64::MAX));
 
         match &out_result {
             Ok(x) => log::trace!("OutReply: {:?}", x),
