@@ -904,6 +904,17 @@ fn push_rr(v: &mut Vec<u8>, rr: &RR, offsets: &mut DomainOffsets) {
 }
 
 impl DNSPkt {
+    pub fn status(&self) -> String {
+        match self
+            .edns
+            .as_ref()
+            .and_then(|e| e.get_extended_dns_error())
+            .map(|e| e.0)
+        {
+            Some(x) => format!("{} ({})", self.rcode, x),
+            None => format!("{}", self.rcode),
+        }
+    }
     pub fn serialise(&self) -> Vec<u8> {
         self.serialise_with_size(65536)
     }

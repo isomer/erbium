@@ -301,7 +301,7 @@ impl DnsListenerHandler {
     async fn recv_in_query(
         s: &std::sync::Arc<tokio::sync::RwLock<Self>>,
         msg: &DnsMessage,
-    ) -> Result<dnspkt::DNSPkt, Error> {
+    ) -> Result<dnspkt::DNSPkt, std::convert::Infallible> {
         log::trace!(
             "[{:x}] In Query {}: {} ⇐ {}",
             msg.in_query.qid,
@@ -314,9 +314,15 @@ impl DnsListenerHandler {
         match next.handle_query(&msg).await {
             Ok(out_reply) => {
                 in_reply = Self::create_in_reply(&msg.in_query, &out_reply);
+                IN_QUERY_RESULT
+                    .with_label_values(&[&msg.protocol.to_string(), &in_reply.status()])
+                    .inc();
             }
             Err(err) => {
                 in_reply = Self::create_in_error(&msg.in_query, err);
+                IN_QUERY_RESULT
+                    .with_label_values(&[&msg.protocol.to_string(), &in_reply.status()])
+                    .inc();
             }
         }
         log::trace!("[{:x}] In Reply: {:?}", msg.in_query.qid, in_reply);
@@ -350,30 +356,17 @@ impl DnsListenerHandler {
                 Protocol::UDP,
             ) {
                 Ok(msg) => {
-                    match Self::recv_in_query(&q, &msg).await {
-                        Ok(in_reply) => {
-                            let cmsg = udp::ControlMessage::new().set_send_from(rm.local_ip());
-                            // TODO: Add EDE
-                            IN_QUERY_RESULT
-                                .with_label_values(&[&"UDP", &in_reply.rcode.to_string()])
-                                .inc();
-                            local_listener
-                                .send_msg(
-                                    in_reply.serialise().as_slice(),
-                                    &cmsg,
-                                    udp::MsgFlags::empty(),
-                                    Some(&rm.address.unwrap()), /* TODO: Error? */
-                                )
-                                .await
-                                .expect("Failed to send reply"); // TODO: Better error handling
-                        }
-                        Err(err) => {
-                            log::warn!("Failed to handle query: {}", err);
-                            IN_QUERY_RESULT
-                                .with_label_values(&[&"UDP", &"failed"])
-                                .inc();
-                        }
-                    }
+                    let in_reply = Self::recv_in_query(&q, &msg).await.unwrap();
+                    let cmsg = udp::ControlMessage::new().set_send_from(rm.local_ip());
+                    local_listener
+                        .send_msg(
+                            in_reply.serialise().as_slice(),
+                            &cmsg,
+                            udp::MsgFlags::empty(),
+                            Some(&rm.address.unwrap()), /* TODO: Error? */
+                        )
+                        .await
+                        .expect("Failed to send reply"); // TODO: Better error handling
                 }
                 Err(err) => {
                     log::warn!("Failed to handle request: {}", err);
@@ -437,31 +430,7 @@ impl DnsListenerHandler {
                 Protocol::TCP,
             ) {
                 Ok(msg) => {
-                    let in_reply = match Self::recv_in_query(&q, &msg).await {
-                        Ok(in_reply) => in_reply,
-                        Err(msg) => {
-                            log::warn!("Failed to handle DNS query: {}", msg);
-                            IN_QUERY_RESULT
-                                .with_label_values(&[&"TCP", &"failed"])
-                                .inc();
-                            return;
-                        }
-                    };
-                    IN_QUERY_RESULT
-                        .with_label_values(&[
-                            &"TCP",
-                            &format!(
-                                "{}{}",
-                                in_reply.rcode.to_string(),
-                                in_reply
-                                    .edns
-                                    .as_ref()
-                                    .and_then(|edns| edns.get_extended_dns_error())
-                                    .map(|ede| format!(" ({})", ede.0.to_string()))
-                                    .unwrap_or_else(|| "".into())
-                            ),
-                        ])
-                        .inc();
+                    let in_reply = Self::recv_in_query(&q, &msg).await.unwrap();
                     let serialised =
                         Self::prepare_to_send(&in_reply, msg.in_query.bufsize as usize);
                     let mut in_reply_bytes = vec![];
