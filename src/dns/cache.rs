@@ -132,7 +132,7 @@ impl CacheHandler {
              * So if we get a spike of resolutions we might have to start doing expiries, so poll
              * at least every this time.
              */
-            let mut next_cycle = time::Instant::now() + time::Duration::from_secs(1800);
+            let mut next_cycle = time::Instant::now() + time::Duration::from_secs(300);
 
             /* Expire all the old entries */
             {
