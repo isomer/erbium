@@ -753,6 +753,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut ra = None;
         #[cfg(feature = "dhcp")]
         let mut dhcp = None;
+        #[cfg(feature = "dns")]
+        let mut dns_servers = vec![INTERFACE4, INTERFACE6];
+        #[cfg(not(feature = "dns"))]
         let mut dns_servers = vec![];
         let mut dns_search = vec![];
         let mut captive_portal = None;
