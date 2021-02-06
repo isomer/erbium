@@ -147,6 +147,8 @@ impl CacheHandler {
                     next_cycle = std::cmp::min(next_cycle, (v.birth + v.lifetime).into());
                     v.birth + v.lifetime < now.into()
                 });
+
+                drop(rwcache);
             }
 
             /* Don't waste cpu cycling too often.  If we have a lot of entries expiring at about
