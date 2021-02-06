@@ -113,10 +113,57 @@ fn clone_with_ttl_decrement_out_reply(
 }
 
 impl CacheHandler {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
+        let cache = Arc::new(RwLock::new(Cache::new()));
+        let cache_copy = cache.clone();
+        tokio::spawn(async move {
+            Self::expire(cache_copy).await;
+        })
+        .await
+        .unwrap();
         CacheHandler {
             next: outquery::OutQuery::new(),
-            cache: Arc::new(RwLock::new(Cache::new())),
+            cache,
+        }
+    }
+
+    async fn expire(cache: Arc<RwLock<Cache>>) {
+        use tokio::time;
+        loop {
+            /* We don't have any notification from the resolvers if this time needs to go down.
+             * So if we get a spike of resolutions we might have to start doing expiries, so poll
+             * at least every this time.
+             */
+            let mut next_cycle = time::Instant::now() + time::Duration::from_secs(1800);
+
+            /* Expire all the old entries */
+            {
+                let mut rwcache = cache.write().await;
+                /* We cache now, we don't need this to be precise, and we'd rather this was fast.
+                 */
+                let now = time::Instant::now();
+
+                rwcache.retain(|_k, v| {
+                    next_cycle = std::cmp::min(next_cycle, (v.birth + v.lifetime).into());
+                    v.birth + v.lifetime < now.into()
+                });
+            }
+
+            /* Don't waste cpu cycling too often.  If we have a lot of entries expiring at about
+             * the same time, cap this to poll a bit more infrequently.  Again, we don't need to be
+             * too precise.
+             */
+            next_cycle = std::cmp::max(
+                next_cycle,
+                time::Instant::now() + time::Duration::from_secs(30),
+            );
+
+            /* Now wait until then. */
+            log::trace!(
+                "Next cache expiry in {} seconds",
+                (next_cycle - time::Instant::now()).as_secs(),
+            );
+            time::sleep_until(next_cycle).await;
         }
     }
 

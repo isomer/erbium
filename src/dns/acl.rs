@@ -34,7 +34,7 @@ impl DnsAclHandler {
     pub async fn new(config: config::SharedConfig) -> Self {
         Self {
             config,
-            next: router::DnsRouteHandler::new(),
+            next: router::DnsRouteHandler::new().await,
         }
     }
 

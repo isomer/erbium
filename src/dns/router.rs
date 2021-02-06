@@ -27,9 +27,9 @@ pub struct DnsRouteHandler {
 }
 
 impl DnsRouteHandler {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         DnsRouteHandler {
-            next: super::cache::CacheHandler::new(),
+            next: super::cache::CacheHandler::new().await,
         }
     }
 
