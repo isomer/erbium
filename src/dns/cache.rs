@@ -118,9 +118,7 @@ impl CacheHandler {
         let cache_copy = cache.clone();
         tokio::spawn(async move {
             Self::expire(cache_copy).await;
-        })
-        .await
-        .unwrap();
+        });
         CacheHandler {
             next: outquery::OutQuery::new(),
             cache,
@@ -182,7 +180,6 @@ impl CacheHandler {
             qtype: q.qtype,
         };
 
-        log::trace!("Performing cache read");
         /* Check to see if we have a cache hit that is still valid, if so, return it */
         if let Some(entry) = self.cache.read().await.get(&ck) {
             let now = Instant::now();
