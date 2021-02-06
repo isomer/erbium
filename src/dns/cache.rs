@@ -147,8 +147,6 @@ impl CacheHandler {
                     next_cycle = std::cmp::min(next_cycle, (v.birth + v.lifetime).into());
                     v.birth + v.lifetime < now.into()
                 });
-
-                drop(rwcache);
             }
 
             /* Don't waste cpu cycling too often.  If we have a lot of entries expiring at about
@@ -184,6 +182,7 @@ impl CacheHandler {
             qtype: q.qtype,
         };
 
+        log::trace!("Performing cache read");
         /* Check to see if we have a cache hit that is still valid, if so, return it */
         if let Some(entry) = self.cache.read().await.get(&ck) {
             let now = Instant::now();
