@@ -21,11 +21,14 @@
 use super::Error;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use tokio::time::{Duration, Instant};
 
 use crate::dns::dnspkt;
 use crate::dns::outquery;
+
+#[cfg(test)]
+mod test;
 
 lazy_static::lazy_static! {
     static ref DNS_CACHE: prometheus::IntCounterVec =
@@ -41,6 +44,7 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Eq, PartialEq, Hash)]
+#[cfg_attr(test, derive(Clone))]
 struct CacheKey {
     qname: dnspkt::Domain,
     qtype: dnspkt::Type,
@@ -50,6 +54,12 @@ struct CacheValue {
     reply: Result<dnspkt::DNSPkt, Error>,
     birth: Instant,
     lifetime: Duration,
+}
+
+impl CacheValue {
+    fn expiry(&self) -> Instant {
+        self.birth + self.lifetime
+    }
 }
 
 type Cache = HashMap<CacheKey, CacheValue>;
@@ -117,7 +127,7 @@ impl CacheHandler {
         let cache = Arc::new(RwLock::new(Cache::new()));
         let cache_copy = cache.clone();
         tokio::spawn(async move {
-            Self::expire(cache_copy).await;
+            Self::expire_thread(cache_copy).await;
         });
         CacheHandler {
             next: outquery::OutQuery::new(),
@@ -125,48 +135,122 @@ impl CacheHandler {
         }
     }
 
-    async fn expire(cache: Arc<RwLock<Cache>>) {
-        use tokio::time;
+    /* Expires entries, returns the time for the next expiration run. */
+    fn expire(cache: &mut Cache, now: Instant) -> Instant {
+        use std::convert::TryInto as _;
+
+        /* We don't have any notification from the resolvers if this time needs to go down.
+         * So if we get a spike of resolutions we might have to start doing expiries, so poll
+         * at least every this time.
+         */
+        let mut next_cycle = now + Duration::from_secs(1800);
+        cache.retain(|_k, v| {
+            if v.expiry() >= now {
+                next_cycle = std::cmp::min(next_cycle, v.expiry());
+                true
+            } else {
+                false
+            }
+        });
+
+        /* Update the new cache size. */
+        DNS_CACHE_SIZE.set(cache.len().try_into().unwrap_or(i64::MAX));
+
+        /* Don't waste cpu cycling too often.  If we have a lot of entries expiring at about
+         * the same time, cap this to poll a bit more infrequently, it's more efficient to do
+         * one run that collects multiple entries.
+         * Again, we don't need to be too precise.
+         */
+        std::cmp::max(next_cycle, Instant::now() + Duration::from_secs(30))
+    }
+
+    async fn expire_thread(cache: Arc<RwLock<Cache>>) {
         loop {
-            /* We don't have any notification from the resolvers if this time needs to go down.
-             * So if we get a spike of resolutions we might have to start doing expiries, so poll
-             * at least every this time.
-             */
-            let mut next_cycle = time::Instant::now() + time::Duration::from_secs(1800);
+            let next_cycle;
 
             /* Expire all the old entries */
             {
                 let mut rwcache = cache.write().await;
-                /* We cache now, we don't need this to be precise, and we'd rather this was fast.
-                 */
-                let now = time::Instant::now();
-
-                rwcache.retain(|_k, v| {
-                    next_cycle = std::cmp::min(next_cycle, (v.birth + v.lifetime).into());
-                    v.birth + v.lifetime < now.into()
-                });
+                next_cycle = Self::expire(&mut rwcache, Instant::now());
             }
-
-            /* Don't waste cpu cycling too often.  If we have a lot of entries expiring at about
-             * the same time, cap this to poll a bit more infrequently.  Again, we don't need to be
-             * too precise.
-             */
-            next_cycle = std::cmp::max(
-                next_cycle,
-                time::Instant::now() + time::Duration::from_secs(30),
-            );
 
             /* Now wait until then. */
             log::trace!(
                 "Next cache expiry in {} seconds",
-                (next_cycle - time::Instant::now()).as_secs(),
+                (next_cycle - Instant::now()).as_secs(),
             );
-            time::sleep_until(next_cycle).await;
+            tokio::time::sleep_until(next_cycle.into()).await;
         }
     }
 
-    pub async fn handle_query(&self, msg: &super::DnsMessage) -> Result<dnspkt::DNSPkt, Error> {
+    fn get_entry(
+        cache: &Cache,
+        ck: &CacheKey,
+        now: Instant,
+    ) -> Option<Result<dnspkt::DNSPkt, Error>> {
+        /* Check to see if we have a cache hit that is still valid, if so, return it */
+        if let Some(entry) = cache.get(&ck) {
+            if entry.expiry() >= now {
+                let remaining = (entry.birth + entry.lifetime) - now;
+                log::trace!("Cache hit ({:?} remaining)", remaining);
+                DNS_CACHE.with_label_values(&[&"HIT"]).inc();
+                Some(clone_with_ttl_decrement_out_reply(
+                    &entry.reply,
+                    now - entry.birth,
+                ))
+            } else {
+                log::trace!("Cache miss: Cache expired");
+                DNS_CACHE.with_label_values(&[&"EXPIRED"]).inc();
+                None
+            }
+        } else {
+            log::trace!("Cache miss: Entry not present");
+            DNS_CACHE.with_label_values(&[&"MISS"]).inc();
+            None
+        }
+    }
+
+    fn calculate_expiry(&self, out_result: &Result<crate::dns::dnspkt::DNSPkt, Error>) -> Duration {
+        match &out_result {
+            /* If we got a packet, then use the expiry from the packet. */
+            Ok(out_reply) => out_reply.get_expiry(),
+            /* If there was a problem sending the reply, then wait for at least as long
+             * as exponential backoff would allow.
+             */
+            Err(Error::OutReply(outquery::Error::Timeout))
+            | Err(Error::OutReply(outquery::Error::FailedToSend(_)))
+            | Err(Error::OutReply(outquery::Error::FailedToRecv(_)))
+            | Err(Error::OutReply(outquery::Error::TcpConnectionError(_)))
+            | Err(Error::OutReply(outquery::Error::ParseError(_))) => {
+                std::time::Duration::from_secs(8)
+            }
+            /* Otherwise do not cache the error */
+            _ => std::time::Duration::from_secs(0),
+        }
+    }
+
+    fn insert_cache_entry(
+        &self,
+        cache: &mut Cache,
+        ck: CacheKey,
+        out_result: &Result<dnspkt::DNSPkt, Error>,
+        expiry: Duration,
+    ) {
         use std::convert::TryInto as _;
+
+        cache.insert(
+            ck,
+            CacheValue {
+                reply: clone_out_reply(&out_result),
+                birth: Instant::now(),
+                lifetime: expiry,
+            },
+        );
+
+        DNS_CACHE_SIZE.set(cache.len().try_into().unwrap_or(i64::MAX));
+    }
+
+    pub async fn handle_query(&self, msg: &super::DnsMessage) -> Result<dnspkt::DNSPkt, Error> {
         let q = &msg.in_query.question;
         /* Only do caching for IN queries */
         if q.qclass != dnspkt::CLASS_IN {
@@ -180,52 +264,23 @@ impl CacheHandler {
             qtype: q.qtype,
         };
 
-        /* Check to see if we have a cache hit that is still valid, if so, return it */
-        if let Some(entry) = self.cache.read().await.get(&ck) {
-            let now = Instant::now();
-            if entry.birth + entry.lifetime > now {
-                let remaining = (entry.birth + entry.lifetime) - now;
-                log::trace!("Cache hit ({:?} remaining)", remaining);
-                DNS_CACHE.with_label_values(&[&"HIT"]).inc();
-                return clone_with_ttl_decrement_out_reply(&entry.reply, now - entry.birth);
-            } else {
-                log::trace!("Cache miss: Cache expired");
-                DNS_CACHE.with_label_values(&[&"EXPIRED"]).inc();
+        {
+            let rocache = self.cache.read().await;
+            if let Some(result) = Self::get_entry(&rocache, &ck, Instant::now()) {
+                return result;
             }
-        } else {
-            log::trace!("Cache miss: Entry not present");
-            DNS_CACHE.with_label_values(&[&"MISS"]).inc();
         }
 
         /* Cache miss: Go attempt the resolve, and return the result */
         let out_result = self.next.handle_query(msg).await;
 
-        let expiry = match &out_result {
-            Ok(out_reply) => out_reply.get_expiry(),
-            /* If there was a problem sending the reply, then wait for at least as long
-             * as exponential backoff would allow.
-             */
-            Err(Error::OutReply(outquery::Error::Timeout))
-            | Err(Error::OutReply(outquery::Error::FailedToSend(_)))
-            | Err(Error::OutReply(outquery::Error::FailedToRecv(_)))
-            | Err(Error::OutReply(outquery::Error::TcpConnectionError(_)))
-            | Err(Error::OutReply(outquery::Error::ParseError(_))) => {
-                std::time::Duration::from_secs(8)
-            }
-            /* Otherwise propagate the error, and do not cache it */
-            e => return clone_out_reply(e),
-        };
+        let expiry = self.calculate_expiry(&out_result);
 
-        self.cache.write().await.insert(
-            ck,
-            CacheValue {
-                reply: clone_out_reply(&out_result),
-                birth: Instant::now(),
-                lifetime: expiry,
-            },
-        );
-
-        DNS_CACHE_SIZE.set(self.cache.read().await.len().try_into().unwrap_or(i64::MAX));
+        /* Only insert into the cache if the duration is reasonable */
+        if expiry > Duration::from_secs(0) {
+            let mut rwcache = self.cache.write().await;
+            self.insert_cache_entry(&mut rwcache, ck, &out_result, expiry);
+        }
 
         match &out_result {
             Ok(x) => log::trace!("OutReply: {:?}", x),
