@@ -37,15 +37,15 @@ enum Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Config(path, e) => write!(
+        match *self {
+            Self::Config(ref path, ref e) => write!(
                 f,
                 "Failed to load config from {}: {}",
                 path.to_string_lossy(),
                 e
             ),
-            Error::Service(msg) => write!(f, "{}", msg),
-            Error::CommandLine(msg) => write!(f, "{}", msg),
+            Self::Service(ref msg) => write!(f, "{}", msg),
+            Self::CommandLine(ref msg) => write!(f, "{}", msg),
         }
     }
 }

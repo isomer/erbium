@@ -380,7 +380,7 @@ impl RaAdvService {
             let prefixes = prefixes
                 .iter()
                 .filter_map(|(addr, prefixlen)| {
-                    if let std::net::IpAddr::V6(ip6) = addr {
+                    if let std::net::IpAddr::V6(ref ip6) = *addr {
                         if addresses.contains(&crate::config::Prefix::new(*addr, *prefixlen)) {
                             Some(config::Prefix {
                                 addr: *ip6,

@@ -144,7 +144,7 @@ impl Serialise {
 
 impl Default for Serialise {
     fn default() -> Self {
-        Serialise {
+        Self {
             v: Default::default(),
         }
     }

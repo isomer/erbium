@@ -373,7 +373,7 @@ struct Response {
 fn handle_discover<'l>(
     pools: &mut pool::Pool,
     req: &DHCPRequest,
-    _serverids: ServerIds,
+    _serverids: &ServerIds,
     base: &[config::Policy],
     conf: &'l super::config::Config,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
@@ -448,7 +448,7 @@ fn handle_discover<'l>(
 fn handle_request(
     pools: &mut pool::Pool,
     req: &DHCPRequest,
-    serverids: ServerIds,
+    serverids: &ServerIds,
     base: &[config::Policy],
     conf: &super::config::Config,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
@@ -724,11 +724,11 @@ pub async fn handle_pkt(
     match request.pkt.options.get_messagetype() {
         Some(dhcppkt::DHCPDISCOVER) => {
             let base = [build_default_config(&conf, &request).await];
-            handle_discover(&mut pools, &request, serverids, &base, conf)
+            handle_discover(&mut pools, &request, &serverids, &base, conf)
         }
         Some(dhcppkt::DHCPREQUEST) => {
             let base = [build_default_config(&conf, &request).await];
-            handle_request(&mut pools, &request, serverids, &base, conf)
+            handle_request(&mut pools, &request, &serverids, &base, conf)
         }
         Some(x) => Err(DhcpError::UnknownMessageType(x)),
         None => Err(DhcpError::ParseError(dhcppkt::ParseError::InvalidPacket)),
@@ -1204,7 +1204,7 @@ async fn test_defaults() {
     let base = [build_default_config(&conf, &pkt).await];
     println!("base={:?}", base);
     let resp =
-        handle_discover(&mut p, &pkt, serverids, &base, &conf).expect("Failed to handle request");
+        handle_discover(&mut p, &pkt, &serverids, &base, &conf).expect("Failed to handle request");
     assert_eq!(
         resp.options
             .get_option::<Vec<std::net::Ipv4Addr>>(&dhcppkt::OPTION_DOMAINSERVER),
@@ -1279,7 +1279,7 @@ async fn test_base() {
         .contains(&"192.0.2.3".parse().unwrap()));
     println!("base={:#?}", base);
     println!("pkt={:?}", pkt);
-    let resp = handle_discover(&mut pool, &pkt, serverids, &[base], &conf)
+    let resp = handle_discover(&mut pool, &pkt, &serverids, &[base], &conf)
         .expect("Failed to handle request");
     assert_eq!(
         resp.options
