@@ -179,7 +179,7 @@ impl CacheHandler {
                 "Next cache expiry in {} seconds",
                 (next_cycle - Instant::now()).as_secs(),
             );
-            tokio::time::sleep_until(next_cycle.into()).await;
+            tokio::time::sleep_until(next_cycle).await;
         }
     }
 
