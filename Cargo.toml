@@ -31,9 +31,9 @@ hyper = { version = "0.14.0-dev", features=["server", "http1", "stream", "runtim
 lazy_static = "1.4"
 log = "0.4"
 mio = { version = "0.7" }
-netlink-packet-route = "0.6"
-netlink-sys = { version="0.5", features=["tokio_socket"] }
-nix = { version = "0.19" }
+netlink-packet-route = "0.7"
+netlink-sys = { version="0.6", features=["tokio_socket"] }
+nix = { version = "0.20" }
 prometheus = { version="0.11.0", features=["process"] }
 rand = "0.8"
 rusqlite = { version = "0.24" }
@@ -61,5 +61,5 @@ lto = "fat"
 codegen-units = 1
 
 [build-dependencies]
-vergen = "3"
+vergen = "4"
 
