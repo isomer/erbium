@@ -558,7 +558,7 @@ impl PrefixOps for Prefix4 {
         (u32::from(self.addr) & u32::from(self.netmask())).into()
     }
     fn netmask(&self) -> std::net::Ipv4Addr {
-        (!0xffffffffu32
+        (!0xffffffff_u32
             .checked_shr(self.prefixlen as u32)
             .unwrap_or(0))
         .into()
@@ -611,7 +611,7 @@ impl PrefixOps for Prefix6 {
         (u128::from(self.addr) & u128::from(self.netmask())).into()
     }
     fn netmask(&self) -> std::net::Ipv6Addr {
-        (!(0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffffu128
+        (!(0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffff_u128
             .checked_shr(self.prefixlen as u32)
             .unwrap_or(0)))
         .into()

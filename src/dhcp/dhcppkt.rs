@@ -501,7 +501,7 @@ impl DhcpOptionTypeValue {
                         o.push(label.len() as u8);
                         o.extend(label.as_bytes());
                     }
-                    o.push(0u8)
+                    o.push(0_u8)
                 }
                 o
             }
@@ -684,28 +684,28 @@ impl DhcpParse for Vec<u8> {
 impl DhcpParse for u64 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0u64, |acc, &v| (acc << 8) + (v as Self)))
+        Some(v.iter().fold(0_u64, |acc, &v| (acc << 8) + (v as Self)))
     }
 }
 
 impl DhcpParse for u32 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0u32, |acc, &v| (acc << 8) + (v as Self)))
+        Some(v.iter().fold(0_u32, |acc, &v| (acc << 8) + (v as Self)))
     }
 }
 
 impl DhcpParse for u16 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0u16, |acc, &v| (acc << 8) + (v as Self)))
+        Some(v.iter().fold(0_u16, |acc, &v| (acc << 8) + (v as Self)))
     }
 }
 
 impl DhcpParse for i32 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0i32, |acc, &v| (acc << 8) + (v as Self)))
+        Some(v.iter().fold(0_i32, |acc, &v| (acc << 8) + (v as Self)))
     }
 }
 
@@ -1046,7 +1046,7 @@ impl Serialise for DhcpOptions {
         }
 
         /* Add end of options marker */
-        (255u8).serialise(v);
+        (255_u8).serialise(v);
     }
 }
 
@@ -1079,7 +1079,7 @@ impl DHCP {
         serialise_fixed(&self.file, 128, &mut v);
 
         /* DHCP Magic */
-        0x6382_5363u32.serialise(&mut v);
+        0x6382_5363_u32.serialise(&mut v);
 
         self.options.serialise(&mut v);
 
