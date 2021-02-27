@@ -74,7 +74,7 @@ async fn main() {
     log::info!(
         "erbium-dns {} ({})",
         env!("CARGO_PKG_VERSION"),
-        env!("VERGEN_SHA_SHORT")
+        env!("VERGEN_GIT_SHA_SHORT")
     );
     match go().await {
         Ok(()) => (),
