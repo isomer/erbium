@@ -39,6 +39,8 @@ mod router;
 use bytes::BytesMut;
 use tokio_util::codec::Decoder;
 
+const DNS_LISTEN_ADDR: &str = "[::]:53";
+
 lazy_static::lazy_static! {
     static ref IN_QUERY_LATENCY: prometheus::HistogramVec =
         prometheus::register_histogram_vec!("dns_in_query_latency",
@@ -124,7 +126,7 @@ struct DnsListenerHandler {
 impl DnsListenerHandler {
     async fn listen_udp(_conf: &crate::config::SharedConfig) -> Result<UdpSocket, Error> {
         let udp = UdpSocket::bind(
-            &tokio::net::lookup_host("[::]:53")
+            &tokio::net::lookup_host(DNS_LISTEN_ADDR)
                 .await
                 .map_err(Error::ListenError)?
                 .collect::<Vec<_>>(),
@@ -150,7 +152,7 @@ impl DnsListenerHandler {
     async fn listen_tcp(
         _conf: &crate::config::SharedConfig,
     ) -> Result<tokio::net::TcpListener, Error> {
-        let tcp = tokio::net::TcpListener::bind("[::]:53")
+        let tcp = tokio::net::TcpListener::bind(DNS_LISTEN_ADDR)
             .await
             .map_err(Error::ListenError)?;
 
@@ -176,9 +178,23 @@ impl DnsListenerHandler {
         })
     }
 
-    fn create_in_reply(inq: &dnspkt::DNSPkt, outr: &dnspkt::DNSPkt) -> dnspkt::DNSPkt {
+    fn create_in_reply(msg: &DnsMessage, outr: &dnspkt::DNSPkt) -> dnspkt::DNSPkt {
+        let mut edns: dnspkt::EdnsData = Default::default();
+        // If they requested NSID, then return it.
+        if msg
+            .in_query
+            .edns
+            .as_ref()
+            .map(|edns| edns.get_nsid().is_some())
+            .unwrap_or(false)
+        {
+            // We fill in NSID with the receiving interface IP.
+            // TODO: This might not be particularly interesting if this is a VIP.  We might want to
+            // find some more information to put in here.
+            edns.set_nsid(format!("{}", msg.local_ip).as_bytes());
+        }
         dnspkt::DNSPkt {
-            qid: inq.qid,
+            qid: msg.in_query.qid,
             rd: false,
             tc: outr.tc,
             aa: outr.aa,
@@ -196,19 +212,19 @@ impl DnsListenerHandler {
             edns_ver: Some(0),
             edns_do: false,
 
-            question: inq.question.clone(),
+            question: msg.in_query.question.clone(),
             answer: outr.answer.clone(),
             nameserver: outr.answer.clone(),
             additional: outr.additional.clone(),
-            edns: Some(dnspkt::EdnsData::new()), // We should do more here.
+            edns: Some(edns),
         }
     }
 
     fn create_in_error(inq: &dnspkt::DNSPkt, err: Error) -> dnspkt::DNSPkt {
-        let mut edns: EdnsData = Default::default();
-        let rcode;
         use dnspkt::*;
         use Error::*;
+        let mut edns: EdnsData = Default::default();
+        let rcode;
         match err {
             /* These errors mean we never get a packet to reply to. */
             ListenError(_) => unreachable!(),
@@ -303,17 +319,18 @@ impl DnsListenerHandler {
         msg: &DnsMessage,
     ) -> Result<dnspkt::DNSPkt, std::convert::Infallible> {
         log::trace!(
-            "[{:x}] In Query {}: {} ⇐ {}",
+            "[{:x}] In Query {}: {} ⇐ {}: {:?}",
             msg.in_query.qid,
             msg.protocol,
             msg.local_ip,
-            msg.remote_addr
+            msg.remote_addr,
+            msg.in_query
         );
         let next = &s.read().await.next;
         let in_reply;
         match next.handle_query(&msg).await {
             Ok(out_reply) => {
-                in_reply = Self::create_in_reply(&msg.in_query, &out_reply);
+                in_reply = Self::create_in_reply(&msg, &out_reply);
                 IN_QUERY_RESULT
                     .with_label_values(&[&msg.protocol.to_string(), &in_reply.status()])
                     .inc();

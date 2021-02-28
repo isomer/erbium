@@ -804,6 +804,17 @@ impl EdnsData {
         self.0.iter().find(|o| o.code == *opt)
     }
 
+    pub fn get_nsid(&self) -> Option<&[u8]> {
+        self.get_opt(&EDNS_NSID).map(|opt| &opt.data[..])
+    }
+
+    pub fn set_nsid(&mut self, nsid: &[u8]) {
+        self.set_opt(EdnsOption {
+            code: EDNS_NSID,
+            data: nsid.to_vec(),
+        });
+    }
+
     pub fn get_extended_dns_error(&self) -> Option<(EdeCode, String)> {
         self.get_opt(&EDNS_EDE).map(|opt| {
             (
