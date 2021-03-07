@@ -1012,7 +1012,6 @@ rec {
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
           { name = "erbium-dhcp"; path = "src/bin/erbium-dhcp.rs"; }
           { name = "erbium"; path = "src/main.rs"; }
-          { name = "erbium-netinfo"; path = "src/bin/erbium-netinfo.rs"; }
           { name = "erbium-conftest"; path = "src/bin/erbium-conftest.rs"; }
         ];
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./.; };
