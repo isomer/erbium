@@ -61,6 +61,7 @@ pub const RR_NAPTR: Type = Type(35);
 pub const RR_OPT: Type = Type(41);
 pub const RR_NSEC: Type = Type(47);
 pub const RR_NSEC3: Type = Type(50);
+pub const RR_ANY: Type = Type(255);
 
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -813,6 +814,24 @@ impl EdnsData {
             code: EDNS_NSID,
             data: nsid.to_vec(),
         });
+    }
+
+    pub fn get_cookie(&self) -> Option<(&[u8], Option<&[u8]>)> {
+        self.get_opt(&EDNS_COOKIE)
+            .map(|opt| (&opt.data[..8], opt.data.get(8..)))
+    }
+
+    pub fn set_cookie(&mut self, client: &[u8], server: &[u8]) {
+        assert!(client.len() == 8);
+        assert!(server.len() >= 8 && server.len() <= 32);
+        let mut data = vec![];
+        data.reserve(client.len() + server.len());
+        data.extend(client);
+        data.extend(server);
+        self.set_opt(EdnsOption {
+            code: EDNS_COOKIE,
+            data,
+        })
     }
 
     pub fn get_extended_dns_error(&self) -> Option<(EdeCode, String)> {

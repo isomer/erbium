@@ -101,6 +101,7 @@ fn clone_out_reply(reply: &Result<dnspkt::DNSPkt, Error>) -> Result<dnspkt::DNSP
         Err(OutReply(OutReplyError::InternalError(msg))) => {
             Err(OutReply(OutReplyError::InternalError(msg.clone())))
         }
+        Err(Denied(x)) => Err(Denied(x.clone())),
         /* These errors cannot occur */
         Err(ListenError(_)) => unreachable!(),
         Err(RecvError(_)) => unreachable!(),

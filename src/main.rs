@@ -127,7 +127,7 @@ async fn main() {
     info!(
         "erbium {} ({})",
         env!("CARGO_PKG_VERSION"),
-        env!("VERGEN_GIT_SHA_SHORT")
+        env!("VERGEN_GIT_SHA")
     );
     match go().await {
         Ok(()) => (),

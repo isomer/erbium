@@ -37,6 +37,10 @@ impl DnsRouteHandler {
         /* This is a stub, currently we just route all queries to 8.8.8.8 */
         if !msg.in_query.rd {
             Err(Error::NotAuthoritative)
+        } else if msg.in_query.question.qtype == dnspkt::RR_ANY {
+            Err(Error::Denied("ANY queries are not allowed".into()))
+        } else if msg.remote_addr.port() == 53 {
+            Err(Error::Denied("Invalid Source Port".into()))
         } else {
             self.next.handle_query(msg).await
         }

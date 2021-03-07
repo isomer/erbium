@@ -11,7 +11,7 @@ build = "src/build.rs"
 
 [features]
 full=["dhcp", "radv", "http", "dns"]
-default=["dhcp", "radv", "http"]
+default=["dhcp", "radv", "http", "dns"]
 dhcp=[]
 dns=[] # Partially complete, not ready for use.
 radv=[]
@@ -21,6 +21,7 @@ http=["hyper", "dhcp"] # Currently can't compile http without dhcp.
 arbitrary = { version = "0.4", features = [ "derive" ]}
 async-std = { version = "1.6.2", features = ["tokio02"] }
 async-trait = { version = "0.1.42" }
+rust-crypto = { version = "0.2.36" }
 bytes = "1.0"
 env_logger = "0.8.2"
 futures = "0.3.8"

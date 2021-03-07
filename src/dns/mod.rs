@@ -20,10 +20,12 @@ use crate::net::udp;
 
 type UdpSocket = udp::UdpSocket;
 
+extern crate crypto;
 extern crate nix;
 extern crate rand;
 
 mod acl;
+mod bucket;
 mod cache;
 #[cfg(fuzzing)]
 pub mod dnspkt;
@@ -40,6 +42,7 @@ use bytes::BytesMut;
 use tokio_util::codec::Decoder;
 
 const DNS_LISTEN_ADDR: &str = "[::]:53";
+const COOKIE_KEY: [u8; 8] = 0x0123_4567_89ab_cdef_u64.to_be_bytes();
 
 lazy_static::lazy_static! {
     static ref IN_QUERY_LATENCY: prometheus::HistogramVec =
@@ -55,6 +58,11 @@ lazy_static::lazy_static! {
             &["protocol", "result"])
         .unwrap();
 
+    static ref IN_QUERY_DROPPED: prometheus::IntCounter =
+        prometheus::register_int_counter!("dns_in_query_dropped",
+            "DNS queries dropped")
+        .unwrap();
+
 }
 
 #[cfg_attr(test, derive(Debug))]
@@ -63,6 +71,7 @@ pub enum Error {
     RecvError(std::io::Error),
     ParseError(String),
     RefusedByAcl(crate::acl::AclError),
+    Denied(String),
     NotAuthoritative,
     OutReply(outquery::Error),
 }
@@ -76,7 +85,338 @@ impl std::fmt::Display for Error {
             ParseError(msg) => write!(f, "Failed to parse DNS in query: {}", msg),
             RefusedByAcl(why) => write!(f, "Query refused by policy: {}", why),
             NotAuthoritative => write!(f, "Not Authoritative"),
+            Denied(msg) => write!(f, "Denied: {}", msg),
             OutReply(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+// We want to rate limit some error codes (like REFUSED) to prevent being used in reflection
+// attacks.  We don't want to keep track of a whole bunch of IP addresses tho, so we do a variation
+// on a bloom filter.  We have N token buckets, we hash the IP into *two* of those buckets, and
+// then we try and take some tokens from which ever has more tokens available.  If neither bucket
+// has sufficient tokens available, then we fail.  This means for small amounts of fixed memory
+// we can have a pretty low false positive rate.
+type Bucket = tokio::sync::RwLock<bucket::GenericTokenBucket>;
+struct IpRateLimiter([Bucket; 256]);
+
+impl IpRateLimiter {
+    fn new() -> Self {
+        let new = Bucket::default;
+        Self([
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+            new(),
+        ])
+    }
+
+    fn hash_ip(seed: u64, ip: std::net::IpAddr) -> usize {
+        use std::hash::Hash as _;
+        use std::hash::Hasher as _;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        seed.hash(&mut hasher);
+        ip.hash(&mut hasher);
+        hasher.finish() as usize
+    }
+
+    async fn check(&self, ip: std::net::IpAddr, bytes: usize) -> bool {
+        // TODO: Base seeds on time, rotating every 60s or something.
+        // They probably should also be unique per process.
+        // Maybe each seed should be staggered in time.
+        const SEED1: u64 = 0x1234_5678_9ABC_DEF0;
+        const SEED2: u64 = 0x2345_6789_ABCD_EF01;
+
+        let hash1 = Self::hash_ip(SEED1, ip);
+        let hash2 = Self::hash_ip(SEED2, ip);
+
+        let bucket1 = hash1 % self.0.len();
+
+        /* Normally a read() lock like this, when converted to a write() should be tested again,
+         * however since the writes are commutative, and we're more worried about speed than exact
+         * precision this should be fine.
+         */
+        if self.0[bucket1]
+            .read()
+            .await
+            .check::<bucket::RealTimeClock>(bytes as u32)
+        {
+            self.0[bucket1]
+                .write()
+                .await
+                .deplete::<bucket::RealTimeClock>(bytes as u32);
+            true
+        } else {
+            let mut bucket2 = hash2 % (self.0.len() - 1);
+            if bucket2 == bucket1 {
+                bucket2 = self.0.len() - 1;
+            }
+
+            if self.0[bucket2]
+                .read()
+                .await
+                .check::<bucket::RealTimeClock>(bytes as u32)
+            {
+                self.0[bucket2]
+                    .write()
+                    .await
+                    .deplete::<bucket::RealTimeClock>(bytes as u32);
+                true
+            } else {
+                false
+            }
         }
     }
 }
@@ -109,11 +449,68 @@ impl std::fmt::Display for Protocol {
     }
 }
 
+#[derive(Eq, PartialEq)]
+enum CookieStatus {
+    Missing,
+    Bad,
+    Good,
+}
+
 pub struct DnsMessage {
     pub in_query: dnspkt::DNSPkt,
+    pub in_size: usize,
     pub local_ip: std::net::IpAddr,
     pub remote_addr: std::net::SocketAddr,
     pub protocol: Protocol,
+}
+
+impl DnsMessage {
+    // Calculate the value of the cookie based on a key.
+    // This uses the client cookie, the source and dest ip addresses for generating the cookie.
+    fn calculate_cookie(&self, client: &[u8], key: &[u8]) -> crypto::mac::MacResult {
+        use crypto::mac::Mac;
+        // I'm not a crypto expert, but I am to understand that Hmac is the safest way to use a
+        // hash function to avoid length extension attacks.
+        let mut hasher = crypto::hmac::Hmac::new(crypto::sha2::Sha256::new(), key);
+        hasher.input(client);
+        match self.local_ip {
+            std::net::IpAddr::V4(v4) => hasher.input(&v4.octets()),
+            std::net::IpAddr::V6(v6) => hasher.input(&v6.octets()),
+        }
+        match self.remote_addr.ip() {
+            std::net::IpAddr::V4(v4) => hasher.input(&v4.octets()),
+            std::net::IpAddr::V6(v6) => hasher.input(&v6.octets()),
+        };
+        hasher.result()
+    }
+
+    fn validate_cookie_key(&self, key: &[u8]) -> CookieStatus {
+        if let Some((client, Some(server))) = self
+            .in_query
+            .edns
+            .as_ref()
+            .and_then(|edns| edns.get_cookie())
+        {
+            let myserver = self.calculate_cookie(client, key);
+            if myserver == crypto::mac::MacResult::new(server) {
+                CookieStatus::Good
+            } else {
+                CookieStatus::Bad
+            }
+        } else {
+            CookieStatus::Missing
+        }
+    }
+
+    // To support key rotation, we provide a new key, and an old key, we first
+    // check if they match using the new key, if so we accept it, if not, then
+    // we try again with the older key.
+    fn validate_cookie(&self, key: &[u8], oldkey: &[u8]) -> CookieStatus {
+        match self.validate_cookie_key(key) {
+            CookieStatus::Bad => self.validate_cookie_key(oldkey),
+            status => status,
+        }
+    }
 }
 
 struct DnsListenerHandler {
@@ -121,6 +518,7 @@ struct DnsListenerHandler {
     next: acl::DnsAclHandler,
     udp_listener: std::sync::Arc<UdpSocket>,
     tcp_listener: tokio::net::TcpListener,
+    rate_limiter: std::sync::Arc<IpRateLimiter>,
 }
 
 impl DnsListenerHandler {
@@ -169,12 +567,14 @@ impl DnsListenerHandler {
     async fn new(conf: crate::config::SharedConfig) -> Result<Self, Error> {
         let udp_listener = Self::listen_udp(&conf).await?.into();
         let tcp_listener = Self::listen_tcp(&conf).await?;
+        let rate_limiter = IpRateLimiter::new().into();
 
         Ok(Self {
             _conf: conf.clone(),
             next: acl::DnsAclHandler::new(conf).await,
             udp_listener,
             tcp_listener,
+            rate_limiter,
         })
     }
 
@@ -190,9 +590,21 @@ impl DnsListenerHandler {
         {
             // We fill in NSID with the receiving interface IP.
             // TODO: This might not be particularly interesting if this is a VIP.  We might want to
-            // find some more information to put in here.
+            // find some more useful information to put in here.
             edns.set_nsid(format!("{}", msg.local_ip).as_bytes());
         }
+
+        // Handle DNS COOKIE (RFC7873)
+        if let Some((client, _server)) = msg
+            .in_query
+            .edns
+            .as_ref()
+            .and_then(|edns| edns.get_cookie())
+        {
+            let server = msg.calculate_cookie(client, &COOKIE_KEY); // TODO: Rotate!
+            edns.set_cookie(client, &server.code()[..32]);
+        }
+
         dnspkt::DNSPkt {
             qid: msg.in_query.qid,
             rd: false,
@@ -209,7 +621,7 @@ impl DnsListenerHandler {
 
             bufsize: 4096,
 
-            edns_ver: Some(0),
+            edns_ver: msg.in_query.edns_ver.map(|_| 0),
             edns_do: false,
 
             question: msg.in_query.question.clone(),
@@ -220,7 +632,7 @@ impl DnsListenerHandler {
         }
     }
 
-    fn create_in_error(inq: &dnspkt::DNSPkt, err: Error) -> dnspkt::DNSPkt {
+    fn create_in_error(msg: &DnsMessage, err: Error) -> dnspkt::DNSPkt {
         use dnspkt::*;
         use Error::*;
         let mut edns: EdnsData = Default::default();
@@ -233,6 +645,10 @@ impl DnsListenerHandler {
             RefusedByAcl(why) => {
                 rcode = REFUSED;
                 edns.set_extended_dns_error(EDE_PROHIBITED, &why.to_string());
+            }
+            Denied(why) => {
+                rcode = REFUSED;
+                edns.set_extended_dns_error(EDE_PROHIBITED, &why);
             }
             NotAuthoritative => {
                 rcode = REFUSED;
@@ -275,7 +691,7 @@ impl DnsListenerHandler {
             }
         }
         dnspkt::DNSPkt {
-            qid: inq.qid,
+            qid: msg.in_query.qid,
             rd: false,
             tc: false,
             aa: false,
@@ -286,10 +702,10 @@ impl DnsListenerHandler {
             ra: true,
             rcode,
             bufsize: 4096,
-            edns_ver: Some(0),
+            edns_ver: msg.in_query.edns_ver.map(|_| 0),
             edns_do: false,
 
-            question: inq.question.clone(),
+            question: msg.in_query.question.clone(),
             answer: vec![],
             additional: vec![],
             nameserver: vec![],
@@ -311,6 +727,7 @@ impl DnsListenerHandler {
             local_ip,
             remote_addr,
             protocol,
+            in_size: pkt.len(),
         })
     }
 
@@ -336,7 +753,7 @@ impl DnsListenerHandler {
                     .inc();
             }
             Err(err) => {
-                in_reply = Self::create_in_error(&msg.in_query, err);
+                in_reply = Self::create_in_error(&msg, err);
                 IN_QUERY_RESULT
                     .with_label_values(&[&msg.protocol.to_string(), &in_reply.status()])
                     .inc();
@@ -346,8 +763,39 @@ impl DnsListenerHandler {
         Ok(in_reply)
     }
 
+    async fn should_ratelimit(
+        msg: &DnsMessage,
+        in_reply: &dnspkt::DNSPkt,
+        in_reply_serialised: &[u8],
+        rate_limiter: &IpRateLimiter,
+    ) -> bool {
+        // Currently we only ratelimit REFUSEDs.
+        if in_reply.rcode != dnspkt::REFUSED {
+            return false;
+        }
+
+        // If we can tell it's not spoofed, don't ratelimit.
+        if msg.validate_cookie_key(&COOKIE_KEY) == CookieStatus::Good {
+            return false;
+        }
+
+        // For each byte larger than the incoming request, we charge it at 2× the cost.
+        // For each byte smaller or equal than the incoming request, we charge it at 1× the cost.
+        let cost = (in_reply_serialised.len() * 2).saturating_sub(msg.in_size);
+
+        // We bill this to the remote address.
+        // TODO: Should we bill this to the subnet?  Eg, /56 for v6 and /24 for v4?
+        !rate_limiter.check(msg.remote_addr.ip(), cost).await
+    }
+
     async fn run_udp(s: &std::sync::Arc<tokio::sync::RwLock<Self>>) -> Result<(), Error> {
-        let local_listener = s.read().await.udp_listener.clone();
+        let local_listener;
+        let local_rate_limiter;
+        {
+            let local_self = s.read().await;
+            local_listener = local_self.udp_listener.clone();
+            local_rate_limiter = local_self.rate_limiter.clone();
+        }
         let rm = match local_listener.recv_msg(4096, udp::MsgFlags::empty()).await {
             Ok(rm) => rm,
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
@@ -374,16 +822,28 @@ impl DnsListenerHandler {
             ) {
                 Ok(msg) => {
                     let in_reply = Self::recv_in_query(&q, &msg).await.unwrap();
-                    let cmsg = udp::ControlMessage::new().set_send_from(rm.local_ip());
-                    local_listener
-                        .send_msg(
-                            in_reply.serialise().as_slice(),
-                            &cmsg,
-                            udp::MsgFlags::empty(),
-                            Some(&rm.address.unwrap()), /* TODO: Error? */
-                        )
-                        .await
-                        .expect("Failed to send reply"); // TODO: Better error handling
+                    let in_reply_bytes = in_reply.serialise();
+                    if !Self::should_ratelimit(
+                        &msg,
+                        &in_reply,
+                        &in_reply_bytes,
+                        &local_rate_limiter,
+                    )
+                    .await
+                    {
+                        let cmsg = udp::ControlMessage::new().set_send_from(rm.local_ip());
+                        local_listener
+                            .send_msg(
+                                in_reply_bytes.as_slice(),
+                                &cmsg,
+                                udp::MsgFlags::empty(),
+                                Some(&rm.address.unwrap()), /* TODO: Error? */
+                            )
+                            .await
+                            .expect("Failed to send reply"); // TODO: Better error handling
+                    } else {
+                        log::warn!("Not Sending Reply: Rate Limit");
+                    }
                 }
                 Err(err) => {
                     log::warn!("Failed to handle request: {}", err);
