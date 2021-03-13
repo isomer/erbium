@@ -842,6 +842,7 @@ impl DnsListenerHandler {
                             .await
                             .expect("Failed to send reply"); // TODO: Better error handling
                     } else {
+                        IN_QUERY_DROPPED.inc();
                         log::warn!("Not Sending Reply: Rate Limit");
                     }
                 }
