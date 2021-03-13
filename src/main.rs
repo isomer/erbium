@@ -18,14 +18,7 @@
  */
 
 use futures::StreamExt as _;
-use lazy_static::*;
 use log::{error, info};
-use prometheus::register_int_counter;
-
-lazy_static! {
-    static ref HIGH_FIVE_COUNTER: prometheus::IntCounter =
-        register_int_counter!("highfives", "Number of high fives received").unwrap();
-}
 
 use erbium::*;
 
