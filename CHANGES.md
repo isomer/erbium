@@ -1,3 +1,5 @@
+0.2.9
+   - Workaround for not compiling on NixOS.
 0.2.7
    - Added ACL subsystem.
    - Massive restructuring of the DNS service to start to get it into shape.

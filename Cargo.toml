@@ -1,6 +1,6 @@
 [package]
 name = "erbium"
-version = "0.2.8"
+version = "0.2.9"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2018"
 default-run = "erbium"
@@ -46,7 +46,7 @@ yaml-rust = { version = "0.4" }
 
 [[bin]]
 name="erbium-dns"
-required-features=["dns"]
+#required-features=["dns"]
 
 [[bin]]
 name="erbium-dhcp"
