@@ -1,3 +1,6 @@
+0.2.8
+   - Cookies are now sent on error
+   - Fixed some metrics bugs.
 0.2.7
    - Added ACL subsystem.
    - Massive restructuring of the DNS service to start to get it into shape.
