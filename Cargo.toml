@@ -35,7 +35,7 @@ mio = { version = "0.7" }
 netlink-packet-route = "0.7"
 netlink-sys = { version="0.6", features=["tokio_socket"] }
 nix = { version = "0.20" }
-prometheus = { version="0.11.0", features=["process"] }
+prometheus = { version="0.12", features=["process"] }
 rand = "0.8"
 rusqlite = { version = "0.24" }
 tokio-compat-02 = "0.2"

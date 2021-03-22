@@ -41,8 +41,74 @@ mod router;
 use bytes::BytesMut;
 use tokio_util::codec::Decoder;
 
-const DNS_LISTEN_ADDR: &str = "[::]:53";
-const COOKIE_KEY: [u8; 8] = 0x0123_4567_89ab_cdef_u64.to_be_bytes();
+const DNS_LISTEN_ADDR: &str = "[::]:1053";
+
+type Key = [u8; 8];
+
+struct CookieKeys {
+    next_refresh: tokio::time::Instant,
+    current: Key,
+    previous: Key,
+}
+
+impl CookieKeys {
+    fn new() -> Self {
+        use rand::distributions::Distribution as _;
+        use rand::Rng as _;
+        use tokio::time::{Duration, Instant};
+        let mut rng = rand::rngs::OsRng::default();
+        Self {
+            next_refresh: Instant::now()
+                + rand::distributions::Uniform::new(
+                    Duration::from_secs(86400 / 2),
+                    Duration::from_secs(86400 + 86400 / 2),
+                )
+                .sample(&mut rng),
+            current: rng.gen(),
+            previous: rng.gen(),
+        }
+    }
+
+    fn needs_rotation(&self) -> bool {
+        self.next_refresh < tokio::time::Instant::now()
+    }
+
+    // Gets the current and previous cookie keys, rotating them if they've expired.
+    async fn get_keys(s: &tokio::sync::RwLock<Self>) -> (Key, Key) {
+        use rand::distributions::Distribution as _;
+        use rand::Rng as _;
+        use tokio::time::{Duration, Instant};
+        if s.read().await.needs_rotation() {
+            // TODO: This only does one rotation, it's possibly both keys have expired, in which
+            // case we should rotate both.
+            let mut cookies = s.write().await;
+            let mut rng = rand::rngs::OsRng::default();
+            *cookies = Self {
+                next_refresh: Instant::now()
+                    + rand::distributions::Uniform::new(
+                        Duration::from_secs(86400 / 2),
+                        Duration::from_secs(86400 + 86400 / 2),
+                    )
+                    .sample(&mut rng),
+                current: rng.gen(),
+                previous: cookies.current,
+            }
+        }
+
+        let cookies = s.read().await;
+        (cookies.current, cookies.previous)
+    }
+
+    async fn get_current_key(s: &tokio::sync::RwLock<Self>) -> Key {
+        Self::get_keys(s).await.0
+    }
+}
+
+impl Default for CookieKeys {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 lazy_static::lazy_static! {
     static ref IN_QUERY_LATENCY: prometheus::HistogramVec =
@@ -63,6 +129,7 @@ lazy_static::lazy_static! {
             "DNS queries dropped")
         .unwrap();
 
+    static ref COOKIE_KEYS: tokio::sync::RwLock<CookieKeys> = Default::default();
 }
 
 #[cfg_attr(test, derive(Debug))]
@@ -505,11 +572,21 @@ impl DnsMessage {
     // To support key rotation, we provide a new key, and an old key, we first
     // check if they match using the new key, if so we accept it, if not, then
     // we try again with the older key.
-    fn validate_cookie(&self, key: &[u8], oldkey: &[u8]) -> CookieStatus {
+    fn validate_cookie_keys(&self, key: &[u8], oldkey: &[u8]) -> CookieStatus {
         match self.validate_cookie_key(key) {
             CookieStatus::Bad => self.validate_cookie_key(oldkey),
             status => status,
         }
+    }
+
+    async fn calculate_current_cookie(&self, client: &[u8]) -> crypto::mac::MacResult {
+        let key = CookieKeys::get_current_key(&COOKIE_KEYS).await;
+        self.calculate_cookie(client, &key)
+    }
+
+    async fn validate_cookie(&self) -> CookieStatus {
+        let keys = CookieKeys::get_keys(&COOKIE_KEYS).await;
+        self.validate_cookie_keys(&keys.0, &keys.1)
     }
 }
 
@@ -578,8 +655,7 @@ impl DnsListenerHandler {
         })
     }
 
-    fn create_in_reply(msg: &DnsMessage, outr: &dnspkt::DNSPkt) -> dnspkt::DNSPkt {
-        let mut edns: dnspkt::EdnsData = Default::default();
+    async fn add_edns(edns: &mut dnspkt::EdnsData, msg: &DnsMessage) {
         // If they requested NSID, then return it.
         if msg
             .in_query
@@ -601,10 +677,14 @@ impl DnsListenerHandler {
             .as_ref()
             .and_then(|edns| edns.get_cookie())
         {
-            let server = msg.calculate_cookie(client, &COOKIE_KEY); // TODO: Rotate!
+            let server = msg.calculate_current_cookie(client).await;
             edns.set_cookie(client, &server.code()[..32]);
         }
+    }
 
+    async fn create_in_reply(msg: &DnsMessage, outr: &dnspkt::DNSPkt) -> dnspkt::DNSPkt {
+        let mut edns: dnspkt::EdnsData = Default::default();
+        Self::add_edns(&mut edns, msg).await;
         dnspkt::DNSPkt {
             qid: msg.in_query.qid,
             rd: false,
@@ -632,10 +712,11 @@ impl DnsListenerHandler {
         }
     }
 
-    fn create_in_error(msg: &DnsMessage, err: Error) -> dnspkt::DNSPkt {
+    async fn create_in_error(msg: &DnsMessage, err: Error) -> dnspkt::DNSPkt {
         use dnspkt::*;
         use Error::*;
         let mut edns: EdnsData = Default::default();
+        Self::add_edns(&mut edns, msg).await;
         let rcode;
         match err {
             /* These errors mean we never get a packet to reply to. */
@@ -747,13 +828,13 @@ impl DnsListenerHandler {
         let in_reply;
         match next.handle_query(&msg).await {
             Ok(out_reply) => {
-                in_reply = Self::create_in_reply(&msg, &out_reply);
+                in_reply = Self::create_in_reply(&msg, &out_reply).await;
                 IN_QUERY_RESULT
                     .with_label_values(&[&msg.protocol.to_string(), &in_reply.status()])
                     .inc();
             }
             Err(err) => {
-                in_reply = Self::create_in_error(&msg, err);
+                in_reply = Self::create_in_error(&msg, err).await;
                 IN_QUERY_RESULT
                     .with_label_values(&[&msg.protocol.to_string(), &in_reply.status()])
                     .inc();
@@ -774,14 +855,27 @@ impl DnsListenerHandler {
             return false;
         }
 
-        // If we can tell it's not spoofed, don't ratelimit.
-        if msg.validate_cookie_key(&COOKIE_KEY) == CookieStatus::Good {
-            return false;
+        match msg.validate_cookie().await {
+            CookieStatus::Good => {
+                // If we can tell it's not spoofed, don't ratelimit.
+                log::trace!("Cookie status: Good");
+                return false;
+            }
+            CookieStatus::Bad => {
+                log::trace!("Cookie status: Bad");
+            }
+            CookieStatus::Missing => {
+                log::trace!("Cookie status: Missing");
+            }
         }
 
         // For each byte larger than the incoming request, we charge it at 2× the cost.
         // For each byte smaller or equal than the incoming request, we charge it at 1× the cost.
-        let cost = (in_reply_serialised.len() * 2).saturating_sub(msg.in_size);
+        // But always charge at least 200.
+        let cost = std::cmp::max(
+            (in_reply_serialised.len() * 2).saturating_sub(msg.in_size),
+            200,
+        );
 
         // We bill this to the remote address.
         // TODO: Should we bill this to the subnet?  Eg, /56 for v6 and /24 for v4?
