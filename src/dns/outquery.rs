@@ -436,6 +436,10 @@ impl OutQuery {
             addr,
             oq.qid
         );
+        DNS_SENT_QUERIES
+            .with_label_values(&[&addr.to_string(), "UDP"])
+            .inc();
+
         // TODO: The query id should probably be unique per retry?
         outsock
             .send(oq.serialise().as_slice())
@@ -480,13 +484,13 @@ impl OutQuery {
                                 // If we made multiple attempts, then we should figure out what
                                 // caused us to make multiple attempts, and try and optimise for
                                 // that situation.
+                                let mut timeout = DNS_TIMEOUT.write().await;
                                 if dur < initial_timeout {
                                     // If the reply was shorter than the initial timeout, then
                                     // there's a good chance that this was due to the original
                                     // packet being lost.  In that case, we should lower our
                                     // estimate of the initial timeout, so we recover from packet
                                     // loss faster.  We EWMA our estimate towards the time it took.
-                                    let mut timeout = DNS_TIMEOUT.write().await;
                                     if dur <= *timeout {
                                         // Alpha is how fast we adapt to changes (between 0..BASE)
                                         const ALPHA : u32 = 10;
@@ -503,7 +507,7 @@ impl OutQuery {
                                     // retransmission.  In this case, we should increase our
                                     // estimate of the initial timeout to be at least as long as
                                     // the timeout.
-                                    let mut timeout = DNS_TIMEOUT.write().await;
+
                                     // We don't want to set this directly to the time it took, we
                                     // want to provide some headroom as this is unlikely to be the
                                     // slowest that the server can be.  So increase duration by
@@ -520,7 +524,7 @@ impl OutQuery {
                         }
                     },
                 () = tokio::time::sleep(timeout).fuse() => {
-                    use rand::distributions::Distribution;
+                    use rand::distributions::Distribution as _;
                     // Only allow for 3 attempts before we give up.  We don't want to retry
                     // fruitlessly forever.
                     if attempts.len() > 3 {
