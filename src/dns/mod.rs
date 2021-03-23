@@ -41,7 +41,7 @@ mod router;
 use bytes::BytesMut;
 use tokio_util::codec::Decoder;
 
-const DNS_LISTEN_ADDR: &str = "[::]:1053";
+const DNS_LISTEN_ADDR: &str = "[::]:53";
 
 type Key = [u8; 8];
 
