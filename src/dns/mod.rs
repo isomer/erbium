@@ -41,8 +41,6 @@ mod router;
 use bytes::BytesMut;
 use tokio_util::codec::Decoder;
 
-const DNS_LISTEN_ADDR: &str = "[::]:1053";
-
 type Key = [u8; 8];
 
 struct CookieKeys {
@@ -591,23 +589,20 @@ impl DnsMessage {
 }
 
 struct DnsListenerHandler {
-    _conf: crate::config::SharedConfig,
     next: acl::DnsAclHandler,
-    udp_listener: std::sync::Arc<UdpSocket>,
-    tcp_listener: tokio::net::TcpListener,
+    udp_listeners: Vec<UdpSocket>,
+    tcp_listeners: Vec<tokio::net::TcpListener>,
     rate_limiter: std::sync::Arc<IpRateLimiter>,
 }
 
 impl DnsListenerHandler {
-    async fn listen_udp(_conf: &crate::config::SharedConfig) -> Result<UdpSocket, Error> {
-        let udp = UdpSocket::bind(
-            &tokio::net::lookup_host(DNS_LISTEN_ADDR)
-                .await
-                .map_err(Error::ListenError)?
-                .collect::<Vec<_>>(),
-        )
-        .await
-        .map_err(Error::ListenError)?;
+    async fn listen_udp(
+        _conf: &crate::config::SharedConfig,
+        addr: &nix::sys::socket::SockAddr,
+    ) -> Result<UdpSocket, Error> {
+        let udp = UdpSocket::bind(&[udp::nix_to_std_sockaddr(*addr)])
+            .await
+            .map_err(Error::ListenError)?;
 
         udp.set_opt_ipv4_packet_info(true)
             .map_err(Error::ListenError)?;
@@ -626,8 +621,9 @@ impl DnsListenerHandler {
 
     async fn listen_tcp(
         _conf: &crate::config::SharedConfig,
+        addr: &nix::sys::socket::SockAddr,
     ) -> Result<tokio::net::TcpListener, Error> {
-        let tcp = tokio::net::TcpListener::bind(DNS_LISTEN_ADDR)
+        let tcp = tokio::net::TcpListener::bind(udp::nix_to_std_sockaddr(*addr))
             .await
             .map_err(Error::ListenError)?;
 
@@ -642,15 +638,18 @@ impl DnsListenerHandler {
     }
 
     async fn new(conf: crate::config::SharedConfig) -> Result<Self, Error> {
-        let udp_listener = Self::listen_udp(&conf).await?.into();
-        let tcp_listener = Self::listen_tcp(&conf).await?;
+        let mut udp_listeners = vec![];
+        let mut tcp_listeners = vec![];
+        for addr in &conf.read().await.dns_listeners {
+            udp_listeners.push(Self::listen_udp(&conf, addr).await?);
+            tcp_listeners.push(Self::listen_tcp(&conf, addr).await?);
+        }
         let rate_limiter = IpRateLimiter::new().into();
 
         Ok(Self {
-            _conf: conf.clone(),
             next: acl::DnsAclHandler::new(conf).await,
-            udp_listener,
-            tcp_listener,
+            udp_listeners,
+            tcp_listeners,
             rate_limiter,
         })
     }
@@ -882,15 +881,16 @@ impl DnsListenerHandler {
         !rate_limiter.check(msg.remote_addr.ip(), cost).await
     }
 
-    async fn run_udp(s: &std::sync::Arc<tokio::sync::RwLock<Self>>) -> Result<(), Error> {
-        let local_listener;
+    async fn run_udp(
+        listener: &std::sync::Arc<UdpSocket>,
+        s: &std::sync::Arc<tokio::sync::RwLock<Self>>,
+    ) -> Result<(), Error> {
         let local_rate_limiter;
         {
             let local_self = s.read().await;
-            local_listener = local_self.udp_listener.clone();
             local_rate_limiter = local_self.rate_limiter.clone();
         }
-        let rm = match local_listener.recv_msg(4096, udp::MsgFlags::empty()).await {
+        let rm = match listener.recv_msg(4096, udp::MsgFlags::empty()).await {
             Ok(rm) => rm,
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => return Ok(()),
             Err(err) if err.kind() == std::io::ErrorKind::Interrupted => return Ok(()),
@@ -899,6 +899,7 @@ impl DnsListenerHandler {
         let timer = IN_QUERY_LATENCY.with_label_values(&["UDP"]).start_timer();
 
         let q = s.clone();
+        let local_listener = listener.clone();
 
         log::trace!(
             "Received UDP {:?} ⇒ {:?} ({})",
@@ -1029,14 +1030,11 @@ impl DnsListenerHandler {
         Ok(())
     }
 
-    async fn run_tcp_listener(s: &std::sync::Arc<tokio::sync::RwLock<Self>>) -> Result<(), Error> {
-        let (sock, sock_addr) = s
-            .read()
-            .await
-            .tcp_listener
-            .accept()
-            .await
-            .map_err(Error::ListenError)?;
+    async fn run_tcp_listener(
+        tcp: tokio::net::TcpListener,
+        s: std::sync::Arc<tokio::sync::RwLock<Self>>,
+    ) -> Result<(), Error> {
+        let (sock, sock_addr) = tcp.accept().await.map_err(Error::ListenError)?;
         let local_s = s.clone();
 
         tokio::spawn(async move { Self::run_tcp(&local_s, sock, sock_addr).await });
@@ -1045,17 +1043,28 @@ impl DnsListenerHandler {
     }
 
     async fn run(s: &std::sync::Arc<tokio::sync::RwLock<Self>>) -> Result<(), Error> {
-        use futures::future::FutureExt as _;
-        use futures::pin_mut;
-        let udp_fut = Self::run_udp(s).fuse();
-        let tcp_listener_fut = Self::run_tcp_listener(s).fuse();
-
-        pin_mut!(udp_fut, tcp_listener_fut);
-
-        futures::select! {
-            udp = udp_fut => udp,
-            tcp_listener = tcp_listener_fut => tcp_listener,
+        use futures::StreamExt as _;
+        let mut services = futures::stream::FuturesUnordered::new();
+        let mut my_self = s.write().await;
+        for listener in my_self.udp_listeners.drain(..) {
+            let s_clone = s.clone();
+            services.push(tokio::spawn(async move {
+                let shared_listener = listener.into();
+                loop {
+                    Self::run_udp(&shared_listener, &s_clone).await?
+                }
+            }));
         }
+        for listener in my_self.tcp_listeners.drain(..) {
+            let s_clone = s.clone();
+            services.push(tokio::spawn(async move {
+                Self::run_tcp_listener(listener, s_clone).await
+            }));
+        }
+
+        drop(my_self);
+
+        services.next().await.unwrap().unwrap()
     }
 }
 

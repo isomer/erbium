@@ -737,6 +737,7 @@ pub struct Config {
     pub captive_portal: Option<String>,
     pub addresses: Vec<Prefix>,
     pub listeners: Vec<nix::sys::socket::SockAddr>,
+    pub dns_listeners: Vec<nix::sys::socket::SockAddr>,
     pub acls: Vec<crate::acl::Acl>,
 }
 
@@ -761,6 +762,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut captive_portal = None;
         let mut addresses = None;
         let mut listeners = None;
+        let mut dns_listeners = None;
         let mut acls = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
@@ -787,6 +789,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 (Some("api-listeners"), s) => {
                     listeners = parse_array("api-listeners", s, parse_string_sockaddr)?;
                 }
+                (Some("dns-listeners"), s) => {
+                    dns_listeners = parse_array("dns-listeners",s, parse_string_sockaddr)?;
+                }
                 (Some("acls"), s) => {
                     acls = parse_array("acls", s, crate::acl::parse_acl)?;
                 }
@@ -811,6 +816,14 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             ra: ra.unwrap_or_else(crate::radv::config::Config::default),
             dns_servers,
             dns_search,
+            dns_listeners: dns_listeners.unwrap_or_else(|| {
+                vec![nix::sys::socket::SockAddr::new_inet(
+                    nix::sys::socket::InetAddr::new(
+                        nix::sys::socket::IpAddr::new_v6(0, 0, 0, 0, 0, 0, 0, 0),
+                        53,
+                    ),
+                )]
+            }),
             captive_portal,
             listeners: listeners.unwrap_or_else(|| {
                 vec![nix::sys::socket::SockAddr::Unix(
