@@ -102,6 +102,8 @@ fn clone_out_reply(reply: &Result<dnspkt::DNSPkt, Error>) -> Result<dnspkt::DNSP
             Err(OutReply(OutReplyError::InternalError(msg.clone())))
         }
         Err(Denied(x)) => Err(Denied(x.clone())),
+        Err(Blocked) => Err(Blocked),
+        Err(NoRouteConfigured) => Err(NoRouteConfigured),
         /* These errors cannot occur */
         Err(ListenError(_)) => unreachable!(),
         Err(RecvError(_)) => unreachable!(),
@@ -251,13 +253,17 @@ impl CacheHandler {
         DNS_CACHE_SIZE.set(cache.len().try_into().unwrap_or(i64::MAX));
     }
 
-    pub async fn handle_query(&self, msg: &super::DnsMessage) -> Result<dnspkt::DNSPkt, Error> {
+    pub async fn handle_query(
+        &self,
+        msg: &super::DnsMessage,
+        addr: std::net::SocketAddr,
+    ) -> Result<dnspkt::DNSPkt, Error> {
         let q = &msg.in_query.question;
         /* Only do caching for IN queries */
         if q.qclass != dnspkt::CLASS_IN {
             log::trace!("Not caching non-IN query");
             DNS_CACHE.with_label_values(&[&"UNCACHABLE_CLASS"]).inc();
-            return self.next.handle_query(msg).await;
+            return self.next.handle_query(msg, addr).await;
         }
 
         let ck = CacheKey {
@@ -273,7 +279,7 @@ impl CacheHandler {
         }
 
         /* Cache miss: Go attempt the resolve, and return the result */
-        let out_result = self.next.handle_query(msg).await;
+        let out_result = self.next.handle_query(msg, addr).await;
 
         let expiry = self.calculate_expiry(&out_result);
 

@@ -27,9 +27,7 @@ extern crate rand;
 mod acl;
 mod bucket;
 mod cache;
-#[cfg(fuzzing)]
-pub mod dnspkt;
-#[cfg(not(fuzzing))]
+pub(crate) mod config;
 pub mod dnspkt;
 mod outquery;
 #[cfg(fuzzing)]
@@ -137,6 +135,8 @@ pub enum Error {
     ParseError(String),
     RefusedByAcl(crate::acl::AclError),
     Denied(String),
+    Blocked,
+    NoRouteConfigured,
     NotAuthoritative,
     OutReply(outquery::Error),
 }
@@ -150,6 +150,8 @@ impl std::fmt::Display for Error {
             ParseError(msg) => write!(f, "Failed to parse DNS in query: {}", msg),
             RefusedByAcl(why) => write!(f, "Query refused by policy: {}", why),
             NotAuthoritative => write!(f, "Not Authoritative"),
+            Blocked => write!(f, "Blocked by configuration"),
+            NoRouteConfigured => write!(f, "No route configured"),
             Denied(msg) => write!(f, "Denied: {}", msg),
             OutReply(err) => write!(f, "{}", err),
         }
@@ -730,9 +732,20 @@ impl DnsListenerHandler {
                 rcode = REFUSED;
                 edns.set_extended_dns_error(EDE_PROHIBITED, &why);
             }
+            Blocked => {
+                rcode = NXDOMAIN;
+                edns.set_extended_dns_error(
+                    EDE_BLOCKED,
+                    "Server is configured to block these queries",
+                );
+            }
             NotAuthoritative => {
                 rcode = REFUSED;
                 edns.set_extended_dns_error(EDE_NOT_AUTHORITATIVE, "Not Authoritative");
+            }
+            NoRouteConfigured => {
+                rcode = SERVFAIL;
+                edns.set_extended_dns_error(EDE_NOT_SUPPORTED, "No route configured for suffix");
             }
             OutReply(outquery::Error::Timeout) => {
                 rcode = SERVFAIL;

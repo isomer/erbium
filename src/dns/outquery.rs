@@ -426,9 +426,12 @@ impl OutQuery {
         oq: super::dnspkt::DNSPkt,
     ) -> Result<(Duration, dnspkt::DNSPkt), Error> {
         let start = Instant::now();
-        let outsock = UdpSocket::bind("0.0.0.0:0")
-            .await
-            .map_err(Error::FailedToSend)?;
+        let outsock = UdpSocket::bind(match addr {
+            std::net::SocketAddr::V4(_) => "0.0.0.0:0",
+            std::net::SocketAddr::V6(_) => "[::]:0",
+        })
+        .await
+        .map_err(Error::FailedToSend)?;
         outsock.connect(addr).await.map_err(Error::FailedToSend)?;
         log::trace!(
             "Sending query {} → {} ({})",
@@ -609,8 +612,8 @@ impl OutQuery {
     pub async fn handle_query(
         &self,
         msg: &super::DnsMessage,
+        addr: std::net::SocketAddr,
     ) -> Result<dnspkt::DNSPkt, super::Error> {
-        let addr: std::net::SocketAddr = "8.8.8.8:53".parse().unwrap();
         OUT_QUERY_OUTSTANDING
             .with_label_values(&[&addr.to_string()])
             .inc();

@@ -8,6 +8,7 @@ description = "Network services for small/home networks"
 license = "Apache-2.0"
 repository = "https://github.com/isomer/erbium.git"
 build = "src/build.rs"
+homepage = "https://github.com/isomer/erbium"
 
 [features]
 full=["dhcp", "radv", "http", "dns"]

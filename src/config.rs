@@ -738,6 +738,7 @@ pub struct Config {
     pub addresses: Vec<Prefix>,
     pub listeners: Vec<nix::sys::socket::SockAddr>,
     pub dns_listeners: Vec<nix::sys::socket::SockAddr>,
+    pub dns_routes: Vec<crate::dns::config::Route>,
     pub acls: Vec<crate::acl::Acl>,
 }
 
@@ -763,6 +764,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut addresses = None;
         let mut listeners = None;
         let mut dns_listeners = None;
+        let mut dns_routes = None;
         let mut acls = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
@@ -795,6 +797,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 (Some("acls"), s) => {
                     acls = parse_array("acls", s, crate::acl::parse_acl)?;
                 }
+                (Some("dns-routes"), s) => {
+                    dns_routes = crate::dns::config::parse_dns_routes("dns-routes", s)?;
+                }
                 (Some(x), _) => {
                     return Err(Error::InvalidConfig(format!(
                         "Unknown configuration option {}",
@@ -824,6 +829,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                     ),
                 )]
             }),
+            dns_routes: dns_routes.unwrap_or_else(Vec::new),
             captive_portal,
             listeners: listeners.unwrap_or_else(|| {
                 vec![nix::sys::socket::SockAddr::Unix(

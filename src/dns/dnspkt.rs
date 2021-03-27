@@ -192,6 +192,12 @@ impl Arbitrary for Label {
 #[cfg_attr(fuzzing, derive(Arbitrary))]
 pub struct Domain(Vec<Label>);
 
+impl Domain {
+    pub fn ends_with(&self, other: &Self) -> bool {
+        self.0.ends_with(&other.0)
+    }
+}
+
 impl From<Vec<Label>> for Domain {
     fn from(mut v: Vec<Label>) -> Self {
         v.shrink_to_fit();
@@ -219,15 +225,48 @@ impl fmt::Debug for Domain {
     }
 }
 
-#[cfg_attr(test, derive(Debug))]
-pub enum ParseDomainError {
-    ParseError,
+impl std::str::FromStr for Domain {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut it = s.chars();
+        let mut v = vec![];
+        let mut l = vec![];
+        while let Some(c) = it.next() {
+            match c {
+                '\\' => return Err("\\ not yet supported"), // TODO
+                '.' => {
+                    if l.is_empty() {
+                        return Err("illegal empty label");
+                    }
+                    l.shrink_to_fit();
+                    v.push(Label(l));
+                    l = vec![]
+                }
+                ch if ch.is_ascii() => l.push(ch as u8),
+                _ => return Err("illegal charactor in label"),
+            }
+        }
+        if !l.is_empty() {
+            l.shrink_to_fit();
+            v.push(Label(l));
+        }
+        v.shrink_to_fit();
+        Ok(Domain(v))
+    }
 }
 
-impl std::str::FromStr for Domain {
-    type Err = ParseDomainError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Domain(s.split('.').map(|l| Label(l.into())).collect()))
+// We want to sort longer suffixes first.
+pub fn compare_longest_suffix(lhs: &Domain, rhs: &Domain) -> std::cmp::Ordering {
+    use std::cmp::Ordering::*;
+    if lhs.0.len() != rhs.0.len() {
+        if lhs.0.len() < rhs.0.len() {
+            Greater // Because we want the largest first, not smallest first.
+        } else {
+            Less
+        }
+    } else {
+        // If they are the same length, then just compare based on the text
+        lhs.0.cmp(&rhs.0)
     }
 }
 
@@ -340,11 +379,35 @@ impl fmt::Display for EdeCode {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 #[cfg_attr(fuzzing, derive(Arbitrary))]
 pub struct EdnsOption {
     pub code: EdnsCode,
     pub data: Vec<u8>,
+}
+
+impl fmt::Debug for EdnsOption {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.code {
+            EDNS_EDE => write!(
+                f,
+                "EdnsOption({}: {})",
+                self.code,
+                String::from_utf8_lossy(&self.data[..])
+            ),
+            EDNS_COOKIE => write!(
+                f,
+                "EdnsOption({}: {})",
+                self.code,
+                self.data[..]
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join("")
+            ),
+            ref code => write!(f, "EdnsOption({}: {:?})", code, self.data),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
@@ -1254,4 +1317,17 @@ fn test_pkt_roundtrip() {
     let v = orig_pkt.serialise();
     let mut p = super::parse::PktParser::new(&v);
     assert_eq!(orig_pkt, p.get_dns().unwrap());
+}
+
+#[test]
+fn domain_from_str() {
+    assert_eq!(
+        "example.com".parse(),
+        Ok(Domain(vec![
+            Label(vec![
+                'e' as u8, 'x' as u8, 'a' as u8, 'm' as u8, 'p' as u8, 'l' as u8, 'e' as u8
+            ]),
+            Label(vec!['c' as u8, 'o' as u8, 'm' as u8])
+        ]))
+    );
 }
