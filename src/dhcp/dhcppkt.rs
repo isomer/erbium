@@ -1,4 +1,4 @@
-/*   Copyright 2020 Perry Lorier
+/*   Copyright 2021 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
  *  Parsing/Serialisation for a DHCP Packet.
  */
 
+use crate::pktparser;
 use std::collections;
 use std::fmt;
 use std::net;
@@ -44,41 +45,15 @@ impl std::fmt::Display for ParseError {
     }
 }
 
-fn get_u8(it: &mut dyn std::iter::Iterator<Item = &u8>) -> Result<u8, ParseError> {
-    match it.next() {
-        Some(v) => Ok(*v),
-        None => Err(ParseError::UnexpectedEndOfInput),
+impl ParseError {
+    pub fn get_variant_name(&self) -> &'static str {
+        use ParseError::*;
+        match self {
+            UnexpectedEndOfInput => "TRUNCATED_PACKET",
+            WrongMagic => "WRONG_MAGIC",
+            InvalidPacket => "INVALID_PACKET",
+        }
     }
-}
-
-fn get_be16(it: &mut dyn std::iter::Iterator<Item = &u8>) -> Result<u16, ParseError> {
-    Ok(get_u8(it)? as u16 * 256 + get_u8(it)? as u16)
-}
-
-fn get_be32(it: &mut dyn std::iter::Iterator<Item = &u8>) -> Result<u32, ParseError> {
-    Ok(get_u8(it)? as u32 * (256 * 256 * 256)
-        + get_u8(it)? as u32 * (256 * 256)
-        + get_u8(it)? as u32 * 256
-        + get_u8(it)? as u32)
-}
-
-fn get_bytes(
-    it: &mut dyn std::iter::Iterator<Item = &u8>,
-    l: usize,
-) -> Result<Vec<u8>, ParseError> {
-    let mut v = vec![];
-    for _ in 0..l {
-        v.push(get_u8(it)?);
-    }
-    Ok(v)
-}
-
-fn get_ipv4(it: &mut dyn std::iter::Iterator<Item = &u8>) -> Result<net::Ipv4Addr, ParseError> {
-    let a = get_u8(it)?;
-    let b = get_u8(it)?;
-    let c = get_u8(it)?;
-    let d = get_u8(it)?;
-    Ok(net::Ipv4Addr::new(a, b, c, d))
 }
 
 #[derive(PartialEq, Eq)]
@@ -191,6 +166,7 @@ pub const OPTION_MASKDISCOVERY: DhcpOption = DhcpOption(29);
 pub const OPTION_MASKSUPPLIER: DhcpOption = DhcpOption(30);
 pub const OPTION_RTRDISCOVERY: DhcpOption = DhcpOption(31);
 pub const OPTION_RTRREQ: DhcpOption = DhcpOption(32);
+pub const OPTION_STATICROUTE: DhcpOption = DhcpOption(33);
 pub const OPTION_TRAILERS: DhcpOption = DhcpOption(34);
 pub const OPTION_ARPTIMEOUT: DhcpOption = DhcpOption(35);
 pub const OPTION_ETHERNET: DhcpOption = DhcpOption(36);
@@ -230,13 +206,16 @@ pub const OPTION_STREETTALK: DhcpOption = DhcpOption(75);
 pub const OPTION_STDA: DhcpOption = DhcpOption(76);
 pub const OPTION_USERCLASS: DhcpOption = DhcpOption(77); /* RFC3004 */
 pub const OPTION_FQDN: DhcpOption = DhcpOption(81); /* RFC4702 */
+pub const OPTION_UUID: DhcpOption = DhcpOption(97); /* RFC4578 */
 pub const OPTION_PCODE: DhcpOption = DhcpOption(100); /* RFC4833 */
 pub const OPTION_TCODE: DhcpOption = DhcpOption(101); /* RFC4833 */
 pub const OPTION_AUTOCONF: DhcpOption = DhcpOption(103);
 pub const OPTION_SUBNETSELECT: DhcpOption = DhcpOption(104);
-//pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
-//pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
+pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
+pub const OPTION_SIPSERVERS: DhcpOption = DhcpOption(120);
+pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
 pub const OPTION_CAPTIVEPORTAL: DhcpOption = DhcpOption(160);
+pub const OPTION_WPAD: DhcpOption = DhcpOption(252);
 
 const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     ("netmask", OPTION_NETMASK, DhcpOptionType::Ip),
@@ -286,7 +265,11 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
         DhcpOptionType::Bool,
     ),
     ("router-request", OPTION_RTRREQ, DhcpOptionType::Ip),
-    //("static-route",  OPTION_STATICROUTE, DhcpOptionType::...), // Needs special handling.
+    (
+        "classful-route",
+        OPTION_STATICROUTE,
+        DhcpOptionType::Unknown,
+    ), // Needs special handling. -- DNI
     ("trailers", OPTION_TRAILERS, DhcpOptionType::Bool),
     ("arp-timeout", OPTION_ARPTIMEOUT, DhcpOptionType::Seconds32),
     ("ethernet", OPTION_ETHERNET, DhcpOptionType::Bool),
@@ -371,10 +354,10 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     ),
     ("stda-servers", OPTION_STDA, DhcpOptionType::IpList),
     ("user-class", OPTION_USERCLASS, DhcpOptionType::String),
-    //("directory-agent", OPTION_
-    //("server-scope"
-    //("rapid-commit"
+    //("directory-agent", OPTION_DIRECTORY_AGENT, DhcpOptionType::Unknown),
+    //("service-scope", OPTION_SERVICE_SCOPE
     // 80
+    //("rapid-commit", OPTION_RAPID_COMMIT
     ("fqdn", OPTION_FQDN, DhcpOptionType::String),
     // option 82 (relay agent information) needs special handling.
     // iSNS
@@ -391,7 +374,7 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     // client-ndi, RFC4578
     // ldap, RFC3679
     //
-    //("uuid",      OPTION_UUID,       DhcpOptionType::String), RFC4578
+    ("uuid", OPTION_UUID, DhcpOptionType::Unknown), //RFC4578
     // userauth, RFC2485
     // geoconf civic, RFC4776
     // 100
@@ -400,9 +383,13 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     // uuid/guid
     ("autoconfig", OPTION_AUTOCONF, DhcpOptionType::Bool),
     ("subnet-selection", OPTION_SUBNETSELECT, DhcpOptionType::Ip), // RFC3011 -- needs better support
-    //("search-path", OPTION_DNSSEARCH, DhcpOptionType::...), // RFC3397
-    //("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::...), // RFC3361
-    //121: classless routes, RFC3442 -- Don't intend to implement.
+    (
+        "dns-searches",
+        OPTION_DOMAINSEARCH,
+        DhcpOptionType::DomainList,
+    ), // RFC3397
+    ("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::Unknown),   // RFC3361
+    ("routes", OPTION_CIDRROUTE, DhcpOptionType::Routes),
     //122: Cablelabs Client configuration, RFC3495
     //123: GeoConf, RFC6225
     //124: Vendor Identifying Vendor Class -- needs special support, RFC3925
@@ -412,6 +399,7 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
         OPTION_CAPTIVEPORTAL,
         DhcpOptionType::String,
     ),
+    ("wpad-url", OPTION_WPAD, DhcpOptionType::String),
 ];
 
 impl From<u8> for DhcpOption {
@@ -433,6 +421,9 @@ pub enum DhcpOptionType {
     Seconds16,
     Seconds32,
     HwAddr,
+    Routes,
+    DomainList,
+    Unknown,
 }
 
 type IpList = Vec<std::net::Ipv4Addr>;
@@ -453,6 +444,11 @@ impl DhcpOptionType {
             DhcpOptionType::Seconds16 => u16::parse_into(v).map(DhcpOptionTypeValue::U16), // ?
             DhcpOptionType::Seconds32 => u32::parse_into(v).map(DhcpOptionTypeValue::U32), // ?
             DhcpOptionType::HwAddr => U8Str::parse_into(v).map(DhcpOptionTypeValue::HwAddr),
+            DhcpOptionType::Routes => Vec::<Route>::parse_into(v).map(DhcpOptionTypeValue::Routes),
+            DhcpOptionType::DomainList => {
+                Vec::<String>::parse_into(v).map(DhcpOptionTypeValue::DomainList)
+            }
+            DhcpOptionType::Unknown => U8Str::parse_into(v).map(DhcpOptionTypeValue::Unknown),
         }
     }
 }
@@ -460,13 +456,16 @@ impl DhcpOptionType {
 #[derive(Debug, Clone)]
 pub enum DhcpOptionTypeValue {
     String(String),
-    IpList(Vec<std::net::Ipv4Addr>),
+    IpList(IpList),
     Ip(std::net::Ipv4Addr),
     I32(i32),
     U8(u8),
     U16(u16),
     U32(u32),
     HwAddr(Vec<u8>),
+    Routes(Vec<Route>),
+    DomainList(Vec<String>),
+    Unknown(Vec<u8>),
 }
 
 impl DhcpOptionTypeValue {
@@ -485,6 +484,27 @@ impl DhcpOptionTypeValue {
             DhcpOptionTypeValue::U16(x) => x.to_be_bytes().to_vec(),
             DhcpOptionTypeValue::U32(x) => x.to_be_bytes().to_vec(),
             DhcpOptionTypeValue::HwAddr(x) => x.clone(),
+            DhcpOptionTypeValue::Routes(v) => {
+                let mut o = vec![];
+                for i in v {
+                    o.push(i.prefix.prefixlen);
+                    o.extend(i.prefix.addr.octets().iter());
+                    o.extend(i.nexthop.octets().iter());
+                }
+                o
+            }
+            DhcpOptionTypeValue::Unknown(v) => v.clone(),
+            DhcpOptionTypeValue::DomainList(l) => {
+                let mut o = vec![];
+                for domains in l.iter().map(|d| d.split('.')) {
+                    for label in domains {
+                        o.push(label.len() as u8);
+                        o.extend(label.as_bytes());
+                    }
+                    o.push(0u8)
+                }
+                o
+            }
         }
     }
 }
@@ -525,6 +545,23 @@ impl std::fmt::Display for DhcpOptionTypeValue {
                     .collect::<Vec<String>>()
                     .join(":")
             ),
+            DhcpOptionTypeValue::Routes(l) => write!(
+                f,
+                "{}",
+                l.iter()
+                    .map(|i| format!("{}->{}", i.prefix, i.nexthop))
+                    .collect::<Vec<String>>()
+                    .join(",")
+            ),
+            DhcpOptionTypeValue::Unknown(v) => write!(
+                f,
+                "{}",
+                v.iter()
+                    .map(|b| format!("{:0>2x}", b))
+                    .collect::<Vec<_>>()
+                    .join("")
+            ),
+            DhcpOptionTypeValue::DomainList(v) => write!(f, "{}", v.join(",")),
         }
     }
 }
@@ -574,6 +611,38 @@ pub trait DhcpParse {
     fn parse_into(v: &[u8]) -> Option<Self::Item>;
 }
 
+#[derive(Clone, Debug)]
+pub struct Route {
+    pub prefix: crate::net::Ipv4Subnet,
+    pub nexthop: std::net::Ipv4Addr,
+}
+
+fn parse_ip_from_iter<I>(it: &mut I) -> Option<std::net::Ipv4Addr>
+where
+    I: std::iter::Iterator<Item = u8>,
+{
+    let ip1 = it.next()?;
+    let ip2 = it.next()?;
+    let ip3 = it.next()?;
+    let ip4 = it.next()?;
+    Some(net::Ipv4Addr::new(ip1, ip2, ip3, ip4))
+}
+
+impl DhcpParse for Vec<Route> {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self::Item> {
+        let mut it = v.iter().copied();
+        let mut ret = vec![];
+        while let Some(prefixlen) = it.next() {
+            let prefix =
+                crate::net::Ipv4Subnet::new(parse_ip_from_iter(&mut it)?, prefixlen).ok()?;
+            let nexthop = parse_ip_from_iter(&mut it)?;
+            ret.push(Route { prefix, nexthop });
+        }
+        Some(ret)
+    }
+}
+
 impl DhcpParse for std::net::Ipv4Addr {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self::Item> {
@@ -585,7 +654,7 @@ impl DhcpParse for std::net::Ipv4Addr {
     }
 }
 
-impl DhcpParse for Vec<std::net::Ipv4Addr> {
+impl DhcpParse for IpList {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self::Item> {
         let mut it = v.iter().copied();
@@ -669,6 +738,14 @@ impl DhcpParse for MessageType {
     }
 }
 
+impl DhcpParse for Vec<String> {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        let mut buf = crate::pktparser::Buffer::new(v);
+        Some(buf.get_domains()?.iter().map(|d| d.join(".")).collect())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DhcpOptions {
     pub other: collections::HashMap<DhcpOption, Vec<u8>>,
@@ -714,6 +791,10 @@ impl DhcpOptions {
         let mut v = Vec::new();
         value.serialise(&mut v);
         self.other.insert(*option, v);
+    }
+
+    pub fn mutate_option_value(&mut self, option: &DhcpOption, value: &DhcpOptionTypeValue) {
+        self.other.insert(*option, value.as_bytes());
     }
 
     pub fn maybe_set_option<T: Serialise>(self, option: &DhcpOption, value: Option<&T>) -> Self {
@@ -803,44 +884,47 @@ fn null_terminated(mut v: Vec<u8>) -> Vec<u8> {
 }
 
 pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
-    let mut it = pkt.iter();
-    let op = get_u8(&mut it)?;
-    let htype = get_u8(&mut it)?;
-    let hlen = get_u8(&mut it)?;
-    let hops = get_u8(&mut it)?;
-    let xid = get_be32(&mut it)?;
-    let secs = get_be16(&mut it)?;
-    let flags = get_be16(&mut it)?;
-    let ciaddr = get_ipv4(&mut it)?;
-    let yiaddr = get_ipv4(&mut it)?;
-    let siaddr = get_ipv4(&mut it)?;
-    let giaddr = get_ipv4(&mut it)?;
-    let chaddr = get_bytes(&mut it, 16)?;
+    let mut buf = pktparser::Buffer::new(pkt);
+    let op = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let htype = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let hlen = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let hops = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let xid = buf.get_be32().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let secs = buf.get_be16().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let flags = buf.get_be16().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let ciaddr = buf.get_ipv4().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let yiaddr = buf.get_ipv4().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let siaddr = buf.get_ipv4().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let giaddr = buf.get_ipv4().ok_or(ParseError::UnexpectedEndOfInput)?;
+    let chaddr = buf.get_vec(16).ok_or(ParseError::UnexpectedEndOfInput)?;
     if hlen as usize > chaddr.len() {
         return Err(ParseError::InvalidPacket);
     }
-    let sname = null_terminated(get_bytes(&mut it, 64)?);
-    let file = null_terminated(get_bytes(&mut it, 128)?);
+    let sname = null_terminated(buf.get_vec(64).ok_or(ParseError::UnexpectedEndOfInput)?);
+    let file = null_terminated(buf.get_vec(128).ok_or(ParseError::UnexpectedEndOfInput)?);
     let mut raw_options: collections::HashMap<DhcpOption, Vec<u8>> = collections::HashMap::new();
-    match get_be32(&mut it) {
-        Ok(0x6382_5363) => {
+    match buf.get_be32() {
+        Some(0x6382_5363) => {
             loop {
-                match get_u8(&mut it) {
-                    Ok(0) => (),      /* Pad byte */
-                    Ok(255) => break, /* End Field */
-                    Ok(x) => {
-                        let l = get_u8(&mut it)?;
+                match buf.get_u8() {
+                    Some(0) => (),      /* Pad byte */
+                    Some(255) => break, /* End Field */
+                    Some(x) => {
+                        let l = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
                         raw_options
                             .entry(DhcpOption(x))
                             .or_insert_with(Vec::new)
-                            .extend(get_bytes(&mut it, l as usize)?);
+                            .extend(
+                                buf.get_bytes(l as usize)
+                                    .ok_or(ParseError::UnexpectedEndOfInput)?,
+                            );
                     }
-                    Err(e) => return Err(e),
+                    None => return Err(ParseError::UnexpectedEndOfInput),
                 }
             }
         }
-        Ok(_) => return Err(ParseError::WrongMagic),
-        Err(x) => return Err(x),
+        Some(_) => return Err(ParseError::WrongMagic),
+        None => return Err(ParseError::UnexpectedEndOfInput),
     }
 
     let options = DhcpOptions { other: raw_options };
@@ -940,16 +1024,7 @@ impl Serialise for i32 {
 
 impl Serialise for DhcpOptionTypeValue {
     fn serialise(&self, v: &mut Vec<u8>) {
-        match self {
-            DhcpOptionTypeValue::String(x) => x.serialise(v),
-            DhcpOptionTypeValue::IpList(x) => x.serialise(v),
-            DhcpOptionTypeValue::Ip(x) => x.serialise(v),
-            DhcpOptionTypeValue::I32(x) => x.serialise(v),
-            DhcpOptionTypeValue::U8(x) => x.serialise(v),
-            DhcpOptionTypeValue::U16(x) => x.serialise(v),
-            DhcpOptionTypeValue::U32(x) => x.serialise(v),
-            DhcpOptionTypeValue::HwAddr(x) => x.serialise(v),
-        }
+        v.extend(self.as_bytes().iter());
     }
 }
 
@@ -971,7 +1046,7 @@ impl Serialise for DhcpOptions {
         }
 
         /* Add end of options marker */
-        (255 as u8).serialise(v);
+        (255u8).serialise(v);
     }
 }
 
@@ -1063,6 +1138,13 @@ fn test_type_serialisation() {
         ])),
         vec![192, 0, 2, 0, 192, 0, 2, 1, 192, 0, 2, 2]
     );
+    assert_eq!(
+        serialise_one_for_test(DhcpOptionTypeValue::Routes(vec![Route {
+            prefix: crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
+            nexthop: "192.0.2.254".parse().unwrap(),
+        }])),
+        vec![24, 192, 0, 2, 0, 192, 0, 2, 254]
+    );
 }
 
 #[test]
@@ -1140,5 +1222,16 @@ fn test_parse() {
                 .unwrap()
         ),
         "00:01:02:03:04:05"
+    );
+    assert_eq!(
+        format!(
+            "{}",
+            DhcpOptionType::Routes
+                .decode(&vec![
+                    24, 192, 0, 2, 0, 192, 0, 2, 254, 24, 198, 51, 100, 0, 192, 0, 2, 254
+                ])
+                .unwrap()
+        ),
+        "192.0.2.0/24->192.0.2.254,198.51.100.0/24->192.0.2.254"
     );
 }

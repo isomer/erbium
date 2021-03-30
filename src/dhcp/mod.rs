@@ -1,4 +1,4 @@
-/*   Copyright 2020 Perry Lorier
+/*   Copyright 2021 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@
  *  Main DHCP Code.
  */
 use std::collections;
-use std::convert::TryInto;
-use std::iter::FromIterator;
+use std::convert::TryInto as _;
 use std::net;
+use std::ops::Sub as _;
 use std::sync::Arc;
 use tokio::sync;
 
@@ -35,24 +35,53 @@ pub mod config;
 pub mod dhcppkt;
 #[cfg(not(fuzzing))]
 mod dhcppkt;
-
 pub mod pool;
-
 #[cfg(test)]
 mod test;
 
-type Pool = Arc<sync::Mutex<pool::Pool>>;
 type UdpSocket = udp::UdpSocket;
 type ServerIds = std::collections::HashSet<net::Ipv4Addr>;
 pub type SharedServerIds = Arc<sync::Mutex<ServerIds>>;
 
+lazy_static::lazy_static! {
+    static ref DHCP_RX_PACKETS: prometheus::IntCounter =
+        prometheus::register_int_counter!("dhcp_received_packets", "Number of DHCP packets received")
+            .unwrap();
+    static ref DHCP_TX_PACKETS: prometheus::IntCounter =
+        prometheus::register_int_counter!("dhcp_sent_packets", "Number of DHCP packets sent")
+            .unwrap();
+    static ref DHCP_ERRORS: prometheus::IntCounterVec = prometheus::register_int_counter_vec!(
+        "dhcp_errors",
+        "Counts of reasons that replies cannot be sent",
+        &["reason"]
+    )
+    .unwrap();
+    static ref DHCP_ALLOCATIONS: prometheus::IntCounterVec = prometheus::register_int_counter_vec!(
+        "dhcp_allocations",
+        "Counts of address allocation types",
+        &["reason"]
+    )
+    .unwrap();
+    static ref DHCP_ACTIVE_LEASES: prometheus::IntGauge = prometheus::register_int_gauge!(
+        "dhcp_active_leases",
+        "Counts of leases that are currently in use"
+    )
+    .unwrap();
+    static ref DHCP_EXPIRED_LEASES: prometheus::IntGauge = prometheus::register_int_gauge!(
+        "dhcp_expired_leases",
+        "Counts of leases that are currently expired"
+    )
+    .unwrap();
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum DhcpError {
     UnknownMessageType(dhcppkt::MessageType),
-    NoLeasesAvailable,
+    NoLeasesConfigured,
     ParseError(dhcppkt::ParseError),
+    PoolError(pool::Error),
     InternalError(String),
-    OtherServer,
+    OtherServer(std::net::Ipv4Addr),
     NoPolicyConfigured,
 }
 
@@ -66,11 +95,29 @@ impl std::fmt::Display for DhcpError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DhcpError::UnknownMessageType(m) => write!(f, "Unknown Message Type: {:?}", m),
-            DhcpError::NoLeasesAvailable => write!(f, "No Leases Available"),
+            DhcpError::NoLeasesConfigured => write!(f, "No Leases Configured"),
             DhcpError::ParseError(e) => write!(f, "Parse Error: {:?}", e),
             DhcpError::InternalError(e) => write!(f, "Internal Error: {:?}", e),
-            DhcpError::OtherServer => write!(f, "Packet for a different DHCP server"),
+            DhcpError::OtherServer(s) => write!(f, "Packet for a different DHCP server: {}", s),
             DhcpError::NoPolicyConfigured => write!(f, "No policy configured for client"),
+            DhcpError::PoolError(p) => write!(f, "Pool Error: {:?}", p),
+        }
+    }
+}
+
+impl DhcpError {
+    fn get_variant_name(&self) -> &'static str {
+        use DhcpError::*;
+        match self {
+            UnknownMessageType(_) => "UNKNOWN_MESSAGE_TYPE",
+            NoLeasesConfigured => "NO_LEASES_CONFIGURED",
+            ParseError(_) => "PARSE_ERROR",
+            InternalError(_) => "INTERNAL_ERROR",
+            OtherServer(_) => "OTHER_SERVER",
+            NoPolicyConfigured => "NO_POLICY",
+            PoolError(pool::Error::NoAssignableAddress) => "NO_ADDRESS",
+            PoolError(pool::Error::RequestedAddressInUse) => "ADDRESS_IN_USE",
+            PoolError(_) => "INTERNAL_POOL_ERROR",
         }
     }
 }
@@ -83,6 +130,8 @@ pub struct DHCPRequest {
     pub serverip: std::net::Ipv4Addr,
     /// The interface index that the request was received on.
     pub ifindex: u32,
+    pub if_mtu: Option<u32>,
+    pub if_router: Option<std::net::Ipv4Addr>,
 }
 
 #[cfg(test)]
@@ -111,6 +160,8 @@ impl std::default::Default for DHCPRequest {
             },
             serverip: "0.0.0.0".parse().unwrap(),
             ifindex: 0,
+            if_mtu: None,
+            if_router: None,
         }
     }
 }
@@ -125,6 +176,9 @@ enum PolicyMatch {
 fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
     let mut outcome = PolicyMatch::NoMatch;
     //if let Some(policy.match_interface ...
+    if policy.match_all {
+        outcome = PolicyMatch::MatchSucceeded;
+    }
     if let Some(match_chaddr) = &policy.match_chaddr {
         outcome = PolicyMatch::MatchSucceeded;
         if req.pkt.chaddr != *match_chaddr {
@@ -157,32 +211,44 @@ fn check_policy(req: &DHCPRequest, policy: &config::Policy) -> PolicyMatch {
 }
 
 fn apply_policy(req: &DHCPRequest, policy: &config::Policy, response: &mut Response) -> bool {
-    let policymatch = check_policy(req, policy);
-    if policymatch == PolicyMatch::MatchFailed {
-        return false;
+    /* Check if our policy should match.
+     */
+    match check_policy(req, policy) {
+        /* If the match failed, do not apply. */
+        PolicyMatch::MatchFailed => return false,
+        /* If there are no matches applied for this policy, check if any subpolicies match, and if
+         * so, apply this policy too, otherwise fail.
+         */
+        PolicyMatch::NoMatch => {
+            if !check_policies(req, &policy.policies) {
+                return false;
+            }
+        }
+        /* If there were matchers, and we matched them all, then continue with applying the policy.
+         */
+        PolicyMatch::MatchSucceeded => (),
     }
 
-    if policymatch == PolicyMatch::NoMatch && !check_policies(req, &policy.policies) {
-        return false;
-    }
-
+    /* If there are addresses provided here, override any from the parent */
     if let Some(address) = &policy.apply_address {
         response.address = Some(address.clone()); /* HELP: I tried to make the lifetimes worked, and failed */
     }
 
+    /* Now get the list of parameters we will apply from the parameter list from the client.
+     */
     // TODO: This should probably just be a u128 bitvector
     let pl: std::collections::HashSet<
         dhcppkt::DhcpOption,
         std::collections::hash_map::RandomState,
-    > = std::collections::HashSet::from_iter(
-        req.pkt
-            .options
-            .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
-            .unwrap_or_else(Vec::new)
-            .iter()
-            .cloned()
-            .map(dhcppkt::DhcpOption::from),
-    );
+    > = req
+        .pkt
+        .options
+        .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+        .unwrap_or_else(Vec::new)
+        .iter()
+        .cloned()
+        .map(dhcppkt::DhcpOption::from)
+        .collect();
 
     for (k, v) in &policy.apply_other {
         if pl.contains(k) {
@@ -193,7 +259,7 @@ fn apply_policy(req: &DHCPRequest, policy: &config::Policy, response: &mut Respo
     /* And check to see if a subpolicy also matches */
     apply_policies(req, &policy.policies, response);
 
-    /* Automatically apply some defaults */
+    /* Some of the defaults depend on what other options end up being set, so apply them here. */
     if let Some(subnet) = &policy.match_subnet {
         if pl.contains(&dhcppkt::OPTION_NETMASK) {
             response
@@ -308,8 +374,10 @@ fn handle_discover<'l>(
     pools: &mut pool::Pool,
     req: &DHCPRequest,
     _serverids: ServerIds,
+    base: &[config::Policy],
     conf: &'l super::config::Config,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
+    /* Build the default response we are about to reply with, it will be filled in later */
     let mut response: Response = Response {
         options: ResponseOptions {
             ..Default::default()
@@ -318,9 +386,15 @@ fn handle_discover<'l>(
         .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
         ..Default::default()
     };
-    if !apply_policies(req, &conf.dhcp.policies, &mut response) {
+
+    /* Now attempt to apply all the policies.*/
+    let base_policy = apply_policies(req, base, &mut response);
+    let conf_policy = apply_policies(req, &conf.dhcp.policies, &mut response);
+    if !base_policy && !conf_policy {
+        /* If none of the policies applied at all, then provide a warning back to the caller */
         Err(DhcpError::NoPolicyConfigured)
     } else if let Some(addresses) = response.address {
+        /* At least one policy matched, and provided addresses.  So now go allocate an address */
         match pools.allocate_address(
             &req.pkt.get_client_id(),
             req.pkt.options.get_address_request(),
@@ -328,32 +402,46 @@ fn handle_discover<'l>(
             response.minlease.unwrap_or(pool::DEFAULT_MIN_LEASE),
             response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
         ) {
-            Ok(lease) => Ok(dhcppkt::DHCP {
-                op: dhcppkt::OP_BOOTREPLY,
-                htype: dhcppkt::HWTYPE_ETHERNET,
-                hlen: 6,
-                hops: 0,
-                xid: req.pkt.xid,
-                secs: 0,
-                flags: req.pkt.flags,
-                ciaddr: net::Ipv4Addr::UNSPECIFIED,
-                yiaddr: lease.ip,
-                siaddr: net::Ipv4Addr::UNSPECIFIED,
-                giaddr: req.pkt.giaddr,
-                chaddr: req.pkt.chaddr.clone(),
-                sname: vec![],
-                file: vec![],
-                options: response
-                    .options
-                    .clone()
-                    .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
-                    .to_options(),
-            }),
-            Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
-            Err(e) => Err(DhcpError::InternalError(e.to_string())),
+            /* Now we have an address, build the reply */
+            Ok(lease) => {
+                DHCP_ALLOCATIONS
+                    .with_label_values(&[&format!("{:?}", lease.lease_type)])
+                    .inc();
+                log::info!(
+                    "Allocated Lease: {} for {:?} ({:?})",
+                    lease.ip,
+                    lease.expire,
+                    lease.lease_type
+                );
+
+                Ok(dhcppkt::DHCP {
+                    op: dhcppkt::OP_BOOTREPLY,
+                    htype: dhcppkt::HWTYPE_ETHERNET,
+                    hlen: 6,
+                    hops: 0,
+                    xid: req.pkt.xid,
+                    secs: 0,
+                    flags: req.pkt.flags,
+                    ciaddr: net::Ipv4Addr::UNSPECIFIED,
+                    yiaddr: lease.ip,
+                    siaddr: net::Ipv4Addr::UNSPECIFIED,
+                    giaddr: req.pkt.giaddr,
+                    chaddr: req.pkt.chaddr.clone(),
+                    sname: vec![],
+                    file: vec![],
+                    options: response
+                        .options
+                        .clone()
+                        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip)
+                        .to_options(),
+                })
+            }
+            /* Some error occurred, document it. */
+            Err(e) => Err(DhcpError::PoolError(e)),
         }
     } else {
-        Err(DhcpError::NoLeasesAvailable)
+        /* There were no addresses assigned to this match */
+        Err(DhcpError::NoLeasesConfigured)
     }
 }
 
@@ -361,11 +449,12 @@ fn handle_request(
     pools: &mut pool::Pool,
     req: &DHCPRequest,
     serverids: ServerIds,
+    base: &[config::Policy],
     conf: &super::config::Config,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     if let Some(si) = req.pkt.options.get_serverid() {
         if !serverids.contains(&si) {
-            return Err(DhcpError::OtherServer);
+            return Err(DhcpError::OtherServer(si));
         }
     }
     let mut response: Response = Response {
@@ -376,7 +465,9 @@ fn handle_request(
         .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
         ..Default::default()
     };
-    if !apply_policies(req, &conf.dhcp.policies, &mut response) {
+    let base_policy = apply_policies(req, base, &mut response);
+    let conf_policy = apply_policies(req, &conf.dhcp.policies, &mut response);
+    if !base_policy && !conf_policy {
         Err(DhcpError::NoPolicyConfigured)
     } else if let Some(addresses) = response.address {
         match pools.allocate_address(
@@ -390,36 +481,46 @@ fn handle_request(
             response.minlease.unwrap_or(pool::DEFAULT_MIN_LEASE),
             response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
         ) {
-            Ok(lease) => Ok(dhcppkt::DHCP {
-                op: dhcppkt::OP_BOOTREPLY,
-                htype: dhcppkt::HWTYPE_ETHERNET,
-                hlen: 6,
-                hops: 0,
-                xid: req.pkt.xid,
-                secs: 0,
-                flags: req.pkt.flags,
-                ciaddr: req.pkt.ciaddr,
-                yiaddr: lease.ip,
-                siaddr: net::Ipv4Addr::UNSPECIFIED,
-                giaddr: req.pkt.giaddr,
-                chaddr: req.pkt.chaddr.clone(),
-                sname: vec![],
-                file: vec![],
-                options: response
-                    .options
-                    .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPACK)
-                    .set_option(
-                        &dhcppkt::OPTION_SERVERID,
-                        &req.pkt.options.get_serverid().unwrap_or(req.serverip),
-                    )
-                    .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32))
-                    .to_options(),
-            }),
-            Err(pool::Error::NoAssignableAddress) => Err(DhcpError::NoLeasesAvailable),
-            Err(e) => Err(DhcpError::InternalError(e.to_string())),
+            Ok(lease) => {
+                DHCP_ALLOCATIONS
+                    .with_label_values(&[&format!("{:?}", lease.lease_type)])
+                    .inc();
+                log::info!(
+                    "Allocated Lease: {} for {:?} ({:?})",
+                    lease.ip,
+                    lease.expire,
+                    lease.lease_type
+                );
+                Ok(dhcppkt::DHCP {
+                    op: dhcppkt::OP_BOOTREPLY,
+                    htype: dhcppkt::HWTYPE_ETHERNET,
+                    hlen: 6,
+                    hops: 0,
+                    xid: req.pkt.xid,
+                    secs: 0,
+                    flags: req.pkt.flags,
+                    ciaddr: req.pkt.ciaddr,
+                    yiaddr: lease.ip,
+                    siaddr: net::Ipv4Addr::UNSPECIFIED,
+                    giaddr: req.pkt.giaddr,
+                    chaddr: req.pkt.chaddr.clone(),
+                    sname: vec![],
+                    file: vec![],
+                    options: response
+                        .options
+                        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPACK)
+                        .set_option(
+                            &dhcppkt::OPTION_SERVERID,
+                            &req.pkt.options.get_serverid().unwrap_or(req.serverip),
+                        )
+                        .set_option(&dhcppkt::OPTION_LEASETIME, &(lease.expire.as_secs() as u32))
+                        .to_options(),
+                })
+            }
+            Err(e) => Err(DhcpError::PoolError(e)),
         }
     } else {
-        Err(DhcpError::NoLeasesAvailable)
+        Err(DhcpError::NoLeasesConfigured)
     }
 }
 
@@ -443,7 +544,7 @@ fn format_client(req: &dhcppkt::DHCP) -> String {
 }
 
 fn log_options(req: &dhcppkt::DHCP) {
-    println!(
+    log::info!(
         "{}: Options: {}",
         format_client(&req),
         req.options
@@ -466,36 +567,38 @@ fn log_options(req: &dhcppkt::DHCP) {
 }
 
 async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNetInfo) {
-    print!("{}", format_client(&request.pkt));
-    print!(": ");
-    print!(
-        "{}",
+    use std::fmt::Write as _;
+    let mut s = "".to_string();
+    write!(
+        s,
+        "{}: {} on {}",
+        format_client(&request.pkt),
         request
             .pkt
             .options
             .get_messagetype()
             .map(|x| x.to_string())
             .unwrap_or_else(|| "[unknown]".into()),
-    );
-    print!(
-        " on {}",
         netinfo.get_safe_name_by_ifidx(request.ifindex).await
-    );
+    )
+    .unwrap();
     if !request.serverip.is_unspecified() {
-        print!(" ({})", request.serverip);
+        write!(s, " ({})", request.serverip).unwrap();
     }
     if !request.pkt.ciaddr.is_unspecified() {
-        print!(", using {}", request.pkt.ciaddr);
+        write!(s, ", using {}", request.pkt.ciaddr).unwrap();
     }
     if !request.pkt.giaddr.is_unspecified() {
-        print!(
+        write!(
+            s,
             ", relayed via {} hops from {}",
             request.pkt.hops, request.pkt.giaddr
-        );
+        )
+        .unwrap();
     }
-    println!();
+    log::info!("{}", s);
     log_options(&request.pkt);
-    println!(
+    log::info!(
         "{}: Requested: {}",
         format_client(&request.pkt),
         request
@@ -512,24 +615,131 @@ async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNet
     );
 }
 
-pub fn handle_pkt(
+/// Produce a default configuration.
+/// This builds a configuration that would look like:
+/// ```yaml
+/// # Always match the base configuration
+/// match-all: true
+/// # For top level settings, apply them.
+/// apply-dns-servers: [ip4s]
+/// apply-dns-search: [domains]
+/// apply-captive-portal: captiveportal
+/// policies:
+///  # For each IPv4 prefix provided in the addresses top level config:
+///  - match-subnet: prefix4
+///    apply-subnet: prefix4 # with the current requestip removed.
+/// ```
+pub async fn build_default_config(
+    conf: &crate::config::Config,
+    request: &DHCPRequest,
+) -> config::Policy {
+    let mut default_policy = config::Policy {
+        match_all: true, /* We always want this policy to match. */
+        ..Default::default()
+    };
+    /* Add the default options from the top level configuration */
+    default_policy.apply_other.insert(
+        dhcppkt::OPTION_DOMAINSERVER,
+        Some(dhcppkt::DhcpOptionTypeValue::IpList(
+            conf.dns_servers
+                .iter()
+                .filter_map(|ip| match ip {
+                    ip if *ip == config::INTERFACE4 => Some(request.serverip),
+                    std::net::IpAddr::V4(ip4) => Some(*ip4),
+                    _ => None,
+                })
+                .collect(),
+        )),
+    );
+    default_policy.apply_other.insert(
+        dhcppkt::OPTION_DOMAINSEARCH,
+        Some(dhcppkt::DhcpOptionTypeValue::DomainList(
+            conf.dns_search.clone(),
+        )),
+    );
+    default_policy.apply_other.insert(
+        dhcppkt::OPTION_CAPTIVEPORTAL,
+        conf.captive_portal
+            .clone()
+            .map(dhcppkt::DhcpOptionTypeValue::String),
+    );
+    /* Now build some sub policies, for each address range */
+    let all_addrs = conf.dhcp.get_all_used_addresses();
+    default_policy.policies = conf
+        .addresses
+        .iter()
+        .filter_map(|prefix| {
+            if let super::config::Prefix::V4(p4) = prefix {
+                use crate::config::Match as _;
+                // TODO: Currently if the subnet is invalid, then we just skip adding it.
+                // This is probably fine for now, but is likely to cause confusion in the future.
+                let subnet = crate::net::Ipv4Subnet::new(p4.addr, p4.prefixlen).ok()?;
+                let mut ret = config::Policy {
+                    match_subnet: Some(subnet),
+                    apply_address: Some(
+                        (1..((1 << (32 - p4.prefixlen)) - 2))
+                            .map(|offset| (u32::from(subnet.network()) + offset).into())
+                            // TODO: This removes one IP from the list, it should also remove any
+                            // others found on the local machine.  Again, fine for now, but likely
+                            // to cause confusion in the future.
+                            .filter(|ip4| *ip4 != request.serverip)
+                            .collect::<pool::PoolAddresses>()
+                            .sub(&all_addrs),
+                    ),
+                    ..Default::default()
+                };
+                /* If this is the interface the request is coming in, then we can do extra stuff */
+                if p4.contains(request.serverip) {
+                    // Add the MTU
+                    // TODO: Perhaps don't send it if it's default?
+                    if let Some(mtu) = request.if_mtu {
+                        ret.apply_other.insert(
+                            dhcppkt::OPTION_MTUIF,
+                            Some(dhcppkt::DhcpOptionTypeValue::U16(mtu as u16)),
+                        );
+                    }
+                    // Add the default route.
+                    if let Some(route) = request.if_router {
+                        ret.apply_other.insert(
+                            dhcppkt::OPTION_ROUTERADDR,
+                            Some(dhcppkt::DhcpOptionTypeValue::Ip(route)),
+                        );
+                    }
+                }
+                Some(ret)
+            } else {
+                None
+            }
+        })
+        .collect();
+    default_policy
+}
+
+pub async fn handle_pkt(
     mut pools: &mut pool::Pool,
     request: &DHCPRequest,
     serverids: ServerIds,
     conf: &super::config::Config,
 ) -> Result<dhcppkt::DHCP, DhcpError> {
     match request.pkt.options.get_messagetype() {
-        Some(dhcppkt::DHCPDISCOVER) => handle_discover(&mut pools, &request, serverids, conf),
-        Some(dhcppkt::DHCPREQUEST) => handle_request(&mut pools, &request, serverids, conf),
+        Some(dhcppkt::DHCPDISCOVER) => {
+            let base = [build_default_config(&conf, &request).await];
+            handle_discover(&mut pools, &request, serverids, &base, conf)
+        }
+        Some(dhcppkt::DHCPREQUEST) => {
+            let base = [build_default_config(&conf, &request).await];
+            handle_request(&mut pools, &request, serverids, &base, conf)
+        }
         Some(x) => Err(DhcpError::UnknownMessageType(x)),
         None => Err(DhcpError::ParseError(dhcppkt::ParseError::InvalidPacket)),
     }
 }
 
 async fn send_raw(raw: Arc<raw::RawSocket>, buf: &[u8], intf: i32) -> Result<(), std::io::Error> {
+    DHCP_TX_PACKETS.inc();
     raw.send_msg(
         buf,
-        &mut raw::ControlMessage::new(),
+        &raw::ControlMessage::new(),
         raw::MsgFlags::empty(),
         /* Wow this is ugly, some wrappers here might help */
         Some(&nix::sys::socket::SockAddr::Link(
@@ -556,146 +766,6 @@ fn to_array(mac: &[u8]) -> Option<[u8; 6]> {
     mac[0..6].try_into().ok()
 }
 
-async fn recvdhcp(
-    raw: Arc<raw::RawSocket>,
-    pools: Pool,
-    serverids: SharedServerIds,
-    pkt: &[u8],
-    src: std::net::SocketAddr,
-    netinfo: crate::net::netinfo::SharedNetInfo,
-    intf: u32,
-    conf: super::config::SharedConfig,
-) {
-    /* First, lets find the various metadata IP addresses */
-    let ip4 = if let net::SocketAddr::V4(f) = src {
-        f
-    } else {
-        println!("from={:?}", src);
-        unimplemented!()
-    };
-    let optional_dst = netinfo.get_ipv4_by_ifidx(intf).await;
-    if optional_dst.is_none() {
-        println!(
-            "No IPv4 found on interface {}",
-            netinfo.get_safe_name_by_ifidx(intf).await
-        );
-        return;
-    }
-
-    /* Now lets decode the packet, and if it fails decode, fail the function early */
-    let req = match dhcppkt::parse(pkt) {
-        Err(e) => {
-            println!("Failed to parse packet: {}", e);
-            return;
-        }
-        Ok(req) => req,
-    };
-
-    /* Log what we've got */
-    let request = DHCPRequest {
-        pkt: req,
-        serverip: optional_dst.unwrap(),
-        ifindex: intf,
-    };
-    log_pkt(&request, &netinfo).await;
-
-    /* Now, lets process the packet we've found */
-    let reply;
-    {
-        /* Limit the amount of time we have these locked to just handling the packet */
-        let mut pool = pools.lock().await;
-        let lockedconf = conf.lock().await;
-
-        reply = match handle_pkt(
-            &mut pool,
-            &request,
-            get_serverids(&serverids).await,
-            &lockedconf,
-        ) {
-            Err(e) => {
-                println!(
-                    "{}: Failed to handle {}: {}",
-                    format_client(&request.pkt),
-                    request
-                        .pkt
-                        .options
-                        .get_messagetype()
-                        .map(|x| x.to_string())
-                        .unwrap_or_else(|| "packet".into()),
-                    e
-                );
-                return;
-            }
-            Ok(r) => r,
-        };
-    }
-
-    /* Now, we should have a packet ready to send */
-    /* First, if we're claiming to be particular IP, we should remember that as an IP that is one
-     * of ours
-     */
-    if let Some(si) = reply.options.get_serverid() {
-        serverids.lock().await.insert(si);
-    }
-
-    /* Log what we're sending */
-    println!(
-        "{}: Sending {} on {} with {} for {}",
-        format_client(&reply),
-        reply
-            .options
-            .get_messagetype()
-            .map(|x| x.to_string())
-            .unwrap_or_else(|| "[unknown]".into()),
-        netinfo
-            .get_name_by_ifidx(intf)
-            .await
-            .unwrap_or_else(|| "<unknown if>".into()),
-        reply.yiaddr,
-        reply
-            .options
-            .get_option::<u32>(&dhcppkt::OPTION_LEASETIME)
-            .unwrap_or(0)
-    );
-    log_options(&reply);
-
-    /* Collect metadata ready to send */
-    let srcll = if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) =
-        netinfo.get_linkaddr_by_ifidx(intf).await
-    {
-        srcll
-    } else {
-        println!("{}: Not a usable LinkLayer?!", format_client(&reply));
-        return;
-    };
-
-    let chaddr = if let Some(chaddr) = to_array(&reply.chaddr) {
-        chaddr
-    } else {
-        println!(
-            "{}: Cannot send reply to invalid address {:?}",
-            format_client(&reply),
-            reply.chaddr
-        );
-        return;
-    };
-
-    /* Construct the raw packet from the reply to send */
-    let replybuf = reply.serialise();
-    let etherbuf = packet::Fragment::new_udp(
-        std::net::SocketAddrV4::new(request.serverip, 67),
-        &srcll,
-        ip4,
-        &chaddr,
-        packet::Tail::Payload(&replybuf),
-    )
-    .flatten();
-
-    if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
-        println!("{}: Failed to send reply: {:?}", format_client(&reply), e);
-    }
-}
-
 enum RunError {
     Io(std::io::Error),
     PoolError(pool::Error),
@@ -710,58 +780,270 @@ impl ToString for RunError {
     }
 }
 
-async fn run_internal(
+pub struct DhcpService {
     netinfo: crate::net::netinfo::SharedNetInfo,
-    conf: super::config::SharedConfig,
-) -> Result<(), RunError> {
-    println!("Starting DHCP service");
-    let rawsock = Arc::new(raw::RawSocket::new().map_err(RunError::Io)?);
-    let pools = Arc::new(sync::Mutex::new(
-        pool::Pool::new().map_err(RunError::PoolError)?,
-    ));
-    let serverids: SharedServerIds = Arc::new(sync::Mutex::new(std::collections::HashSet::new()));
-    let listener = UdpSocket::bind("0.0.0.0:67").await.map_err(RunError::Io)?;
-    listener
-        .set_opt_ipv4_packet_info(true)
-        .map_err(RunError::Io)?;
-    println!(
-        "Listening for DHCP on {}",
-        listener.local_addr().map_err(RunError::Io)?
-    );
-
-    loop {
-        let rm = listener
-            .recv_msg(65536, udp::MsgFlags::empty())
-            .await
-            .map_err(RunError::Io)?;
-        let p = pools.clone();
-        let rs = rawsock.clone();
-        let s = serverids.clone();
-        let ni = netinfo.clone();
-        let c = conf.clone();
-        tokio::spawn(async move {
-            recvdhcp(
-                rs,
-                p,
-                s,
-                &rm.buffer,
-                rm.address.unwrap(),
-                ni,
-                rm.local_intf().unwrap().try_into().unwrap(),
-                c,
-            )
-            .await
-        });
-    }
+    conf: crate::config::SharedConfig,
+    rawsock: std::sync::Arc<crate::net::raw::RawSocket>,
+    pool: std::sync::Arc<sync::Mutex<pool::Pool>>,
+    serverids: SharedServerIds,
+    listener: UdpSocket,
 }
 
-pub async fn run(
-    netinfo: crate::net::netinfo::SharedNetInfo,
-    conf: super::config::SharedConfig,
-) -> Result<(), String> {
-    match run_internal(netinfo, conf).await {
-        Ok(_) => Ok(()),
-        Err(e) => Err(e.to_string()),
+impl DhcpService {
+    async fn recvdhcp(&self, pkt: &[u8], src: std::net::SocketAddr, intf: u32) {
+        let raw = self.rawsock.clone();
+        /* First, lets find the various metadata IP addresses */
+        let ip4 = if let net::SocketAddr::V4(f) = src {
+            f
+        } else {
+            DHCP_ERRORS
+                .with_label_values(&["UNEXPECTED_IP_PROTOCOL"])
+                .inc();
+            log::warn!(
+                "Query from unexpected source protocol ({:?}), ignoring.",
+                src
+            );
+            return;
+        };
+        let optional_dst = self.netinfo.get_ipv4_by_ifidx(intf).await;
+        if optional_dst.is_none() {
+            log::warn!(
+                "No IPv4 found on interface {}",
+                self.netinfo.get_safe_name_by_ifidx(intf).await
+            );
+            DHCP_ERRORS
+                .with_label_values(&["NO_IPV4_ON_INTERFACE"])
+                .inc();
+            return;
+        }
+
+        /* Now lets decode the packet, and if it fails decode, fail the function early */
+        let req = match dhcppkt::parse(pkt) {
+            Err(e) => {
+                log::warn!("Failed to parse packet: {}", e);
+                DHCP_ERRORS.with_label_values(&[e.get_variant_name()]).inc();
+                return;
+            }
+            Ok(req) => req,
+        };
+
+        /* Log what we've got */
+        let if_mtu = self.netinfo.get_mtu_by_ifidx(intf).await;
+        let if_router = match self.netinfo.get_ipv4_default_route().await {
+            /* If the default route points out a different interface, then this is the default route */
+            Some((_, Some(rtridx))) if rtridx != intf => Some(optional_dst.unwrap()),
+            /* If it's the same interface, then the default router should be the nexthop */
+            Some((Some(nexthop), Some(rtridx))) if rtridx == intf => Some(nexthop),
+            _ => None,
+        };
+
+        let request = DHCPRequest {
+            pkt: req,
+            serverip: optional_dst.unwrap(),
+            ifindex: intf,
+            if_mtu,
+            if_router,
+        };
+        log_pkt(&request, &self.netinfo).await;
+
+        /* Now, lets process the packet we've found */
+        let reply;
+        {
+            /* Limit the amount of time we have these locked to just handling the packet */
+            let mut pool = self.pool.lock().await;
+            let lockedconf = self.conf.read().await;
+
+            reply = match handle_pkt(
+                &mut pool,
+                &request,
+                get_serverids(&self.serverids).await,
+                &lockedconf,
+            )
+            .await
+            {
+                Err(e) => {
+                    log::warn!(
+                        "{}: Failed to handle {}: {}",
+                        format_client(&request.pkt),
+                        request
+                            .pkt
+                            .options
+                            .get_messagetype()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| "packet".into()),
+                        e
+                    );
+                    DHCP_ERRORS.with_label_values(&[e.get_variant_name()]).inc();
+                    return;
+                }
+                Ok(r) => r,
+            };
+        }
+
+        /* Now, we should have a packet ready to send */
+        /* First, if we're claiming to be particular IP, we should remember that as an IP that is one
+         * of ours
+         */
+        if let Some(si) = reply.options.get_serverid() {
+            self.serverids.lock().await.insert(si);
+        }
+
+        /* Log what we're sending */
+        log::info!(
+            "{}: Sending {} on {} with {} for {}",
+            format_client(&reply),
+            reply
+                .options
+                .get_messagetype()
+                .map(|x| x.to_string())
+                .unwrap_or_else(|| "[unknown]".into()),
+            self.netinfo
+                .get_name_by_ifidx(intf)
+                .await
+                .unwrap_or_else(|| "<unknown if>".into()),
+            reply.yiaddr,
+            reply
+                .options
+                .get_option::<u32>(&dhcppkt::OPTION_LEASETIME)
+                .unwrap_or(0)
+        );
+        log_options(&reply);
+
+        /* Collect metadata ready to send */
+        let srcll = if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) =
+            self.netinfo.get_linkaddr_by_ifidx(intf).await
+        {
+            srcll
+        } else {
+            log::warn!("{}: Not a usable LinkLayer?!", format_client(&reply));
+            DHCP_ERRORS.with_label_values(&["UNUSABLE_LINKLAYER"]).inc();
+            return;
+        };
+
+        let chaddr = if let Some(chaddr) = to_array(&reply.chaddr) {
+            chaddr
+        } else {
+            log::warn!(
+                "{}: Cannot send reply to invalid client hardware addr {:?}",
+                format_client(&reply),
+                reply.chaddr
+            );
+            DHCP_ERRORS.with_label_values(&["INVALID_CHADDR"]).inc();
+            return;
+        };
+
+        /* Construct the raw packet from the reply to send */
+        let replybuf = reply.serialise();
+        let etherbuf = packet::Fragment::new_udp(
+            std::net::SocketAddrV4::new(request.serverip, 67),
+            &srcll,
+            ip4,
+            &chaddr,
+            packet::Tail::Payload(&replybuf),
+        )
+        .flatten();
+
+        if let Err(e) = send_raw(raw, &etherbuf, intf.try_into().unwrap()).await {
+            log::warn!("{}: Failed to send reply: {:?}", format_client(&reply), e);
+            DHCP_ERRORS.with_label_values(&["SEND_ERROR"]).inc();
+        }
+    }
+
+    async fn new_internal(
+        netinfo: crate::net::netinfo::SharedNetInfo,
+        conf: super::config::SharedConfig,
+    ) -> Result<Self, RunError> {
+        let rawsock = Arc::new(raw::RawSocket::new(raw::EthProto::ALL).map_err(RunError::Io)?);
+        let pool = Arc::new(sync::Mutex::new(
+            pool::Pool::new().map_err(RunError::PoolError)?,
+        ));
+        let serverids: SharedServerIds =
+            Arc::new(sync::Mutex::new(std::collections::HashSet::new()));
+        let listener = UdpSocket::bind(
+            &tokio::net::lookup_host("0.0.0.0:67")
+                .await
+                .map_err(RunError::Io)?
+                .collect::<Vec<_>>(),
+        )
+        .await
+        .map_err(RunError::Io)?;
+        listener
+            .set_opt_ipv4_packet_info(true)
+            .map_err(RunError::Io)?;
+        log::info!(
+            "Listening for DHCP on {}",
+            listener.local_addr().map_err(RunError::Io)?
+        );
+        Ok(Self {
+            netinfo,
+            conf,
+            rawsock,
+            serverids,
+            listener,
+            pool,
+        })
+    }
+
+    pub async fn new(
+        netinfo: crate::net::netinfo::SharedNetInfo,
+        conf: super::config::SharedConfig,
+    ) -> Result<Self, String> {
+        match Self::new_internal(netinfo, conf).await {
+            Ok(x) => Ok(x),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    async fn run_internal(self: std::sync::Arc<Self>) -> Result<(), RunError> {
+        log::info!("Starting DHCP service");
+        loop {
+            let rm;
+            match self.listener.recv_msg(65536, udp::MsgFlags::empty()).await {
+                Ok(m) => rm = m,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(RunError::Io(e)),
+            }
+            DHCP_RX_PACKETS.inc();
+            let self2 = self.clone();
+            tokio::spawn(async move {
+                self2
+                    .recvdhcp(
+                        &rm.buffer,
+                        rm.address.unwrap(),
+                        rm.local_intf().unwrap().try_into().unwrap(),
+                    )
+                    .await
+            });
+        }
+    }
+
+    pub async fn run(self: std::sync::Arc<Self>) -> Result<(), String> {
+        match self.run_internal().await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    pub async fn update_metrics(self: &std::sync::Arc<Self>) {
+        match self.pool.lock().await.get_pool_metrics() {
+            Ok((in_use, expired)) => {
+                DHCP_ACTIVE_LEASES.set(in_use.into());
+                DHCP_EXPIRED_LEASES.set(expired.into());
+            }
+            Err(e) => log::warn!("Failed to update metrics: {}", e),
+        }
+    }
+
+    pub async fn get_leases(self: &std::sync::Arc<Self>) -> Vec<pool::LeaseInfo> {
+        let ret = self.pool.lock().await.get_leases();
+        match ret {
+            Ok(l) => l,
+            Err(e) => {
+                log::warn!("Failed to get leases: {}", e);
+                Vec::new()
+            }
+        }
     }
 }
 
@@ -785,41 +1067,40 @@ fn test_policy() {
 async fn test_config_parse() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = crate::config::load_config_from_string_for_test(
         "---
-dhcp:
+dhcp-policies:
+  - match-subnet: 192.168.0.0/24
+    apply-dns-servers: ['8.8.8.8', '8.8.4.4']
+    apply-subnet: 192.168.0.0/24
+    apply-time-offset: 3600
+    apply-domain-name: erbium.dev
+    apply-forward: false
+    apply-mtu: 1500
+    apply-broadcast: 192.168.255.255
+    apply-rebind-time: 120
+    apply-renewal-time: 90s
+    apply-arp-timeout: 1w
+
+
     policies:
-      - match-subnet: 192.168.0.0/24
-        apply-dns-servers: ['8.8.8.8', '8.8.4.4']
-        apply-subnet: 192.168.0.0/24
-        apply-time-offset: 3600
-        apply-domain-name: erbium.dev
-        apply-forward: false
-        apply-mtu: 1500
-        apply-broadcast: 192.168.255.255
-        apply-rebind-time: 120
-        apply-renewal-time: 90s
-        apply-arp-timeout: 1w
+       - { match-host-name: myhost, apply-address: 192.168.0.1 }
+       - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
 
 
+  - match-interface: dmz
+    apply-dns-servers: ['8.8.8.8']
+    apply-subnet: 192.0.2.0/24
+
+    # Reserve some space from the pool for servers
+    policies:
+      - apply-range: {start: 192.0.2.10, end: 192.0.2.20}
+
+        # From the reserved pool, assign a static address.
         policies:
-           - { match-host-name: myhost, apply-address: 192.168.0.1 }
-           - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
+          - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
 
-
-      - match-interface: dmz
-        apply-dns-servers: ['8.8.8.8']
-        apply-subnet: 192.0.2.0/24
-
-        # Reserve some space from the pool for servers
-        policies:
-          - apply-range: {start: 192.0.2.10, end: 192.0.2.20}
-
-            # From the reserved pool, assign a static address.
-            policies:
-              - { match-hardware-address: 00:01:02:03:04:05, apply-address: 192.168.0.2 }
-
-          # Reserve space for VPN endpoints
-          - match-user-class: VPN
-            apply-subnet: 192.0.2.128/25
+      # Reserve space for VPN endpoints
+      - match-user-class: VPN
+        apply-subnet: 192.0.2.128/25
         ",
     )?;
 
@@ -849,20 +1130,25 @@ dhcp:
             },
             serverip: "192.168.0.67".parse().unwrap(),
             ifindex: 1,
+            if_mtu: None,
+            if_router: None,
         },
-        &cfg.lock().await.dhcp.policies,
+        &cfg.read().await.dhcp.policies,
         &mut resp,
     ) {
         panic!("No policies applied");
     }
 
-    println!("{:?}", cfg.lock().await);
+    log::info!("{:?}", cfg.read().await);
 
     assert_eq!(
         resp.address,
-        Some(std::collections::HashSet::from_iter(
-            [std::net::Ipv4Addr::new(192, 168, 0, 2)].iter().cloned()
-        ))
+        Some(
+            [std::net::Ipv4Addr::new(192, 168, 0, 2)]
+                .iter()
+                .cloned()
+                .collect()
+        )
     );
 
     Ok(())
@@ -890,4 +1176,134 @@ fn test_format_client() {
         },
     };
     assert_eq!(format_client(&req), "00:01:02:03:04:05 ()");
+}
+
+#[tokio::test]
+async fn test_defaults() {
+    let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
+    let mut pkt = test::mk_dhcp_request();
+    pkt.pkt.options.mutate_option(
+        &dhcppkt::OPTION_PARAMLIST,
+        &vec![
+            6u8, /* Domain Server */
+            119, /* Domain Search */
+            160, /* Captive Portal */
+        ],
+    );
+
+    let serverids: ServerIds = ServerIds::new();
+    let conf = crate::config::Config {
+        dns_servers: vec![
+            "192.0.2.53".parse().unwrap(),
+            "2001:db8::53".parse().unwrap(),
+        ],
+        dns_search: vec!["example.org".into()],
+        captive_portal: Some("example.com".into()),
+        ..test::mk_default_config()
+    };
+    let base = [build_default_config(&conf, &pkt).await];
+    println!("base={:?}", base);
+    let resp =
+        handle_discover(&mut p, &pkt, serverids, &base, &conf).expect("Failed to handle request");
+    assert_eq!(
+        resp.options
+            .get_option::<Vec<std::net::Ipv4Addr>>(&dhcppkt::OPTION_DOMAINSERVER),
+        Some(vec!["192.0.2.53".parse::<std::net::Ipv4Addr>().unwrap()])
+    );
+    println!(
+        "{:?}",
+        resp.options.get_raw_option(&dhcppkt::OPTION_CAPTIVEPORTAL)
+    );
+    assert_eq!(
+        resp.options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_CAPTIVEPORTAL),
+        Some(
+            "example.com"
+                .as_bytes()
+                .iter()
+                .copied()
+                .collect::<Vec<u8>>()
+        )
+    );
+    assert_eq!(
+        resp.options
+            .get_option::<Vec<String>>(&dhcppkt::OPTION_DOMAINSEARCH),
+        Some(vec![String::from("example.org")])
+    );
+}
+
+#[tokio::test]
+async fn test_base() {
+    let mut pool = pool::Pool::new_in_memory().expect("Failed to create pool");
+    let mut pkt = test::mk_dhcp_request();
+    pkt.pkt.options.mutate_option(
+        &dhcppkt::OPTION_PARAMLIST,
+        &vec![
+            6u8, /* Domain Server */
+            119, /* Domain Search */
+            160, /* Captive Portal */
+        ],
+    );
+
+    let serverids: ServerIds = ServerIds::new();
+    let mut apply_address: pool::PoolAddresses = Default::default();
+    apply_address.insert("192.0.2.3".parse().unwrap());
+    let conf = crate::config::Config {
+        dns_servers: vec![
+            "192.0.2.53".parse().unwrap(),
+            "2001:db8::53".parse().unwrap(),
+        ],
+        dns_search: vec!["example.org".into()],
+        captive_portal: Some("example.com".into()),
+        addresses: vec![config::Prefix::V4(config::Prefix4 {
+            addr: "192.0.2.0".parse().unwrap(),
+            prefixlen: 24,
+        })],
+        dhcp: config::Config {
+            policies: vec![config::Policy {
+                match_chaddr: Some(vec![0x0, 0x1, 0x2, 0x3, 0x4, 0x5]),
+                apply_address: Some(apply_address),
+                ..Default::default()
+            }],
+        },
+        ..Default::default()
+    };
+    let base = build_default_config(&conf, &pkt).await;
+    /* The generated policy should not allocate 192.0.2.3, because that is allocated in the
+     * custom dhcp policy provided.
+     */
+    assert!(!base.policies[0]
+        .apply_address
+        .as_ref()
+        .unwrap()
+        .contains(&"192.0.2.3".parse().unwrap()));
+    println!("base={:#?}", base);
+    println!("pkt={:?}", pkt);
+    let resp = handle_discover(&mut pool, &pkt, serverids, &[base], &conf)
+        .expect("Failed to handle request");
+    assert_eq!(
+        resp.options
+            .get_option::<Vec<std::net::Ipv4Addr>>(&dhcppkt::OPTION_DOMAINSERVER),
+        Some(vec!["192.0.2.53".parse::<std::net::Ipv4Addr>().unwrap()])
+    );
+    println!(
+        "{:?}",
+        resp.options.get_raw_option(&dhcppkt::OPTION_CAPTIVEPORTAL)
+    );
+    assert_eq!(
+        resp.options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_CAPTIVEPORTAL),
+        Some(
+            "example.com"
+                .as_bytes()
+                .iter()
+                .copied()
+                .collect::<Vec<u8>>()
+        )
+    );
+    assert_eq!(
+        resp.options
+            .get_option::<Vec<String>>(&dhcppkt::OPTION_DOMAINSEARCH),
+        Some(vec![String::from("example.org")])
+    );
 }

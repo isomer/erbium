@@ -14,20 +14,20 @@
  *
  *  SPDX-License-Identifier: Apache-2.0
  *
- *  This allows using erbium as a library.
+ *  Tests to verify requirements of RFC4861: Neighbor Discovery for IP version 6
  */
 
-pub mod acl;
-pub mod config;
-#[cfg(feature = "dhcp")]
-pub mod dhcp;
-#[cfg(feature = "dns")]
-pub mod dns;
-#[cfg(feature = "http")]
-pub mod http;
-pub mod net;
-pub mod pktparser;
-pub mod radv;
+/* Section 2.3: All interfaces on routers MUST have a link-local address.
+ * Justification: Kernels responsibility.
+ */
 
-#[cfg(test)]
-mod test_man_configs;
+/* Section 4.1: [Reserved field] MUST be initialized to zero by the sender and MUST be ignored by
+ * the receiver.
+ */
+#[test]
+fn test_reserved_is_zero() {
+    let conf = config::Interface {};
+    let adv = build_announcement_pure(&conf, Some([1, 2, 3, 4, 5, 6]), Some(1500));
+    let pkt = icmppkt::serialise(&icmppkt::Icmp6::RtrAdvert(adv));
+    assert_eq!(pkt[4..9], [0, 0, 0, 0]);
+}

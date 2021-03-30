@@ -1,4 +1,4 @@
-/*   Copyright 2020 Perry Lorier
+/*   Copyright 2021 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -33,6 +33,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("Loading config from {}", config_file.display());
     let conf = erbium::config::load_config_from_path(config_file).await?;
-    println!("Parse config: {:#?}", conf.lock().await);
+    println!("Parse config: {:#?}", conf.read().await);
     Ok(())
 }

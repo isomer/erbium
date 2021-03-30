@@ -1,4 +1,4 @@
-/*   Copyright 2020 Perry Lorier
+/*   Copyright 2021 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -67,15 +67,17 @@ fn mk_dhcp_request_pkt() -> dhcppkt::DHCP {
     }
 }
 
-fn mk_dhcp_request() -> dhcp::DHCPRequest {
+pub fn mk_dhcp_request() -> dhcp::DHCPRequest {
     dhcp::DHCPRequest {
         pkt: mk_dhcp_request_pkt(),
         serverip: SERVER_IP,
         ifindex: 1,
+        if_mtu: None,
+        if_router: None,
     }
 }
 
-fn mk_default_config() -> crate::config::Config {
+pub fn mk_default_config() -> crate::config::Config {
     let mut apply_address: pool::PoolAddresses = Default::default();
     for i in 1..255 {
         apply_address
@@ -91,6 +93,7 @@ fn mk_default_config() -> crate::config::Config {
                 ..Default::default()
             }],
         },
+        ..Default::default()
     }
 }
 
@@ -121,8 +124,8 @@ fn test_parsing_inverse_serialising() {
     assert_eq!(orig_pkt.pkt, new_pkt);
 }
 
-#[test]
-fn test_handle_pkt() {
+#[tokio::test]
+async fn test_handle_pkt() {
     let mut request = mk_dhcp_request();
     request.pkt.options = request
         .pkt
@@ -135,7 +138,9 @@ fn test_handle_pkt() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
-    dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
+    dhcp::handle_pkt(&mut p, &request, serverids, &conf)
+        .await
+        .expect("Failed to handle request");
 }
 
 #[test]
@@ -189,7 +194,7 @@ async fn ignore_unused_flag_bits() {
     pkt.pkt.flags = 0x7FFF;
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
-    dhcp::handle_discover(&mut p, &pkt, serverids, &conf).expect("Failed to handle request");
+    dhcp::handle_discover(&mut p, &pkt, serverids, &[], &conf).expect("Failed to handle request");
 }
 
 /* rfc2131 Section 3.1 Step 3: The client broadcasts a DHCPREQUEST message that MUST include the
@@ -210,8 +215,8 @@ async fn confirm_yiaddr_set() {
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
-    let reply =
-        dhcp::handle_discover(&mut p, &pkt, serverids, &conf).expect("Failed to handle request");
+    let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &[], &conf)
+        .expect("Failed to handle request");
     assert_ne!(
         reply.yiaddr,
         net::Ipv4Addr::UNSPECIFIED,
@@ -281,8 +286,8 @@ async fn server_address_set() {
     let pkt = mk_dhcp_request();
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
-    let reply =
-        dhcp::handle_discover(&mut p, &pkt, serverids, &conf).expect("Failed to handle request");
+    let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &[], &conf)
+        .expect("Failed to handle request");
     assert_ne!(
         reply
             .options
@@ -308,11 +313,11 @@ async fn ignore_other_request() {
     serverids.insert(SERVER_IP);
     serverids.insert(SERVER_IP2);
     let cfg = mk_default_config();
-    let reply =
-        dhcp::handle_request(&mut p, &pkt, serverids, &cfg).expect_err("Handled request not to me");
+    let reply = dhcp::handle_request(&mut p, &pkt, serverids, &[], &cfg)
+        .expect_err("Handled request not to me");
     assert_eq!(
         reply,
-        dhcp::DhcpError::OtherServer,
+        dhcp::DhcpError::OtherServer(NOT_SERVER_IP),
         "Packet to not-a-server-ip should be ignored."
     );
 }
@@ -450,8 +455,8 @@ fn client_identifier_or_chaddr() {
  * All others                MAY          MAY                MUST NOT
  */
 
-#[test]
-fn offer_required() {
+#[tokio::test]
+async fn offer_required() {
     let mut request = mk_dhcp_request();
     request.pkt.options = request
         .pkt
@@ -465,8 +470,9 @@ fn offer_required() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
-    let reply =
-        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
+    let reply = dhcp::handle_pkt(&mut p, &request, serverids, &conf)
+        .await
+        .expect("Failed to handle request");
     assert_eq!(reply.op, dhcppkt::OP_BOOTREPLY);
     assert_eq!(reply.htype, dhcppkt::HWTYPE_ETHERNET);
     assert_eq!(reply.hlen, 6);
@@ -502,8 +508,8 @@ fn offer_required() {
         .is_none());
 }
 
-#[test]
-fn ack_required() {
+#[tokio::test]
+async fn ack_required() {
     let mut request = mk_dhcp_request();
     request.pkt.options = request
         .pkt
@@ -517,8 +523,9 @@ fn ack_required() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
-    let reply =
-        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
+    let reply = dhcp::handle_pkt(&mut p, &request, serverids, &conf)
+        .await
+        .expect("Failed to handle request");
     assert_eq!(reply.op, dhcppkt::OP_BOOTREPLY);
     assert_eq!(reply.htype, dhcppkt::HWTYPE_ETHERNET);
     assert_eq!(reply.hlen, 6);
@@ -556,8 +563,8 @@ fn ack_required() {
         .is_none());
 }
 
-#[test]
-fn test_renew_unknown() {
+#[tokio::test]
+async fn test_renew_unknown() {
     /* If the server is started and there is a client that tries to renew a lease we've not heard
      * about.  If the lease is available, we should update our database and give it to them!
      */
@@ -573,13 +580,14 @@ fn test_renew_unknown() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
-    let reply =
-        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
+    let reply = dhcp::handle_pkt(&mut p, &request, serverids, &conf)
+        .await
+        .expect("Failed to handle request");
     assert_eq!(reply.yiaddr, EXAMPLE_IP2);
 }
 
-#[test]
-fn test_full() {
+#[tokio::test]
+async fn test_full() {
     /* This is an end to end test, testing a sequence of packets that a client should send and
      * making sure that we handle them correctly.
      */
@@ -600,6 +608,7 @@ fn test_full() {
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPDISCOVER);
 
     let offer = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
+        .await
         .expect("Failed to handle request");
 
     serverids.insert(offer.options.get_serverid().unwrap());
@@ -618,6 +627,7 @@ fn test_full() {
         .set_option(&dhcppkt::OPTION_ADDRESSREQUEST, &offer.yiaddr);
 
     let ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
+        .await
         .expect("Failed to handle request");
 
     assert_eq!(ack.options.get_messagetype(), Some(dhcppkt::DHCPACK));
@@ -635,6 +645,7 @@ fn test_full() {
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST);
     /* no server id */
     let ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
+        .await
         .expect("Failed to handle request");
     assert_eq!(ack.options.get_messagetype(), Some(dhcppkt::DHCPACK));
     assert_eq!(ack.yiaddr, offer.yiaddr); /* Did we get back the same address? */
@@ -650,8 +661,9 @@ fn test_full() {
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPRELEASE);
     /* no server id */
     /* release is not supported, so we expect an error here.  But we shouldn't crash */
-    let _ack =
-        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect_err("Failed to handle request");
+    let _ack = dhcp::handle_pkt(&mut p, &request, serverids, &conf)
+        .await
+        .expect_err("Failed to handle request");
 }
 
 #[tokio::test]
@@ -660,17 +672,16 @@ async fn test_defaults() {
     let pkt = mk_dhcp_request();
     let conf = crate::config::load_config_from_string_for_test(
         "
-dhcp:
- policies:
+dhcp-policies:
   - match-subnet: 192.0.2.0/24
     apply-address: 192.0.2.1
     apply-netmask: null
 ",
     )
     .expect("Failed to parse test config");
-    let lockedconf = conf.lock().await;
+    let lockedconf = conf.read().await;
     let serverids: dhcp::ServerIds = dhcp::ServerIds::new();
-    let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &lockedconf)
+    let reply = dhcp::handle_discover(&mut p, &pkt, serverids, &[], &lockedconf)
         .expect("Failed to handle request");
     /* We've asked that netmask doesn't get set, so check it's not set */
     assert_eq!(

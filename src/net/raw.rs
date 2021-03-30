@@ -1,4 +1,4 @@
-/*   Copyright 2020 Perry Lorier
+/*   Copyright 2021 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,21 +17,16 @@
  *  Low level functions to create/use an async raw socket.
  */
 
-use futures::ready;
-use mio::event::Evented;
-use mio::unix::EventedFd;
-use mio::{Poll, PollOpt, Ready, Token};
 use nix::sys::socket;
 use std::io;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::RawFd;
-use std::task::Context;
-use tokio::future::poll_fn;
-use tokio::io::PollEvented;
+use tokio::io::unix::AsyncFd;
 
 use crate::net::udp;
 use nix::libc;
 
+pub type SockAddr = crate::net::socket::SockAddr;
 pub type Error = std::io::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type MsgFlags = socket::MsgFlags;
@@ -40,68 +35,51 @@ pub type IoVec<A> = nix::sys::uio::IoVec<A>;
 /* These should be refactored out somewhere */
 pub type ControlMessage = udp::ControlMessage;
 
-#[derive(Debug)]
-struct RawSocketEvented {
-    fd: RawFd,
+pub struct IpProto(u8);
+impl IpProto {
+    pub const ICMP: IpProto = IpProto(1);
+    pub const TCP: IpProto = IpProto(6);
+    pub const UDP: IpProto = IpProto(17);
+    pub const ICMP6: IpProto = IpProto(58);
 }
 
-impl RawSocketEvented {
-    fn new(fd: RawFd) -> RawSocketEvented {
-        RawSocketEvented { fd }
-    }
-}
-
-impl Evented for RawSocketEvented {
-    fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> Result<()> {
-        EventedFd(&self.fd).register(poll, token, interest, opts)
-    }
-
-    fn reregister(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> Result<()> {
-        EventedFd(&self.fd).reregister(poll, token, interest, opts)
-    }
-
-    fn deregister(&self, poll: &Poll) -> Result<()> {
-        EventedFd(&self.fd).deregister(poll)
+impl From<IpProto> for u8 {
+    fn from(ipp: IpProto) -> Self {
+        ipp.0
     }
 }
 
-impl AsRawFd for RawSocketEvented {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd
+impl From<IpProto> for u16 {
+    fn from(ipp: IpProto) -> Self {
+        ipp.0 as u16
     }
+}
+
+pub struct EthProto(u16);
+impl EthProto {
+    pub const IP4: EthProto = EthProto(0x0800);
+    pub const ALL: EthProto = EthProto(0x0003);
 }
 
 #[derive(Debug)]
 pub struct RawSocket {
-    io: PollEvented<RawSocketEvented>,
+    fd: AsyncFd<crate::net::socket::SocketFd>,
 }
 
 impl AsRawFd for RawSocket {
     fn as_raw_fd(&self) -> RawFd {
-        self.io.get_ref().as_raw_fd()
+        self.fd.as_raw_fd()
     }
 }
 
 impl RawSocket {
-    pub fn new() -> Result<Self> {
-        // I would love to use the nix socket() wrapper, except, uh, it has a closed enum.
-        // See https://github.com/nix-rust/nix/issues/854
-        //
-        // So I have to use the libc version directly.
-        let fd = unsafe {
-            libc::socket(
+    pub fn new(protocol: EthProto) -> Result<Self> {
+        Ok(Self {
+            fd: AsyncFd::new(crate::net::socket::new_socket(
                 libc::AF_PACKET,
                 libc::SOCK_RAW,
-                i32::from(
-                    ((libc::ETH_P_ALL | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK) as u16).to_be(),
-                ),
-            )
-        };
-        if fd == -1 {
-            return Err(Error::last_os_error());
-        }
-        Ok(Self {
-            io: PollEvented::new(RawSocketEvented::new(fd as RawFd)).unwrap(),
+                protocol.0 as libc::c_int,
+            )?)?,
         })
     }
 
@@ -110,38 +88,191 @@ impl RawSocket {
         socket::send(self.as_raw_fd(), buf, flags).map_err(udp::nix_to_io_error)
     }
 
+    pub async fn recv_msg(
+        &self,
+        bufsize: usize,
+        flags: MsgFlags,
+    ) -> io::Result<crate::net::socket::RecvMsg> {
+        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
+    }
+
     pub async fn send_msg(
         &self,
         buffer: &[u8],
-        cmsg: &mut ControlMessage,
+        cmsg: &ControlMessage,
         flags: MsgFlags,
-        addr: Option<&nix::sys::socket::SockAddr>,
+        addr: Option<&SockAddr>,
     ) -> io::Result<()> {
-        poll_fn(|cx| self.poll_send_msg(cx, buffer, cmsg, flags, addr)).await
+        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
 
-    fn poll_send_msg(
+    pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
         &self,
-        cx: &mut Context<'_>,
-        buffer: &[u8],
-        cmsg: &mut ControlMessage,
+        opt: O,
+        val: &O::Val,
+    ) -> Result<()> {
+        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(udp::nix_to_io_error)
+    }
+}
+
+#[derive(Debug)]
+pub struct CookedRawSocket {
+    fd: AsyncFd<crate::net::socket::SocketFd>,
+}
+
+impl AsRawFd for CookedRawSocket {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd.as_raw_fd()
+    }
+}
+
+impl CookedRawSocket {
+    pub fn new(protocol: EthProto) -> Result<Self> {
+        Ok(Self {
+            fd: AsyncFd::new(crate::net::socket::new_socket(
+                libc::AF_PACKET,
+                libc::SOCK_RAW,
+                protocol.0 as libc::c_int,
+            )?)?,
+        })
+    }
+
+    #[allow(dead_code)]
+    pub fn send(&self, buf: &[u8], flags: MsgFlags) -> Result<usize> {
+        socket::send(self.as_raw_fd(), buf, flags).map_err(udp::nix_to_io_error)
+    }
+
+    pub async fn recv_msg(
+        &self,
+        bufsize: usize,
         flags: MsgFlags,
-        from: Option<&nix::sys::socket::SockAddr>,
-    ) -> std::task::Poll<io::Result<()>> {
-        ready!(self.io.poll_write_ready(cx))?;
+    ) -> io::Result<crate::net::socket::RecvMsg> {
+        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
+    }
 
-        let iov = &[IoVec::from_slice(buffer)];
+    pub async fn send_msg(
+        &self,
+        buffer: &[u8],
+        cmsg: &ControlMessage,
+        flags: MsgFlags,
+        addr: Option<&SockAddr>,
+    ) -> io::Result<()> {
+        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
+    }
 
-        let cmsgs = cmsg.convert_to_cmsg();
+    pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
+        &self,
+        opt: O,
+        val: &O::Val,
+    ) -> Result<()> {
+        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(udp::nix_to_io_error)
+    }
+}
 
-        match nix::sys::socket::sendmsg(self.io.get_ref().as_raw_fd(), iov, &cmsgs, flags, from) {
-            Ok(_) => std::task::Poll::Ready(Ok(())),
-            Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => std::task::Poll::Pending,
-            Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
-                self.io.clear_write_ready(cx)?;
-                std::task::Poll::Pending
-            }
-            Err(e) => std::task::Poll::Ready(Err(udp::nix_to_io_error(e))),
-        }
+#[derive(Debug)]
+pub struct Raw6Socket {
+    fd: AsyncFd<crate::net::socket::SocketFd>,
+}
+
+impl AsRawFd for Raw6Socket {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd.as_raw_fd()
+    }
+}
+
+impl Raw6Socket {
+    pub fn new(protocol: IpProto) -> Result<Self> {
+        Ok(Self {
+            fd: AsyncFd::new(crate::net::socket::new_socket(
+                libc::AF_INET6,
+                libc::SOCK_RAW,
+                protocol.0 as libc::c_int,
+            )?)?,
+        })
+    }
+
+    #[allow(dead_code)]
+    pub fn send(&self, buf: &[u8], flags: MsgFlags) -> Result<usize> {
+        socket::send(self.as_raw_fd(), buf, flags).map_err(udp::nix_to_io_error)
+    }
+
+    pub async fn recv_msg(
+        &self,
+        bufsize: usize,
+        flags: MsgFlags,
+    ) -> io::Result<crate::net::socket::RecvMsg> {
+        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
+    }
+
+    pub async fn send_msg(
+        &self,
+        buffer: &[u8],
+        cmsg: &ControlMessage,
+        flags: MsgFlags,
+        addr: Option<&SockAddr>,
+    ) -> io::Result<()> {
+        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
+    }
+
+    pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
+        &self,
+        opt: O,
+        val: &O::Val,
+    ) -> Result<()> {
+        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(udp::nix_to_io_error)
+    }
+}
+
+#[derive(Debug)]
+pub struct Raw4Socket {
+    fd: AsyncFd<crate::net::socket::SocketFd>,
+}
+
+impl AsRawFd for Raw4Socket {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd.as_raw_fd()
+    }
+}
+
+impl Raw4Socket {
+    pub fn new(protocol: IpProto) -> Result<Self> {
+        Ok(Self {
+            fd: AsyncFd::new(crate::net::socket::new_socket(
+                libc::AF_INET,
+                libc::SOCK_RAW,
+                protocol.0 as libc::c_int,
+            )?)?,
+        })
+    }
+
+    #[allow(dead_code)]
+    pub fn send(&self, buf: &[u8], flags: MsgFlags) -> Result<usize> {
+        socket::send(self.as_raw_fd(), buf, flags).map_err(udp::nix_to_io_error)
+    }
+
+    pub async fn recv_msg(
+        &self,
+        bufsize: usize,
+        flags: MsgFlags,
+    ) -> io::Result<crate::net::socket::RecvMsg> {
+        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
+    }
+
+    pub async fn send_msg(
+        &self,
+        buffer: &[u8],
+        cmsg: &ControlMessage,
+        flags: MsgFlags,
+        addr: Option<&SockAddr>,
+    ) -> io::Result<()> {
+        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
+    }
+
+    pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
+        fd: RawFd,
+        opt: O,
+        val: &O::Val,
+    ) -> Result<()> {
+        nix::sys::socket::setsockopt(fd, opt, val).map_err(udp::nix_to_io_error)
     }
 }

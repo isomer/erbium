@@ -1,4 +1,4 @@
-/*   Copyright 2020 Perry Lorier
+/*   Copyright 2021 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,10 +17,13 @@
 pub mod netinfo;
 pub mod packet;
 pub mod raw;
+pub mod socket;
 pub mod udp;
 
+pub use nix::sys::socket::sockopt::*;
+
 // TODO: Write better Debug or to_string() method.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Ipv4Subnet {
     pub addr: std::net::Ipv4Addr,
     pub prefixlen: u8,
@@ -29,6 +32,20 @@ pub struct Ipv4Subnet {
 #[derive(Debug)]
 pub enum Error {
     InvalidSubnet,
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::InvalidSubnet => write!(f, "Invalid Subnet"),
+        }
+    }
+}
+
+impl std::fmt::Display for Ipv4Subnet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.addr, self.prefixlen)
+    }
 }
 
 impl Ipv4Subnet {
@@ -45,7 +62,7 @@ impl Ipv4Subnet {
         (u32::from(self.addr) & u32::from(self.netmask())).into()
     }
     pub fn netmask(&self) -> std::net::Ipv4Addr {
-        (!(0xffff_ffff as u64 >> self.prefixlen) as u32).into()
+        (!(0xffff_ffffu64 >> self.prefixlen) as u32).into()
     }
     pub fn contains(&self, ip: std::net::Ipv4Addr) -> bool {
         u32::from(ip) & u32::from(self.netmask()) == u32::from(self.addr)

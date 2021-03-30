@@ -1,4 +1,4 @@
-/*   Copyright 2020 Perry Lorier
+/*   Copyright 2021 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,34 +17,50 @@
  *  Thin wrapper to start all services.
  */
 
-use tokio::stream::StreamExt;
+use futures::StreamExt as _;
+use lazy_static::*;
+use log::{error, info};
+use prometheus::register_int_counter;
+
+lazy_static! {
+    static ref HIGH_FIVE_COUNTER: prometheus::IntCounter =
+        register_int_counter!("highfives", "Number of high fives received").unwrap();
+}
 
 use erbium::*;
 
 enum Error {
-    ConfigError(std::path::PathBuf, erbium::config::Error),
+    Config(std::path::PathBuf, erbium::config::Error),
+    Service(String),
+    CommandLine(String),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::ConfigError(path, e) => write!(
+            Error::Config(path, e) => write!(
                 f,
                 "Failed to load config from {}: {}",
                 path.to_string_lossy(),
                 e
             ),
+            Error::Service(msg) => write!(f, "{}", msg),
+            Error::CommandLine(msg) => write!(f, "{}", msg),
         }
     }
 }
 
 async fn go() -> Result<(), Error> {
+    /* Process the command line options.
+     * Currently we don't do anything smart with the command line.
+     */
     let args: Vec<_> = std::env::args_os().collect();
-    if args.len() > 2 {
-        println!("Usage: {} <configfile>", args[0].to_string_lossy());
-        return Ok(());
+    if args.len() > 2 || (args.len() == 2 && args[1].to_string_lossy().starts_with('-')) {
+        return Err(Error::CommandLine(format!(
+            "Usage: {} <configfile>",
+            args[0].to_string_lossy()
+        )));
     }
-    let netinfo = net::netinfo::SharedNetInfo::new().await;
     let config_file = if args.len() == 1 {
         std::path::Path::new("erbium.conf")
     } else {
@@ -52,26 +68,71 @@ async fn go() -> Result<(), Error> {
     };
     let conf = erbium::config::load_config_from_path(config_file)
         .await
-        .map_err(|e| Error::ConfigError(config_file.to_path_buf(), e))?;
+        .map_err(|e| Error::Config(config_file.to_path_buf(), e))?;
+
+    /* Build the shared network information database that various systems depend on */
+    let netinfo = net::netinfo::SharedNetInfo::new().await;
+
+    /* Initialise each of the services, and record them */
     let mut services = futures::stream::FuturesUnordered::new();
+    #[cfg(feature = "dns")]
+    {
+        let dns = dns::DnsService::new(conf.clone())
+            .await
+            .map_err(|err| Error::Service(err.to_string()))?;
+        services.push(tokio::spawn(async move {
+            dns.run().await.map_err(|err| err.to_string())
+        }));
+    }
 
     #[cfg(feature = "dhcp")]
-    services.push(tokio::spawn(dhcp::run(netinfo, conf)));
-    #[cfg(feature = "dns")]
-    services.push(tokio::spawn(dns::run()));
+    let dhcp;
+    #[cfg(feature = "dhcp")]
+    {
+        dhcp = std::sync::Arc::new(
+            dhcp::DhcpService::new(netinfo.clone(), conf.clone())
+                .await
+                .map_err(Error::Service)?,
+        );
+        let dhcp_copy = dhcp.clone();
+        services.push(tokio::spawn(async move { dhcp_copy.run().await }));
+    }
+    #[cfg(feature = "radv")]
+    {
+        let radv = std::sync::Arc::new(
+            radv::RaAdvService::new(netinfo.clone(), conf.clone())
+                .map_err(|x| Error::Service(x.to_string()))?,
+        );
 
+        services.push(tokio::spawn(async move { radv.run().await }));
+    }
+    #[cfg(feature = "http")]
+    http::run(dhcp, conf.clone())
+        .await
+        .map_err(|x| Error::Service(x.to_string()))?;
+
+    /* TODO: Perhaps drop some of the capabilities we don't need? */
+
+    /* Now start running them */
     let x = services.next().await.unwrap();
-    println!("Service complete: {:?}", x);
+    error!("Service complete: {:?}", x);
 
     Ok(())
 }
 
 #[tokio::main]
 async fn main() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    info!(
+        "erbium {} ({})",
+        env!("CARGO_PKG_VERSION"),
+        env!("VERGEN_SHA_SHORT")
+    );
     match go().await {
         Ok(()) => (),
         Err(x) => {
-            println!("Error: {}", x);
+            error!("Error: {}", x);
             std::process::exit(1);
         }
     }

@@ -1,4 +1,4 @@
-/*   Copyright 2020 Perry Lorier
+/*   Copyright 2021 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
  *  Caching in Erbium is applied on the "out" side, not on the "in" side as might be more common.
  */
 
+use super::Error;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -33,7 +34,7 @@ struct CacheKey {
 }
 
 struct CacheValue {
-    reply: dnspkt::DNSPkt,
+    reply: Result<dnspkt::DNSPkt, Error>,
     birth: Instant,
     lifetime: Duration,
 }
@@ -46,6 +47,58 @@ pub struct CacheHandler {
     cache: Arc<RwLock<Cache>>,
 }
 
+/* std::io::Error is not clonable (for good reason), but we want to clone it.
+ * So instead, we do some mappings to remove the std::io::Error
+ */
+fn clone_out_reply(reply: &Result<dnspkt::DNSPkt, Error>) -> Result<dnspkt::DNSPkt, Error> {
+    use outquery::Error as OutReplyError;
+    use Error::*;
+    match reply {
+        Ok(out_reply) => Ok(out_reply.clone()),
+        Err(NotAuthoritative) => Err(NotAuthoritative),
+        Err(OutReply(OutReplyError::Timeout)) => Err(OutReply(OutReplyError::Timeout)),
+        Err(OutReply(OutReplyError::FailedToSend(io))) => {
+            Err(OutReply(OutReplyError::FailedToSendMsg(format!("{}", io))))
+        }
+        Err(OutReply(OutReplyError::FailedToSendMsg(msg))) => {
+            Err(OutReply(OutReplyError::FailedToSendMsg(msg.clone())))
+        }
+        Err(OutReply(OutReplyError::FailedToRecv(io))) => {
+            Err(OutReply(OutReplyError::FailedToRecvMsg(format!("{}", io))))
+        }
+        Err(OutReply(OutReplyError::FailedToRecvMsg(msg))) => {
+            Err(OutReply(OutReplyError::FailedToRecvMsg(msg.clone())))
+        }
+        Err(OutReply(OutReplyError::TcpConnectionError(msg))) => {
+            Err(OutReply(OutReplyError::TcpConnectionError(msg.clone())))
+        }
+        Err(OutReply(OutReplyError::ParseError(msg))) => {
+            Err(OutReply(OutReplyError::ParseError(msg.clone())))
+        }
+        Err(OutReply(OutReplyError::InternalError(msg))) => {
+            Err(OutReply(OutReplyError::InternalError(msg.clone())))
+        }
+        /* These errors cannot occur */
+        Err(ListenError(_)) => unreachable!(),
+        Err(RecvError(_)) => unreachable!(),
+        Err(ParseError(_)) => unreachable!(),
+        Err(RefusedByAcl(_)) => unreachable!(),
+    }
+}
+
+/* std::io::Error is not clonable (for good reason), but we want to clone it.
+ * So instead, we do some mappings to remove the std::io::Error
+ */
+fn clone_with_ttl_decrement_out_reply(
+    reply: &Result<dnspkt::DNSPkt, Error>,
+    decrement: std::time::Duration,
+) -> Result<dnspkt::DNSPkt, Error> {
+    match reply {
+        Ok(out_reply) => Ok(out_reply.clone_with_ttl_decrement(decrement.as_secs() as u32)),
+        err => clone_out_reply(err),
+    }
+}
+
 impl CacheHandler {
     pub fn new() -> Self {
         CacheHandler {
@@ -54,40 +107,66 @@ impl CacheHandler {
         }
     }
 
-    pub async fn handle_query(
-        &self,
-        q: &dnspkt::Question,
-    ) -> Result<dnspkt::DNSPkt, std::io::Error> {
+    pub async fn handle_query(&self, msg: &super::DnsMessage) -> Result<dnspkt::DNSPkt, Error> {
+        let q = &msg.in_query.question;
+        /* Only do caching for IN queries */
+        if q.qclass != dnspkt::CLASS_IN {
+            log::trace!("Not caching non-IN query");
+            return self.next.handle_query(msg).await;
+        }
+
         let ck = CacheKey {
             qname: q.qdomain.clone(),
             qtype: q.qtype,
         };
-        if q.qclass == dnspkt::CLASS_IN {
-            if let Some(entry) = self.cache.read().await.get(&ck) {
-                let now = Instant::now();
-                if entry.birth + entry.lifetime > now {
-                    return Ok(entry
-                        .reply
-                        .clone_with_ttl_decrement((now - entry.birth).as_secs() as u32));
-                }
+
+        /* Check to see if we have a cache hit that is still valid, if so, return it */
+        if let Some(entry) = self.cache.read().await.get(&ck) {
+            let now = Instant::now();
+            if entry.birth + entry.lifetime > now {
+                let remaining = (entry.birth + entry.lifetime) - now;
+                log::trace!("Cache hit ({:?} remaining)", remaining);
+                return clone_with_ttl_decrement_out_reply(&entry.reply, now - entry.birth);
+            } else {
+                log::trace!("Cache miss: Cache expired");
             }
+        } else {
+            log::trace!("Cache miss: Entry not present");
         }
 
-        let outreply = self.next.handle_query(q).await?;
+        /* Cache miss: Go attempt the resolve, and return the result */
+        let out_result = self.next.handle_query(msg).await;
 
-        if q.qclass == dnspkt::CLASS_IN {
-            self.cache.write().await.insert(
-                ck,
-                CacheValue {
-                    reply: outreply.clone(),
-                    birth: Instant::now(),
-                    lifetime: outreply.get_expiry(),
-                },
-            );
-        }
+        let expiry = match &out_result {
+            Ok(out_reply) => out_reply.get_expiry(),
+            /* If there was a problem sending the reply, then wait for at least as long
+             * as exponential backoff would allow.
+             */
+            Err(Error::OutReply(outquery::Error::Timeout))
+            | Err(Error::OutReply(outquery::Error::FailedToSend(_)))
+            | Err(Error::OutReply(outquery::Error::FailedToRecv(_)))
+            | Err(Error::OutReply(outquery::Error::TcpConnectionError(_)))
+            | Err(Error::OutReply(outquery::Error::ParseError(_))) => {
+                std::time::Duration::from_secs(8)
+            }
+            /* Otherwise propagate the error, and do not cache it */
+            e => return clone_out_reply(e),
+        };
 
-        println!("OutReply: {:?}", outreply);
+        self.cache.write().await.insert(
+            ck,
+            CacheValue {
+                reply: clone_out_reply(&out_result),
+                birth: Instant::now(),
+                lifetime: expiry,
+            },
+        );
 
-        Ok(outreply)
+        match &out_result {
+            Ok(x) => log::trace!("OutReply: {:?}", x),
+            Err(e) => log::trace!("OutReply: {}", e),
+        };
+
+        out_result
     }
 }

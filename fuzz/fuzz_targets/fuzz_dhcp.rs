@@ -15,6 +15,7 @@ fuzz_target!(|data: &[u8]| {
                 ..Default::default()
             }],
         },
+        ..Default::default()
     };
 
     if let Ok(pkt) = erbium::dhcp::dhcppkt::parse(data) {
@@ -22,9 +23,11 @@ fuzz_target!(|data: &[u8]| {
             pkt,
             serverip: "192.168.0.1".parse().unwrap(),
             ifindex: 1,
+            if_mtu: Some(1500),
+            if_router: None,
         };
 
-        if let Ok(reply) = erbium::dhcp::handle_pkt(&mut pools, &request, serverids, &cfg) {
+        if let Ok(reply) = erbium::dhcp::handle_pkt(&mut pools, &request, serverids, &cfg).await {
             let _ = reply.serialise();
         }
     }

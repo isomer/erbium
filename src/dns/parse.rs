@@ -1,4 +1,4 @@
-/*   Copyright 2020 Perry Lorier
+/*   Copyright 2021 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
  *  Code to parse a DNS packet.
  */
 use crate::dns::dnspkt;
-use std::collections::BTreeMap;
 
 pub struct EdnsParser<'l> {
     buffer: &'l [u8],
@@ -46,10 +45,17 @@ impl<'l> EdnsParser<'l> {
     fn get_option(&mut self) -> Result<dnspkt::EdnsOption, String> {
         let code = self.get_u16()?;
         let len = self.get_u16()? as usize;
+        if self.buffer.len() < len {
+            return Err(format!(
+                "Truncated EDNS Option (got {}, wanted {})",
+                self.buffer.len(),
+                len
+            ));
+        }
         let data = self.buffer[0..len].to_vec();
         self.buffer = &self.buffer[len..];
         if data.len() < len {
-            return Err("Truncated EDNS Option".to_string());
+            return Err("Truncated EDNS Option".into());
         }
         Ok(dnspkt::EdnsOption {
             code: dnspkt::EdnsCode(code),
@@ -58,39 +64,31 @@ impl<'l> EdnsParser<'l> {
     }
 
     fn get_options(&mut self) -> Result<dnspkt::EdnsData, String> {
-        let mut data = dnspkt::EdnsData { other: vec![] };
+        let mut data = dnspkt::EdnsData::new();
 
         while !self.buffer.is_empty() {
-            let ednsopt = self.get_option()?;
-            // TODO: Understand a few obvious edns options.
-            data.other.push(ednsopt);
+            data.set_opt(self.get_option()?);
         }
 
         Ok(data)
     }
 }
 
-struct Label {
-    label: dnspkt::Label,
-    next: Option<u16>,
-}
-
 pub struct PktParser<'l> {
     buffer: &'l [u8],
     offset: usize,
-    labels: BTreeMap<u16, Label>,
 }
 
 impl<'l> PktParser<'l> {
     pub fn new(buffer: &'l [u8]) -> PktParser {
-        PktParser {
-            buffer,
-            offset: 0,
-            labels: BTreeMap::new(),
-        }
+        PktParser { buffer, offset: 0 }
     }
     fn peek_u8(&mut self) -> Result<u8, String> {
-        Ok(self.buffer[self.offset])
+        if self.offset < self.buffer.len() {
+            Ok(self.buffer[self.offset])
+        } else {
+            Err("Truncated Packet (u8)".into())
+        }
     }
     fn get_u8(&mut self) -> Result<u8, String> {
         let ret = self.peek_u8()?;
@@ -108,66 +106,63 @@ impl<'l> PktParser<'l> {
     }
 
     fn get_bytes(&mut self, count: usize) -> Result<Vec<u8>, String> {
-        let ret = self.buffer[self.offset..self.offset + count].to_vec();
-        self.offset += count;
-        Ok(ret)
-    }
-    fn get_label(&mut self) -> Result<dnspkt::Label, String> {
-        let size = self.get_u8()? as usize;
-        assert!(size & 0b1100_0000 == 0b0000_0000);
-        Ok(dnspkt::Label::from(self.get_bytes(size)?))
+        if self.offset + count <= self.buffer.len() {
+            let ret = self.buffer[self.offset..self.offset + count].to_vec();
+            self.offset += count;
+            Ok(ret)
+        } else {
+            Err(format!(
+                "Truncated packet, reading {} bytes (only {} remaining)",
+                count,
+                self.buffer.len() - self.offset
+            ))
+        }
     }
 
-    fn get_domain(&mut self) -> Result<dnspkt::Domain, String> {
-        let mut domainv = Vec::new();
+    fn get_string(&mut self) -> Result<Vec<u8>, String> {
+        let size = self.get_u8()? as usize;
+        self.get_bytes(size)
+    }
+
+    fn get_domain_into(
+        &mut self,
+        domainv: &mut Vec<dnspkt::Label>,
+        depth: i32,
+    ) -> Result<(), String> {
         loop {
-            let prefix = self.peek_u8()?;
-            match prefix & 0b1100_0000 {
-                0b0000_00000 => {
+            let prefix = self.get_u8()?;
+            match prefix {
+                0 => {
+                    // End of domain marker.
+                    return Ok(());
+                }
+                p if p & 0b1100_0000 == 0 => {
                     // Uncompressed label
-                    let saved_offset = self.offset as u16;
-                    if self.peek_u8()? == 0 {
-                        self.get_u8()?; // Consume the \0
-                        return Ok(dnspkt::Domain::from(domainv));
-                    }
-                    let label = self.get_label()?;
-                    let next = if self.peek_u8()? == 0 {
-                        None
-                    } else {
-                        Some(self.offset as u16)
-                    };
-                    self.labels.insert(
-                        saved_offset,
-                        Label {
-                            label: label.clone(),
-                            next,
-                        },
-                    );
-                    domainv.push(label.clone());
+                    domainv.push(dnspkt::Label::from(self.get_bytes(prefix as usize)?));
                 }
-                0b1100_0000 => {
+                offset_high if offset_high & 0b1100_0000 == 0b1100_0000 => {
+                    if depth > 10 {
+                        return Err("Compression Corruption".into());
+                    }
                     // Compressed label.
-                    let mut offset = self.get_u16()? & 0b0011_1111;
-                    loop {
-                        match self.labels.get(&offset) {
-                            None => return Err(String::from("Bad compression offset")),
-                            Some(l) => {
-                                domainv.push(l.label.clone());
-                                match l.next {
-                                    Some(o) => {
-                                        offset = o;
-                                    }
-                                    None => {
-                                        return Ok(dnspkt::Domain::from(domainv));
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    let offset_low = self.get_u8()?;
+                    let offset =
+                        (((offset_high & !0b1100_0000) as usize) << 8) | (offset_low as usize);
+                    let saved_offset = self.offset;
+                    self.offset = offset;
+                    let ret = self.get_domain_into(domainv, depth + 1);
+                    self.offset = saved_offset;
+                    return ret;
                 }
-                _ => return Err(String::from("Unsupported label type")),
+                marker => return Err(format!("Unsupported label type ({:x})", marker)),
             }
         }
+    }
+
+    pub fn get_domain(&mut self) -> Result<dnspkt::Domain, String> {
+        let mut domainv = Vec::new();
+        self.get_domain_into(&mut domainv, 1)
+            .map(|_| dnspkt::Domain::from(domainv))
     }
 
     fn get_class(&mut self) -> Result<dnspkt::Class, String> {
@@ -178,41 +173,90 @@ impl<'l> PktParser<'l> {
         Ok(dnspkt::Type(self.get_u16()?))
     }
 
-    fn get_soa(&mut self) -> Result<dnspkt::SoaData, String> {
-        let _rdlen = self.get_u16()? as usize;
-        Ok(dnspkt::SoaData {
-            mname: self.get_domain()?,
-            rname: self.get_domain()?,
-            serial: self.get_u32()?,
-            refresh: self.get_u32()?,
-            retry: self.get_u32()?,
-            expire: self.get_u32()?,
-            minimum: self.get_u32()?,
-        })
-    }
-
     fn get_rdata(&mut self, rtype: dnspkt::Type) -> Result<dnspkt::RData, String> {
+        use dnspkt::RData::*;
+        let rdlen = self.get_u16()? as usize;
         match rtype {
+            dnspkt::RR_CNAME => {
+                Ok(CNAME(self.get_domain()?))
+                // TODO: assert the domain == rdlen.
+            }
+            dnspkt::RR_NS => {
+                Ok(NS(self.get_domain()?))
+                // TODO: assert the domain == rdlen.
+            }
+            dnspkt::RR_PTR => {
+                Ok(PTR(self.get_domain()?))
+                // TODO: assert the domain == rdlen.
+            }
+            dnspkt::RR_AFSDB => Ok(dnspkt::RData::AFSDB(dnspkt::AFSDBData {
+                subtype: self.get_u16()?,
+                hostname: self.get_domain()?,
+            })),
+            dnspkt::RR_RP => Ok(dnspkt::RData::RP(dnspkt::RPData {
+                mbox: self.get_domain()?,
+                txt: self.get_domain()?,
+            })),
+            dnspkt::RR_RT => Ok(dnspkt::RData::RT(dnspkt::PrefDomainData {
+                pref: self.get_u16()?,
+                domain: self.get_domain()?,
+            })),
+            dnspkt::RR_MX => Ok(dnspkt::RData::MX(dnspkt::PrefDomainData {
+                pref: self.get_u16()?,
+                domain: self.get_domain()?,
+            })),
+            dnspkt::RR_NAPTR => {
+                let order = self.get_u16()?;
+                let preference = self.get_u16()?;
+                let flags = self.get_string()?;
+                let services = self.get_string()?;
+                let regexp = self.get_string()?;
+                let replacement = self.get_domain()?;
+                Ok(dnspkt::RData::NAPTR(dnspkt::NAPTRData {
+                    order,
+                    preference,
+                    flags,
+                    services,
+                    regexp,
+                    replacement,
+                }))
+            }
             dnspkt::RR_OPT => {
-                let rdlen = self.get_u16()? as usize;
                 let rdata = self.get_bytes(rdlen)?;
                 Ok(dnspkt::RData::OPT(EdnsParser::new(&rdata).get_options()?))
             }
-            dnspkt::RR_SOA => Ok(dnspkt::RData::SOA(self.get_soa()?)),
+            dnspkt::RR_SOA => Ok(dnspkt::RData::SOA(dnspkt::SoaData {
+                mname: self.get_domain()?,
+                rname: self.get_domain()?,
+                serial: self.get_u32()?,
+                refresh: self.get_u32()?,
+                retry: self.get_u32()?,
+                expire: self.get_u32()?,
+                minimum: self.get_u32()?,
+            })),
             _ => {
-                let rdlen = self.get_u16()? as usize;
                 let rdata = self.get_bytes(rdlen)?;
                 Ok(dnspkt::RData::Other(rdata))
             }
         }
     }
 
-    fn get_rr(&mut self) -> Result<dnspkt::RR, String> {
-        let domain = self.get_domain()?;
-        let rrtype = self.get_type()?;
-        let class = self.get_class()?;
-        let ttl = self.get_u32()?;
-        let rdata = self.get_rdata(rrtype)?;
+    pub fn get_rr(&mut self) -> Result<dnspkt::RR, String> {
+        let domain = self
+            .get_domain()
+            .map_err(|m| format!("{} while reading domain", m))?;
+        let rrtype = self
+            .get_type()
+            .map_err(|m| format!("{} while reading rrtype", m))?;
+        let class = self
+            .get_class()
+            .map_err(|m| format!("{} while reading class", m))?;
+        let ttl = self
+            .get_u32()
+            .map_err(|m| format!("{} while reading ttl", m))?;
+        let rdata = self
+            .get_rdata(rrtype)
+            .map_err(|m| format!("{} while reading rdata", m))?;
 
         Ok(dnspkt::RR {
             domain,
@@ -224,10 +268,20 @@ impl<'l> PktParser<'l> {
     }
 
     pub fn get_dns(&mut self) -> Result<dnspkt::DNSPkt, String> {
-        let qid = self.get_u16()?;
-        let flag1 = self.get_u8()?;
-        let flag2 = self.get_u8()?;
-        let qcount = self.get_u16()?;
+        let qid = self
+            .get_u16()
+            .map_err(|m| format!("{} while reading qid", m))?;
+        let flag1 = self
+            .get_u8()
+            .map_err(|m| format!("{} while reading flag1", m))?;
+        let flag2 = self
+            .get_u8()
+            .map_err(|m| format!("{} while reading flag2", m))?;
+        let qcount = self
+            .get_u16()
+            .map_err(|m| format!("{} while reading qcount", m))?;
+
+        let trunc = flag1 & 0b0000_0010 != 0;
 
         let opcode = dnspkt::Opcode((flag1 & 0b0111_1000) >> 3);
         let rcode = dnspkt::RCode((flag2 & 0b0000_1111) as u16);
@@ -237,31 +291,68 @@ impl<'l> PktParser<'l> {
                 qcount, opcode, rcode
             ));
         }
-        let arcount = self.get_u16()?;
-        let nscount = self.get_u16()?;
-        let adcount = self.get_u16()?;
+        let arcount = self
+            .get_u16()
+            .map_err(|m| format!("{} while reading arcount", m))?;
+        let nscount = self
+            .get_u16()
+            .map_err(|m| format!("{} while reading arcount", m))?;
+        let adcount = self
+            .get_u16()
+            .map_err(|m| format!("{} while reading adcount", m))?;
 
-        let qdomain = self.get_domain()?;
-        let qtype = self.get_type()?;
-        let qclass = self.get_class()?;
+        let qdomain = self
+            .get_domain()
+            .map_err(|m| format!("{} while reading qdomain", m))?;
+        let qtype = self
+            .get_type()
+            .map_err(|m| format!("{} while reading qtype", m))?;
+        let qclass = self
+            .get_class()
+            .map_err(|m| format!("{} while reading qclass", m))?;
 
-        let answer = (0..arcount)
-            .map(|_| self.get_rr())
-            .collect::<Result<Vec<_>, _>>()?;
-        let nameserver = (0..nscount)
-            .map(|_| self.get_rr())
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut additional = (0..adcount)
-            .map(|_| self.get_rr())
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut answer = vec![];
+        for _ in 0..arcount {
+            if self.offset >= self.buffer.len() && trunc {
+                break;
+            }
+            answer.push(
+                self.get_rr()
+                    .map_err(|e| format!("{} while reading {} answers", e, arcount))?,
+            );
+        }
 
-        let opt = additional.iter().find(|it| it.rrtype == dnspkt::RR_OPT);
+        let mut nameserver = vec![];
+        for _ in 0..nscount {
+            if self.offset >= self.buffer.len() && trunc {
+                break;
+            }
+            nameserver.push(
+                self.get_rr()
+                    .map_err(|e| format!("{} while reading {} nameservers", e, nscount))?,
+            );
+        }
 
+        let mut additional = vec![];
+        for _ in 0..adcount {
+            if self.offset >= self.buffer.len() && trunc {
+                break;
+            }
+            additional.push(
+                self.get_rr()
+                    .map_err(|e| format!("{} while reading {} additionals", e, adcount))?,
+            );
+        }
+
+        let opt = additional
+            .iter()
+            .find(|it| it.rrtype == dnspkt::RR_OPT && ((it.ttl >> 16) & 0xFF) == 0);
+
+        let ever = opt.map(|o| ((o.ttl >> 16) & 0xFF) as u8);
         let bufsize = std::cmp::max(opt.map_or(512, |o| o.class.0), 512);
         let ercode = opt.map_or(0, |o| o.ttl >> 24);
-        let ever = opt.map(|o| ((o.ttl >> 16) & 0xFF) as u8);
         let edo = opt.map_or(false, |o| {
-            (o.ttl & 0b00000000_00000000_10000000_00000000) != 0
+            (o.ttl & 0b0000_0000_0000_0000_1000_0000_0000_0000) != 0
         });
 
         let edns = opt.map(|x| match &x.rdata {
@@ -283,7 +374,7 @@ impl<'l> PktParser<'l> {
             ad: (flag2 & 0b0100_0000) != 0,
             ra: (flag2 & 0b1000_0000) != 0,
             //           0b0001_0000
-            rcode: dnspkt::RCode(((flag2 & 0b0000_1111) as u16) | ((ercode as u16) << 8)),
+            rcode: dnspkt::RCode(((flag2 & 0b0000_1111) as u16) | ((ercode as u16) << 4)),
             bufsize,
             edns_ver: ever,
             edns_do: edo,
@@ -298,4 +389,10 @@ impl<'l> PktParser<'l> {
             edns,
         })
     }
+}
+
+#[test]
+fn test_parse_empty_domain() {
+    let mut pkt = PktParser::new(&[0x00]);
+    assert_eq!(pkt.get_domain().unwrap(), dnspkt::Domain::from(vec![]));
 }
