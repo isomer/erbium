@@ -276,7 +276,9 @@ impl Pool {
              FROM
                leases
              WHERE clientid = ?1
-             AND expiry > ?2",
+             AND expiry > ?2
+             ORDER BY expiry DESC
+             LIMIT 1",
                 rusqlite::params![clientid, ts as u32],
                 |row| {
                     Ok(Some((
@@ -315,11 +317,14 @@ impl Pool {
                 "SELECT
                address,
                start,
-               max(expiry)
+               max(expiry) as expire_time
              FROM
                leases
              WHERE clientid = ?1
-             GROUP BY 1",
+             GROUP BY 1
+             ORDER BY expire_time DESC
+             LIMIT 1
+             ",
                 rusqlite::params![clientid],
                 |row| {
                     Ok(Some((
