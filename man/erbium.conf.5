@@ -366,6 +366,10 @@ If not specified, then if the client arrives over a unix domain socket is not ma
 (default: empty list)
 This specifies which accesses the matched clients are permitted.
 .RS
+.IP "\fBdhcp-client\fP"
+Permissions required for DHCP clients with default settings.
+This is used to support future versions that may add additional protocols for DHCP clients.
+Currently an alias for "dns-recursion".
 .IP "\fBdns-recursion\fP"
 Allows DNS recursion.
 .IP "\fBhttp\fP"
