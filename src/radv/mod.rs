@@ -102,7 +102,7 @@ struct ScopeSorter(std::net::Ipv6Addr);
 enum Scope {
     Link,
     Loopback,
-    ULA,
+    UniqueLocalAddress,
     Global,
     Unspecified,
     Multicast,
@@ -111,7 +111,7 @@ enum Scope {
 fn v6_scope(ip6: std::net::Ipv6Addr) -> Scope {
     use std::net::*;
     if (ip6.segments()[0] & 0xfe00) == 0xfc00 {
-        Scope::ULA
+        Scope::UniqueLocalAddress
     } else if u128::from_be_bytes(ip6.octets()) == u128::from_be_bytes(Ipv6Addr::LOCALHOST.octets())
     {
         Scope::Loopback
@@ -136,8 +136,8 @@ fn v6_scope(ip6: std::net::Ipv6Addr) -> Scope {
 impl Ord for ScopeSorter {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         use Scope::*;
-        /* We prefer ULA > Global > Link addresses > Other */
-        let scopes = [Scope::Unspecified, Link, Global, ULA];
+        /* We prefer UniqueLocalAddress > Global > Link addresses > Other */
+        let scopes = [Scope::Unspecified, Link, Global, UniqueLocalAddress];
         let sscope = v6_scope(self.0);
         let oscope = v6_scope(other.0);
         let sscopepos = scopes
@@ -226,7 +226,7 @@ impl RaAdvService {
         }
 
         if let Some(mtu) = mtu {
-            options.add_option(icmppkt::NDOptionValue::MTU(mtu));
+            options.add_option(icmppkt::NDOptionValue::Mtu(mtu));
         }
 
         for prefix in &intf.prefixes {
@@ -253,7 +253,7 @@ impl RaAdvService {
                 })
                 .collect(),
         ) {
-            options.add_option(icmppkt::NDOptionValue::RDNSS((
+            options.add_option(icmppkt::NDOptionValue::RecursiveDnsServers((
                 intf.rdnss_lifetime
                     .always_unwrap_or(3 * DEFAULT_MAX_RTR_ADV_INTERVAL),
                 v.clone(),
@@ -261,7 +261,7 @@ impl RaAdvService {
         }
 
         if let Some(v) = &intf.dnssl.unwrap_or(config.dns_search.clone()) {
-            options.add_option(icmppkt::NDOptionValue::DNSSL((
+            options.add_option(icmppkt::NDOptionValue::DnsSearchList((
                 intf.dnssl_lifetime
                     .always_unwrap_or(3 * DEFAULT_MAX_RTR_ADV_INTERVAL),
                 v.clone(),
@@ -307,7 +307,7 @@ impl RaAdvService {
         };
 
         /* Find the "best" address for an interface.
-         * We prefer ULA > Global > Link > Other
+         * We prefer UniqueLocalAddress > Global > Link > Other
          */
         let ScopeSorter(self6) = self
             .netinfo
@@ -325,8 +325,8 @@ impl RaAdvService {
             .max()
             .unwrap(); /* v6 interfaces always have a linklocal, so we should have found at least one address here */
 
-        /* Let them know the MTU of the interface */
-        /* We use the value from the config, but if they don't specify one, we just read the MTU
+        /* Let them know the Mtu of the interface */
+        /* We use the value from the config, but if they don't specify one, we just read the Mtu
          * from the interface and use that.  If they don't want erbium to specify one, then they
          * can set the value to "null" in the config.
          */
@@ -641,11 +641,13 @@ fn test_default_values() {
         msg.options
             .find_option(icmppkt::RDNSS)
             .iter()
-            .map(|x| if let icmppkt::NDOptionValue::RDNSS((_, servers)) = x {
-                servers
-            } else {
-                panic!("bad")
-            })
+            .map(
+                |x| if let icmppkt::NDOptionValue::RecursiveDnsServers((_, servers)) = x {
+                    servers
+                } else {
+                    panic!("bad")
+                }
+            )
             .cloned()
             .collect::<Vec<Vec<_>>>(),
         vec![vec!["2001:db8::53".parse::<std::net::Ipv6Addr>().unwrap()]]
@@ -654,11 +656,13 @@ fn test_default_values() {
         msg.options
             .find_option(icmppkt::DNSSL)
             .iter()
-            .map(|x| if let icmppkt::NDOptionValue::DNSSL((_, domains)) = x {
-                domains
-            } else {
-                panic!("bad")
-            })
+            .map(
+                |x| if let icmppkt::NDOptionValue::DnsSearchList((_, domains)) = x {
+                    domains
+                } else {
+                    panic!("bad")
+                }
+            )
             .cloned()
             .collect::<Vec<Vec<_>>>(),
         vec![vec![String::from("example.com")]]

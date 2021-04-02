@@ -28,10 +28,10 @@ pub const PREF64: NDOption = NDOption(38);
 #[derive(Clone, Debug)]
 pub enum NDOptionValue {
     SourceLLAddr(Vec<u8>),
-    MTU(u32),
+    Mtu(u32),
     Prefix(AdvPrefix),
-    RDNSS((std::time::Duration, Vec<std::net::Ipv6Addr>)),
-    DNSSL((std::time::Duration, Vec<String>)), // TODO: String is probably the wrong type here.
+    RecursiveDnsServers((std::time::Duration, Vec<std::net::Ipv6Addr>)),
+    DnsSearchList((std::time::Duration, Vec<String>)), // TODO: String is probably the wrong type here.
     CaptivePortal(String),
     Pref64((std::time::Duration, u8, std::net::Ipv6Addr)),
 }
@@ -49,9 +49,9 @@ impl NDOptions {
         self.0
             .iter()
             .filter(|x| match (&o, &x) {
-                (&RDNSS, &NDOptionValue::RDNSS(_)) => true,
+                (&RDNSS, &NDOptionValue::RecursiveDnsServers(_)) => true,
                 (&RDNSS, _) => false,
-                (&DNSSL, &NDOptionValue::DNSSL(_)) => true,
+                (&DNSSL, &NDOptionValue::DnsSearchList(_)) => true,
                 (&DNSSL, _) => false,
                 (&CAPTIVE_PORTAL, &NDOptionValue::CaptivePortal(_)) => true,
                 (&CAPTIVE_PORTAL, _) => false,
@@ -209,7 +209,7 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
                 v.serialise(1u8);
                 v.serialise(src);
             }
-            NDOptionValue::MTU(mtu) => {
+            NDOptionValue::Mtu(mtu) => {
                 v.serialise(MTU.0);
                 v.serialise(1u8);
                 v.serialise(0u16);
@@ -228,7 +228,7 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
                 v.serialise(0u32);
                 v.serialise(&prefix.prefix);
             }
-            NDOptionValue::RDNSS((lifetime, servers)) => {
+            NDOptionValue::RecursiveDnsServers((lifetime, servers)) => {
                 v.serialise(RDNSS.0);
                 v.serialise((1 + servers.len() * 2) as u8);
                 v.serialise(0u16); // Reserved / Padding.
@@ -237,7 +237,7 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
                     v.serialise(server);
                 }
             }
-            NDOptionValue::DNSSL((lifetime, suffixes)) => {
+            NDOptionValue::DnsSearchList((lifetime, suffixes)) => {
                 let mut dnssl = Serialise::default();
                 for suffix in suffixes {
                     for label in suffix.split('.') {
@@ -306,7 +306,7 @@ fn test_reflexitivity() {
         reachable: Duration::from_secs(30),
         retrans: Duration::from_secs(1),
         options: NDOptions(vec![
-            NDOptionValue::MTU(1480),
+            NDOptionValue::Mtu(1480),
             NDOptionValue::SourceLLAddr(vec![0, 1, 2, 3, 4, 5]),
             NDOptionValue::Prefix(AdvPrefix {
                 prefixlen: 64,
@@ -316,11 +316,11 @@ fn test_reflexitivity() {
                 preferred: Duration::from_secs(3600),
                 prefix: "2001:db8::".parse().unwrap(),
             }),
-            NDOptionValue::RDNSS((
+            NDOptionValue::RecursiveDnsServers((
                 Duration::from_secs(600),
                 vec!["2001:db8::53".parse().unwrap()],
             )),
-            NDOptionValue::DNSSL((
+            NDOptionValue::DnsSearchList((
                 Duration::from_secs(600),
                 vec!["example.com".into(), "example.net".into()],
             )),

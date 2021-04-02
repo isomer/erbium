@@ -402,16 +402,16 @@ impl Arbitrary for NAPTRData {
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(fuzzing, derive(Arbitrary))]
 pub enum RData {
-    CNAME(Domain),
-    MX(PrefDomainData),
-    NS(Domain),
-    PTR(Domain),
-    SOA(SoaData),
-    OPT(EdnsData),
-    AFSDB(AFSDBData),
-    RP(RPData),
-    RT(PrefDomainData),
-    NAPTR(NAPTRData),
+    CName(Domain),
+    Mx(PrefDomainData),
+    Ns(Domain),
+    Ptr(Domain),
+    Soa(SoaData),
+    Opt(EdnsData),
+    AfsDb(AFSDBData),
+    Rp(RPData),
+    Rt(PrefDomainData),
+    NaPtr(NAPTRData),
     Other(Vec<u8>),
 }
 
@@ -419,21 +419,21 @@ impl std::fmt::Display for RData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use RData::*;
         match self {
-            CNAME(d) | NS(d) | PTR(d) => write!(f, "\"{}\"", d),
-            MX(pd) | RT(pd) => write!(f, "{} {}", pd.pref, pd.domain),
-            AFSDB(afs) => write!(f, "{} {}", afs.subtype, afs.hostname),
-            RP(rp) => write!(f, "{} {}", rp.mbox, rp.txt),
-            NAPTR(na) => write!(
+            CName(d) | Ns(d) | Ptr(d) => write!(f, "\"{}\"", d),
+            Mx(pd) | Rt(pd) => write!(f, "{} {}", pd.pref, pd.domain),
+            AfsDb(afs) => write!(f, "{} {}", afs.subtype, afs.hostname),
+            Rp(rp) => write!(f, "{} {}", rp.mbox, rp.txt),
+            NaPtr(na) => write!(
                 f,
                 "{} {} {:?} {:?} {:?} \"{}\"",
                 na.order, na.preference, na.flags, na.services, na.regexp, na.replacement
             ),
-            SOA(v) => write!(
+            Soa(v) => write!(
                 f,
                 "{:?} {:?} {} {} {} {} {}",
                 v.mname, v.rname, v.serial, v.refresh, v.retry, v.expire, v.minimum
             ),
-            OPT(v) => write!(f, "{:?}", v),
+            Opt(v) => write!(f, "{:?}", v),
             Other(v) => write!(f, "\\#{} {:?}", v.len(), v),
         }
     }
@@ -472,16 +472,16 @@ impl Arbitrary for RR {
         let ttl = <_>::arbitrary(u)?;
         let rdata = <_>::arbitrary(u)?;
         let rrtype = match &rdata {
-            RData::NS(_) => RR_NS,
-            RData::CNAME(_) => RR_CNAME,
-            RData::SOA(_) => RR_SOA,
-            RData::PTR(_) => RR_PTR,
-            RData::MX(_) => RR_MX,
-            RData::RP(_) => RR_RP,
-            RData::AFSDB(_) => RR_AFSDB,
-            RData::RT(_) => RR_RT,
-            RData::NAPTR(_) => RR_NAPTR,
-            RData::OPT(_) => RR_OPT,
+            RData::Ns(_) => RR_NS,
+            RData::CName(_) => RR_CNAME,
+            RData::Soa(_) => RR_SOA,
+            RData::Ptr(_) => RR_PTR,
+            RData::Mx(_) => RR_MX,
+            RData::Rp(_) => RR_RP,
+            RData::AfsDb(_) => RR_AFSDB,
+            RData::Rt(_) => RR_RT,
+            RData::NaPtr(_) => RR_NAPTR,
+            RData::Opt(_) => RR_OPT,
             RData::Other(_) => loop {
                 /* Don't create RR_SOA or RR_OPT */
                 let rrtype = <_>::arbitrary(u)?;
@@ -817,20 +817,20 @@ fn push_rr(v: &mut Vec<u8>, rr: &RR, offsets: &mut DomainOffsets) {
     push_u16(v, rr.class.0);
     push_u32(v, rr.ttl);
     match &rr.rdata {
-        RData::CNAME(d) | RData::PTR(d) | RData::NS(d) => {
+        RData::CName(d) | RData::Ptr(d) | RData::Ns(d) => {
             let mut vs = vec![];
             push_compressed_domain(&mut vs, &d, offsets, v.len() + 2);
             push_u16(v, vs.len() as u16);
             v.extend_from_slice(vs.as_slice());
         }
-        RData::MX(pd) | RData::RT(pd) => {
+        RData::Mx(pd) | RData::Rt(pd) => {
             let mut vs = vec![];
             push_u16(&mut vs, pd.pref);
             push_compressed_domain(&mut vs, &pd.domain, offsets, v.len() + 2);
             push_u16(v, vs.len() as u16);
             v.extend_from_slice(vs.as_slice());
         }
-        RData::NAPTR(na) => {
+        RData::NaPtr(na) => {
             let mut vs = vec![];
             push_u16(&mut vs, na.order);
             push_u16(&mut vs, na.preference);
@@ -841,14 +841,14 @@ fn push_rr(v: &mut Vec<u8>, rr: &RR, offsets: &mut DomainOffsets) {
             push_u16(v, vs.len() as u16);
             v.extend_from_slice(vs.as_slice());
         }
-        RData::RP(rp) => {
+        RData::Rp(rp) => {
             let mut vs = vec![];
             push_compressed_domain(&mut vs, &rp.mbox, offsets, v.len() + 2);
             push_compressed_domain(&mut vs, &rp.txt, offsets, v.len() + 2);
             push_u16(v, vs.len() as u16);
             v.extend_from_slice(vs.as_slice());
         }
-        RData::SOA(s) => {
+        RData::Soa(s) => {
             assert!(rr.rrtype == RR_SOA);
             let mut vs = vec![];
             push_compressed_domain(&mut vs, &s.mname, offsets, v.len() + 2);
@@ -862,14 +862,14 @@ fn push_rr(v: &mut Vec<u8>, rr: &RR, offsets: &mut DomainOffsets) {
             push_u16(v, vs.len() as u16);
             v.extend_from_slice(vs.as_slice());
         }
-        RData::AFSDB(afs) => {
+        RData::AfsDb(afs) => {
             let mut vs = vec![];
             push_u16(&mut vs, afs.subtype);
             push_compressed_domain(&mut vs, &afs.hostname, offsets, v.len() + 2);
             push_u16(v, vs.len() as u16);
             v.extend_from_slice(vs.as_slice());
         }
-        RData::OPT(o) => {
+        RData::Opt(o) => {
             assert!(rr.rrtype == RR_OPT);
             let mut vo = vec![];
             o.push_opt(&mut vo);
@@ -921,7 +921,7 @@ impl DNSPkt {
                     } else {
                         0b0
                     }),
-                rdata: RData::OPT(edns),
+                rdata: RData::Opt(edns),
             });
         }
 
@@ -1102,14 +1102,14 @@ fn test_rr_roundtrip() {
         class: CLASS_IN,
         rrtype: RR_CNAME,
         ttl: 300,
-        rdata: RData::CNAME("test.example.com".parse().unwrap()),
+        rdata: RData::CName("test.example.com".parse().unwrap()),
     };
     let orig_naptr = RR {
         domain: "test.example.com".parse().unwrap(),
         class: CLASS_IN,
         rrtype: RR_NAPTR,
         ttl: 300,
-        rdata: RData::NAPTR(NAPTRData {
+        rdata: RData::NaPtr(NAPTRData {
             order: 10,
             preference: 20,
             flags: "FLAG".into(),
@@ -1154,7 +1154,7 @@ fn test_pkt_roundtrip() {
                 ttl: 16843009,
                 class: Class(257),
                 rrtype: RR_NAPTR,
-                rdata: RData::NAPTR(NAPTRData {
+                rdata: RData::NaPtr(NAPTRData {
                     order: 47288,
                     preference: 11960,
                     flags: "flags".into(),
@@ -1168,7 +1168,7 @@ fn test_pkt_roundtrip() {
                 ttl: 1234,
                 class: CLASS_IN,
                 rrtype: RR_SOA,
-                rdata: RData::SOA(SoaData {
+                rdata: RData::Soa(SoaData {
                     mname: "dnsmaster.example.com".parse().unwrap(),
                     rname: "ns1.example.com".parse().unwrap(),
                     serial: 1,
@@ -1183,7 +1183,7 @@ fn test_pkt_roundtrip() {
                 ttl: 1234,
                 class: CLASS_IN,
                 rrtype: RR_MX,
-                rdata: RData::MX(PrefDomainData {
+                rdata: RData::Mx(PrefDomainData {
                     pref: 10,
                     domain: "mx.example.com".parse().unwrap(),
                 }),

@@ -812,7 +812,7 @@ impl DhcpOptions {
 }
 
 #[derive(PartialEq)]
-pub struct DHCP {
+pub struct Dhcp {
     pub op: DhcpOp,
     pub htype: HwType,
     pub hlen: u8,
@@ -830,9 +830,9 @@ pub struct DHCP {
     pub options: DhcpOptions,
 }
 
-impl std::fmt::Debug for DHCP {
+impl std::fmt::Debug for Dhcp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DHCP")
+        f.debug_struct("Dhcp")
             .field("op", &self.op)
             .field("htype", &self.htype)
             .field("hlen", &self.hlen)
@@ -883,7 +883,7 @@ fn null_terminated(mut v: Vec<u8>) -> Vec<u8> {
     v
 }
 
-pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
+pub fn parse(pkt: &[u8]) -> Result<Dhcp, ParseError> {
     let mut buf = pktparser::Buffer::new(pkt);
     let op = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
     let htype = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
@@ -929,7 +929,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
 
     let options = DhcpOptions { other: raw_options };
 
-    Ok(DHCP {
+    Ok(Dhcp {
         op: DhcpOp(op),
         htype: HwType(htype),
         hlen,
@@ -1059,7 +1059,7 @@ fn serialise_fixed(out: &[u8], l: usize, v: &mut Vec<u8>) {
     }
 }
 
-impl DHCP {
+impl Dhcp {
     pub fn serialise(&self) -> Vec<u8> {
         let mut v: Vec<u8> = Vec::new();
         self.op.0.serialise(&mut v);

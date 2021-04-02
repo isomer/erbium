@@ -78,15 +78,15 @@ impl Decoder for DnsCodec {
 }
 
 pub enum Protocol {
-    UDP,
-    TCP,
+    Udp,
+    Tcp,
 }
 
 impl std::fmt::Display for Protocol {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match &self {
-            Protocol::UDP => write!(f, "UDP"),
-            Protocol::TCP => write!(f, "TCP"),
+            Protocol::Udp => write!(f, "UDP"),
+            Protocol::Tcp => write!(f, "TCP"),
         }
     }
 }
@@ -330,7 +330,7 @@ impl DnsListenerHandler {
                 &rm.buffer,
                 rm.local_ip().unwrap(), /* TODO: Error? */
                 rm.address.unwrap(),    /* TODO: Error? */
-                Protocol::UDP,
+                Protocol::Udp,
             ) {
                 Ok(msg) => {
                     match Self::recv_in_query(&q, &msg).await {
@@ -403,7 +403,7 @@ impl DnsListenerHandler {
                 &buffer,
                 sock.local_addr().ok().map(|addr| addr.ip()).unwrap(), /* TODO: Error? */
                 sock_addr,
-                Protocol::TCP,
+                Protocol::Tcp,
             ) {
                 Ok(msg) => {
                     let in_reply = match Self::recv_in_query(&q, &msg).await {

@@ -125,7 +125,7 @@ impl DhcpError {
 #[derive(Debug)]
 pub struct DHCPRequest {
     /// The DHCP request packet.
-    pub pkt: dhcppkt::DHCP,
+    pub pkt: dhcppkt::Dhcp,
     /// The IP address that the request was received on.
     pub serverip: std::net::Ipv4Addr,
     /// The interface index that the request was received on.
@@ -138,7 +138,7 @@ pub struct DHCPRequest {
 impl std::default::Default for DHCPRequest {
     fn default() -> Self {
         DHCPRequest {
-            pkt: dhcppkt::DHCP {
+            pkt: dhcppkt::Dhcp {
                 op: dhcppkt::OP_BOOTREQUEST,
                 htype: dhcppkt::HWTYPE_ETHERNET,
                 hlen: 6,
@@ -376,7 +376,7 @@ fn handle_discover<'l>(
     _serverids: ServerIds,
     base: &[config::Policy],
     conf: &'l super::config::Config,
-) -> Result<dhcppkt::DHCP, DhcpError> {
+) -> Result<dhcppkt::Dhcp, DhcpError> {
     /* Build the default response we are about to reply with, it will be filled in later */
     let mut response: Response = Response {
         options: ResponseOptions {
@@ -414,7 +414,7 @@ fn handle_discover<'l>(
                     lease.lease_type
                 );
 
-                Ok(dhcppkt::DHCP {
+                Ok(dhcppkt::Dhcp {
                     op: dhcppkt::OP_BOOTREPLY,
                     htype: dhcppkt::HWTYPE_ETHERNET,
                     hlen: 6,
@@ -451,7 +451,7 @@ fn handle_request(
     serverids: ServerIds,
     base: &[config::Policy],
     conf: &super::config::Config,
-) -> Result<dhcppkt::DHCP, DhcpError> {
+) -> Result<dhcppkt::Dhcp, DhcpError> {
     if let Some(si) = req.pkt.options.get_serverid() {
         if !serverids.contains(&si) {
             return Err(DhcpError::OtherServer(si));
@@ -491,7 +491,7 @@ fn handle_request(
                     lease.expire,
                     lease.lease_type
                 );
-                Ok(dhcppkt::DHCP {
+                Ok(dhcppkt::Dhcp {
                     op: dhcppkt::OP_BOOTREPLY,
                     htype: dhcppkt::HWTYPE_ETHERNET,
                     hlen: 6,
@@ -531,7 +531,7 @@ fn format_mac(v: &[u8]) -> String {
         .join(":")
 }
 
-fn format_client(req: &dhcppkt::DHCP) -> String {
+fn format_client(req: &dhcppkt::Dhcp) -> String {
     format!(
         "{} ({})",
         format_mac(&req.chaddr),
@@ -543,7 +543,7 @@ fn format_client(req: &dhcppkt::DHCP) -> String {
     )
 }
 
-fn log_options(req: &dhcppkt::DHCP) {
+fn log_options(req: &dhcppkt::Dhcp) {
     log::info!(
         "{}: Options: {}",
         format_client(&req),
@@ -720,7 +720,7 @@ pub async fn handle_pkt(
     request: &DHCPRequest,
     serverids: ServerIds,
     conf: &super::config::Config,
-) -> Result<dhcppkt::DHCP, DhcpError> {
+) -> Result<dhcppkt::Dhcp, DhcpError> {
     match request.pkt.options.get_messagetype() {
         Some(dhcppkt::DHCPDISCOVER) => {
             let base = [build_default_config(&conf, &request).await];
@@ -978,9 +978,9 @@ impl DhcpService {
             netinfo,
             conf,
             rawsock,
+            pool,
             serverids,
             listener,
-            pool,
         })
     }
 
@@ -1109,7 +1109,7 @@ dhcp-policies:
     };
     if !apply_policies(
         &DHCPRequest {
-            pkt: dhcppkt::DHCP {
+            pkt: dhcppkt::Dhcp {
                 op: dhcppkt::OP_BOOTREQUEST,
                 htype: dhcppkt::HWTYPE_ETHERNET,
                 hlen: 6,
@@ -1156,7 +1156,7 @@ dhcp-policies:
 
 #[test]
 fn test_format_client() {
-    let req = dhcppkt::DHCP {
+    let req = dhcppkt::Dhcp {
         op: dhcppkt::OP_BOOTREQUEST,
         htype: dhcppkt::HWTYPE_ETHERNET,
         hlen: 6,

@@ -37,8 +37,8 @@ const NOT_SERVER_IP: net::Ipv4Addr = EXAMPLE_IP3;
 
 const CLIENTID: &[u8] = b"Client Identifier";
 
-fn mk_dhcp_request_pkt() -> dhcppkt::DHCP {
-    dhcppkt::DHCP {
+fn mk_dhcp_request_pkt() -> dhcppkt::Dhcp {
+    dhcppkt::Dhcp {
         op: dhcppkt::OP_BOOTREQUEST,
         htype: dhcppkt::HWTYPE_ETHERNET,
         hlen: 6,

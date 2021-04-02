@@ -463,7 +463,7 @@ impl OutQuery {
 
         let out_reply;
         match msg.protocol {
-            Protocol::UDP => {
+            Protocol::Udp => {
                 /* TODO: If we have a warm TCP connection already open, _and_ we have stats that
                  * say TCP is faster than UDP (which is likely if packet loss is high), then we
                  * should skip UDP and just use the existing TCP connection.
@@ -492,7 +492,7 @@ impl OutQuery {
              * good reason for it (eg, a previous reply was truncated, or due to kaminsky attacks
              * or whatever), so we're going to follow suit.
              */
-            Protocol::TCP => {
+            Protocol::Tcp => {
                 out_reply = TcpNameserver::send_query_to(&addr, oq).await?;
             }
         }
