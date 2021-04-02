@@ -1,3 +1,6 @@
+0.2.10 (UNRELEASED)
+   - DHCP: Bug Fix: If there are multiple active leases for a host, don't flip
+     between them, but instead try and keep one.
 0.2.9
    - Workaround for not compiling on NixOS.
 0.2.7
