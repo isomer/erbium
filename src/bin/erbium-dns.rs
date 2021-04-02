@@ -16,17 +16,19 @@
  *
  *  Thin wrapper to start DNS services only.
  */
-use futures::StreamExt as _;
 
 extern crate erbium;
 
+#[cfg(feature = "dns")]
 use erbium::dns;
 
+#[cfg(feature = "dns")]
 enum Error {
     Config(erbium::config::Error),
     Dns(dns::Error),
 }
 
+#[cfg(feature = "dns")]
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Error::*;
@@ -37,7 +39,9 @@ impl std::fmt::Display for Error {
     }
 }
 
+#[cfg(feature = "dns")]
 async fn go() -> Result<(), Error> {
+    use futures::StreamExt as _;
     let args: Vec<_> = std::env::args_os().collect();
     let config_file = match args.len() {
         1 => std::path::Path::new("erbium.conf"),
@@ -47,14 +51,17 @@ async fn go() -> Result<(), Error> {
             return Ok(());
         }
     };
-    let conf = erbium::config::load_config_from_path(config_file)
-        .await
-        .map_err(Error::Config)?;
-    let mut services = futures::stream::FuturesUnordered::new();
+    let mut services: futures::stream::FuturesUnordered<
+        tokio::task::JoinHandle<std::result::Result<(), String>>,
+    > = futures::stream::FuturesUnordered::new();
 
-    let dns = dns::DnsService::new(conf.clone())
-        .await
-        .map_err(Error::Dns)?;
+    let dns = dns::DnsService::new(
+        erbium::config::load_config_from_path(config_file)
+            .await
+            .map_err(Error::Config)?,
+    )
+    .await
+    .map_err(Error::Dns)?;
 
     services.push(tokio::spawn(async move {
         dns.run().await.map_err(|err| err.to_string())
@@ -78,6 +85,7 @@ async fn main() {
             .map(|sha| format!(" ({})", sha))
             .unwrap_or_else(|| "".into())
     );
+    #[cfg(feature = "dns")]
     match go().await {
         Ok(()) => (),
         Err(x) => {

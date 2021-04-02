@@ -1,3 +1,5 @@
+0.2.9
+   - Workaround for not compiling on NixOS.
 0.2.8
    - Cookies are now sent on error
    - Fixed some metrics bugs.

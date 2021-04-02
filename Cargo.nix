@@ -1120,7 +1120,7 @@ rec {
           }
         ];
         features = {
-          "default" = [ "dhcp" "radv" "http" "dns" ];
+          "default" = [ "dhcp" "radv" "http" ];
           "full" = [ "dhcp" "radv" "http" "dns" ];
           "http" = [ "hyper" "dhcp" ];
         };
@@ -2475,6 +2475,48 @@ rec {
             name = "winapi";
             packageId = "winapi";
             target = { target, features }: target."windows";
+          }
+        ];
+        features = {
+          "default" = [ "with-deprecated" ];
+        };
+        resolvedDefaultFeatures = [ "default" "with-deprecated" ];
+      };
+      "mio 0.7.10" = rec {
+        crateName = "mio";
+        version = "0.7.10";
+        edition = "2018";
+        sha256 = "0ffqz2bg0x76wqsnk9c01ad4b8lv13p2r5xikhrgbwxpycia30i1";
+        authors = [
+          "Carl Lerche <me@carllerche.com>"
+          "Thomas de Zeeuw <thomasdezeeuw@gmail.com>"
+          "Tokio Contributors <team@tokio.rs>"
+        ];
+        dependencies = [
+          {
+            name = "libc";
+            packageId = "libc";
+            target = { target, features }: target."unix";
+          }
+          {
+            name = "log";
+            packageId = "log";
+          }
+          {
+            name = "miow";
+            packageId = "miow 0.3.6";
+            target = { target, features }: target."windows";
+          }
+          {
+            name = "ntapi";
+            packageId = "ntapi";
+            target = { target, features }: target."windows";
+          }
+          {
+            name = "winapi";
+            packageId = "winapi 0.3.9";
+>>>>>>> master
+            target = { target, features }: target."windows";
             features = [ "winsock2" "mswsock" ];
           }
         ];
@@ -3617,6 +3659,7 @@ rec {
           "default" = [ "unicode" ];
           "unicode" = [ "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" ];
         };
+        resolvedDefaultFeatures = [ "default" "unicode" "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" ];
       };
       "rusqlite" = rec {
         crateName = "rusqlite";
@@ -4595,6 +4638,10 @@ rec {
           {
             name = "thiserror";
             packageId = "thiserror";
+          }
+          {
+            name = "rustc_version";
+            packageId = "rustc_version";
           }
         ];
         buildDependencies = [

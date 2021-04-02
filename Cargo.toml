@@ -44,8 +44,6 @@ tokio-util = { version="0.6", features= ["codec"] }
 tokio = { version = "1.0", features = ["full"] }
 yaml-rust = { version = "0.4" }
 
-
-
 [[bin]]
 name="erbium-dns"
 required-features=["dns"]
