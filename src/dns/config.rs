@@ -111,3 +111,19 @@ pub fn parse_dns_route(name: &str, fragment: &yaml::Yaml) -> Result<Option<Route
 pub fn parse_dns_routes(name: &str, fragment: &yaml::Yaml) -> Result<Option<Vec<Route>>, Error> {
     parse_array(name, fragment, parse_dns_route)
 }
+
+#[test]
+fn test_dns_config() -> Result<(), Error> {
+    use crate::config;
+    config::load_config_from_string_for_test(
+        "---
+dns-routes:
+  - domain-suffixes: ['invalid']
+    type: forge-nxdomain
+  - domain-suffixes: ['']
+    type: forward
+    dns-servers: [2001:4860:4860::8888]
+",
+    )?;
+    Ok(())
+}
