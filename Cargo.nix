@@ -131,9 +131,9 @@ rec {
       };
       "anyhow" = rec {
         crateName = "anyhow";
-        version = "1.0.39";
+        version = "1.0.40";
         edition = "2018";
-        sha256 = "0rr7gd6m8wn724q64m7w7s5fxph8zwa9gin79ik6g0v2j5gxrkc1";
+        sha256 = "0fq6qxlzp3bwrjbs3wp4i470k8vsvlkpx3q2wpl79gawvf9cvci8";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -859,9 +859,9 @@ rec {
       };
       "ctor" = rec {
         crateName = "ctor";
-        version = "0.1.19";
+        version = "0.1.20";
         edition = "2018";
-        sha256 = "06bbsv7lm9c9mfdg896vdxmdkkammc0sa56n2x4fzg0psjd5vx78";
+        sha256 = "0v80naiw5fp81xkyfkds6jpyamf3wx43kz4nif936bkq3any562y";
         procMacro = true;
         authors = [
           "Matt Mastracci <matthew@mastracci.com>"
@@ -1000,6 +1000,7 @@ rec {
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
           { name = "erbium-dhcp"; path = "src/bin/erbium-dhcp.rs"; }
           { name = "erbium"; path = "src/main.rs"; }
+          { name = "erbium-netinfo"; path = "src/bin/erbium-netinfo.rs"; }
           { name = "erbium-conftest"; path = "src/bin/erbium-conftest.rs"; }
         ];
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./.; };
@@ -1120,7 +1121,7 @@ rec {
           }
         ];
         features = {
-          "default" = [ "dhcp" "radv" "http" ];
+          "default" = [ "dhcp" "radv" "http" "dns" ];
           "full" = [ "dhcp" "radv" "http" "dns" ];
           "http" = [ "hyper" "dhcp" ];
         };
@@ -1967,9 +1968,9 @@ rec {
       };
       "hyper" = rec {
         crateName = "hyper";
-        version = "0.14.4";
+        version = "0.14.5";
         edition = "2018";
-        sha256 = "1ivaqbcvsws6svwykiq7fgma7wds72r83qianzh5b41ln714dsg8";type = [ "lib" "staticlib" "cdylib" ];
+        sha256 = "1l8accw56fqk85isi1g3ahiw1mi3wj5gh3g51p0g9z1cnmhrzw4b";type = [ "lib" "staticlib" "cdylib" ];
         authors = [
           "Sean McArthur <sean@seanmonstar.com>"
         ];
@@ -2018,7 +2019,7 @@ rec {
           }
           {
             name = "socket2";
-            packageId = "socket2 0.3.19";
+            packageId = "socket2";
             optional = true;
           }
           {
@@ -2138,9 +2139,9 @@ rec {
       };
       "js-sys" = rec {
         crateName = "js-sys";
-        version = "0.3.49";
+        version = "0.3.50";
         edition = "2018";
-        sha256 = "08f8avgmlwb44jqjmw4gjhx6rzw1adpl3flm1kv7al0jja9y65fw";
+        sha256 = "0k526bcp63ma05pwxjwzfmn9zhmiqfxlqnzg8vw6g3sbx3izk69d";
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -2183,9 +2184,9 @@ rec {
       };
       "libc" = rec {
         crateName = "libc";
-        version = "0.2.90";
+        version = "0.2.92";
         edition = "2015";
-        sha256 = "1bll4c76xv9aa1mcmijpqb0m15wif26br4v9vh8p8qf37zlfsjms";
+        sha256 = "0537k32dhh6248ajrhmibjbqf49crm8235hg9hs9pfxgkw35bn2n";
         authors = [
           "The Rust Project Developers"
         ];
@@ -2194,7 +2195,7 @@ rec {
           "rustc-dep-of-std" = [ "align" "rustc-std-workspace-core" ];
           "use_std" = [ "std" ];
         };
-        resolvedDefaultFeatures = [ "align" "default" "extra_traits" "std" ];
+        resolvedDefaultFeatures = [ "default" "extra_traits" "std" ];
       };
       "libgit2-sys" = rec {
         crateName = "libgit2-sys";
@@ -2443,9 +2444,9 @@ rec {
       };
       "mio" = rec {
         crateName = "mio";
-        version = "0.7.10";
+        version = "0.7.11";
         edition = "2018";
-        sha256 = "0ffqz2bg0x76wqsnk9c01ad4b8lv13p2r5xikhrgbwxpycia30i1";
+        sha256 = "0mi9ah60l270761sz6qdhhn0hkn5msc8689b53bhnkmk0glx706g";
         authors = [
           "Carl Lerche <me@carllerche.com>"
           "Thomas de Zeeuw <thomasdezeeuw@gmail.com>"
@@ -2475,49 +2476,7 @@ rec {
             name = "winapi";
             packageId = "winapi";
             target = { target, features }: target."windows";
-          }
-        ];
-        features = {
-          "default" = [ "with-deprecated" ];
-        };
-        resolvedDefaultFeatures = [ "default" "with-deprecated" ];
-      };
-      "mio 0.7.10" = rec {
-        crateName = "mio";
-        version = "0.7.10";
-        edition = "2018";
-        sha256 = "0ffqz2bg0x76wqsnk9c01ad4b8lv13p2r5xikhrgbwxpycia30i1";
-        authors = [
-          "Carl Lerche <me@carllerche.com>"
-          "Thomas de Zeeuw <thomasdezeeuw@gmail.com>"
-          "Tokio Contributors <team@tokio.rs>"
-        ];
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-            target = { target, features }: target."unix";
-          }
-          {
-            name = "log";
-            packageId = "log";
-          }
-          {
-            name = "miow";
-            packageId = "miow 0.3.6";
-            target = { target, features }: target."windows";
-          }
-          {
-            name = "ntapi";
-            packageId = "ntapi";
-            target = { target, features }: target."windows";
-          }
-          {
-            name = "winapi";
-            packageId = "winapi 0.3.9";
->>>>>>> master
-            target = { target, features }: target."windows";
-            features = [ "winsock2" "mswsock" ];
+            features = [ "winsock2" "mswsock" "mstcpip" ];
           }
         ];
         features = {
@@ -2532,17 +2491,13 @@ rec {
       };
       "miow" = rec {
         crateName = "miow";
-        version = "0.3.6";
+        version = "0.3.7";
         edition = "2018";
-        sha256 = "15sqdhh29dqgw5xh59clwv6scbsbvdkbmdc16hbfvyq7b2sw2css";
+        sha256 = "08afp2xfpxmdw003111lxz6g9jgbj4zi2fpldvv7da6d4nqcbwdr";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
         dependencies = [
-          {
-            name = "socket2";
-            packageId = "socket2 0.3.19";
-          }
           {
             name = "winapi";
             packageId = "winapi";
@@ -2568,7 +2523,7 @@ rec {
           }
           {
             name = "socket2";
-            packageId = "socket2 0.4.0";
+            packageId = "socket2";
             features = [ "all" ];
           }
         ];
@@ -2971,9 +2926,9 @@ rec {
       };
       "pin-project" = rec {
         crateName = "pin-project";
-        version = "1.0.5";
+        version = "1.0.6";
         edition = "2018";
-        sha256 = "0qqbmxna4b49p80qnhlbnzvdi2q6p22l8da4y5vl8717j2xqxyln";
+        sha256 = "19hva0wx1zm1v4n5vp4qdbljj6n9jpd7l63mwldfj1l8frclh5xw";
         authors = [
           "Taiki Endo <te316e89@gmail.com>"
         ];
@@ -2988,9 +2943,9 @@ rec {
       };
       "pin-project-internal" = rec {
         crateName = "pin-project-internal";
-        version = "1.0.5";
+        version = "1.0.6";
         edition = "2018";
-        sha256 = "02scl9dsvlg5nnlxcfb6x9d1jnhbmkvl32x1s95zgijq6np6k1km";
+        sha256 = "1ra9j3q9yiwz3agfmr07chrlz31dzqxlw91z10dysmp832ck5454";
         procMacro = true;
         authors = [
           "Taiki Endo <te316e89@gmail.com>"
@@ -3194,9 +3149,9 @@ rec {
       };
       "proc-macro2" = rec {
         crateName = "proc-macro2";
-        version = "1.0.24";
+        version = "1.0.26";
         edition = "2018";
-        sha256 = "0wcabxzrddcjmryndw8fpyxcq6rw63m701vx86xxf03y3bp081qy";
+        sha256 = "1v4w5jchgsssr727iyv986r8jaw6z80bzlhqgrbp78nw2lr02lm1";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
           "David Tolnay <dtolnay@gmail.com>"
@@ -3659,7 +3614,6 @@ rec {
           "default" = [ "unicode" ];
           "unicode" = [ "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" ];
         };
-        resolvedDefaultFeatures = [ "default" "unicode" "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" ];
       };
       "rusqlite" = rec {
         crateName = "rusqlite";
@@ -3873,37 +3827,7 @@ rec {
         features = {
         };
       };
-      "socket2 0.3.19" = rec {
-        crateName = "socket2";
-        version = "0.3.19";
-        edition = "2018";
-        sha256 = "0vldz14mxqxnjqb6an2pj7mgclv7nrk45cpscwq7g3fj2c0mfbhj";
-        authors = [
-          "Alex Crichton <alex@alexcrichton.com>"
-        ];
-        dependencies = [
-          {
-            name = "cfg-if";
-            packageId = "cfg-if";
-            target = { target, features }: target."unix";
-          }
-          {
-            name = "libc";
-            packageId = "libc";
-            target = { target, features }: target."unix";
-            features = [ "align" ];
-          }
-          {
-            name = "winapi";
-            packageId = "winapi";
-            target = { target, features }: target."windows";
-            features = [ "handleapi" "ws2def" "ws2ipdef" "ws2tcpip" "minwindef" ];
-          }
-        ];
-        features = {
-        };
-      };
-      "socket2 0.4.0" = rec {
+      "socket2" = rec {
         crateName = "socket2";
         version = "0.4.0";
         edition = "2018";
@@ -3931,9 +3855,9 @@ rec {
       };
       "syn" = rec {
         crateName = "syn";
-        version = "1.0.64";
+        version = "1.0.68";
         edition = "2018";
-        sha256 = "0vsx3448kyym7s5kybrl0qixgya33gzjxaidahya00k1jzlx3n9z";
+        sha256 = "11zxx242fk12l3hxfhfvas96p2xmbbpxc5j7mkpgi8laxp9mvq9w";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -4639,10 +4563,6 @@ rec {
             name = "thiserror";
             packageId = "thiserror";
           }
-          {
-            name = "rustc_version";
-            packageId = "rustc_version";
-          }
         ];
         buildDependencies = [
           {
@@ -4714,9 +4634,9 @@ rec {
       };
       "wasm-bindgen" = rec {
         crateName = "wasm-bindgen";
-        version = "0.2.72";
+        version = "0.2.73";
         edition = "2018";
-        sha256 = "1ghgmhxv7yj0v472qp84w7aix1k619xdqcl19md68pcfp8fzds4g";
+        sha256 = "1n93yq72c7bd2464gg48405yzgvwakwc0cqzz647864xcm4ha943";
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -4742,9 +4662,9 @@ rec {
       };
       "wasm-bindgen-backend" = rec {
         crateName = "wasm-bindgen-backend";
-        version = "0.2.72";
+        version = "0.2.73";
         edition = "2018";
-        sha256 = "1lqzvkdzw66wdhm7wgs80aih0zx349dvmd3w5h3xlqphiyjynv04";
+        sha256 = "1bkxxkmxfy182aav9qqkcq7mz48yxgmx61kdr8ak55fa24j64w5f";
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -4786,9 +4706,9 @@ rec {
       };
       "wasm-bindgen-futures" = rec {
         crateName = "wasm-bindgen-futures";
-        version = "0.4.22";
+        version = "0.4.23";
         edition = "2018";
-        sha256 = "0s1lxjm3y30dd60d4wdi9nj39hy7s6phk82rpdjbavzjkbxpw5bk";
+        sha256 = "1sk3zhmrwvz3aa9b63yz7ms04agd1dlqn5pjig0nmpi3mxkvgf41";
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -4818,9 +4738,9 @@ rec {
       };
       "wasm-bindgen-macro" = rec {
         crateName = "wasm-bindgen-macro";
-        version = "0.2.72";
+        version = "0.2.73";
         edition = "2018";
-        sha256 = "16w1frwyqcaqaj6pm6b3rk4ibipkyngramvwg5ph9nkcsc0smy8f";
+        sha256 = "0vqgbnbnh6zs339v6g9w3j9idi8m3s1dws8rnkypn5rz8j8lswry";
         procMacro = true;
         authors = [
           "The wasm-bindgen Developers"
@@ -4843,9 +4763,9 @@ rec {
       };
       "wasm-bindgen-macro-support" = rec {
         crateName = "wasm-bindgen-macro-support";
-        version = "0.2.72";
+        version = "0.2.73";
         edition = "2018";
-        sha256 = "0pbknfjlh57zyzvk9aslxgvqnhan72sxp4ish5d58czfnb0lbswn";
+        sha256 = "0b0vcb8pvg03cmq9sg5b94a0p05bp1rc6m6dvc7qp9n813zkjdym";
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -4880,9 +4800,9 @@ rec {
       };
       "wasm-bindgen-shared" = rec {
         crateName = "wasm-bindgen-shared";
-        version = "0.2.72";
+        version = "0.2.73";
         edition = "2018";
-        sha256 = "1yjzil4mndy1bzvm1xr1pbmw86ianjzhp9pa8sin0jgvjr38y55p";
+        sha256 = "12a4kq5wvy3znkqlqn6ib25ips1k9apxjpknpca3s8xacsp479fr";
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -4890,9 +4810,9 @@ rec {
       };
       "web-sys" = rec {
         crateName = "web-sys";
-        version = "0.3.49";
+        version = "0.3.50";
         edition = "2018";
-        sha256 = "0413s7f96k5xdk55cpap04warrfaz89p4xs6dqzw1b2x1zbikzjr";
+        sha256 = "1gl1akzrzprc3hc16h1lcai2f3dm1xkr6cvd8ihqiv4g91zda1d9";
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -5369,7 +5289,7 @@ rec {
         features = {
           "debug" = [ "impl-debug" ];
         };
-        resolvedDefaultFeatures = [ "cfg" "consoleapi" "errhandlingapi" "evntrace" "fileapi" "handleapi" "in6addr" "inaddr" "ioapiset" "minwinbase" "minwindef" "mswsock" "namedpipeapi" "ntdef" "ntsecapi" "ntstatus" "processenv" "profileapi" "std" "synchapi" "sysinfoapi" "threadpoollegacyapiset" "timezoneapi" "winbase" "wincon" "windef" "winerror" "winioctl" "winnt" "winsock2" "ws2def" "ws2ipdef" "ws2tcpip" ];
+        resolvedDefaultFeatures = [ "cfg" "consoleapi" "errhandlingapi" "evntrace" "fileapi" "handleapi" "in6addr" "inaddr" "ioapiset" "minwinbase" "minwindef" "mstcpip" "mswsock" "namedpipeapi" "ntdef" "ntsecapi" "ntstatus" "processenv" "profileapi" "std" "synchapi" "sysinfoapi" "threadpoollegacyapiset" "timezoneapi" "winbase" "wincon" "windef" "winerror" "winioctl" "winnt" "winsock2" "ws2def" "ws2ipdef" "ws2tcpip" ];
       };
       "winapi-i686-pc-windows-gnu" = rec {
         crateName = "winapi-i686-pc-windows-gnu";
