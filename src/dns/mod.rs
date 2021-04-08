@@ -1047,12 +1047,22 @@ impl DnsListenerHandler {
         tcp: tokio::net::TcpListener,
         s: std::sync::Arc<tokio::sync::RwLock<Self>>,
     ) -> Result<(), Error> {
-        let (sock, sock_addr) = tcp.accept().await.map_err(Error::ListenError)?;
-        let local_s = s.clone();
+        loop {
+            match tcp.accept().await.map_err(Error::ListenError) {
+                Ok((sock, sock_addr)) => {
+                    let local_s = s.clone();
 
-        tokio::spawn(async move { Self::run_tcp(&local_s, sock, sock_addr).await });
-
-        Ok(())
+                    tokio::spawn(async move { Self::run_tcp(&local_s, sock, sock_addr).await });
+                }
+                Err(err) => log::warn!(
+                    "Error on {}: {}",
+                    tcp.local_addr()
+                        .map(|a| format!("{}", a))
+                        .unwrap_or_else(|_| "<unknown tcp socket>".into()),
+                    err
+                ),
+            }
+        }
     }
 
     async fn run(s: &std::sync::Arc<tokio::sync::RwLock<Self>>) -> Result<(), Error> {
