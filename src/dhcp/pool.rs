@@ -155,7 +155,7 @@ impl Pool {
                   leases",
             )
             .map_err(|e| Error::DbError(e.to_string()))?
-            .query_map(rusqlite::NO_PARAMS, |row| {
+            .query_map([], |row| {
                 Ok(LeaseInfo {
                     ip: row
                         .get::<_, String>(0)?

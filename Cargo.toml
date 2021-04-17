@@ -1,6 +1,6 @@
 [package]
 name = "erbium"
-version = "0.2.10"
+version = "0.2.11"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2018"
 default-run = "erbium"
@@ -18,7 +18,7 @@ radv=[]
 http=["hyper", "dhcp"] # Currently can't compile http without dhcp.
 
 [dependencies]
-arbitrary = { version = "0.4", features = [ "derive" ]}
+arbitrary = { version = "1.0", features = [ "derive" ]}
 async-std = { version = "1.6.2", features = ["tokio02"] }
 async-trait = { version = "0.1.42" }
 bytes = "1.0"
@@ -31,12 +31,12 @@ hyper = { version = "0.14.5", features=["server", "http1", "stream", "runtime", 
 lazy_static = "1.4"
 log = "0.4"
 mio = { version = "0.7" }
-netlink-packet-route = "0.6"
-netlink-sys = { version="0.5", features=["tokio_socket"] }
-nix = { version = "0.19" }
-prometheus = { version="0.11.0", features=["process"] }
+netlink-packet-route = "0.7"
+netlink-sys = { version="0.6", features=["tokio_socket"] }
+nix = { version = "0.20" }
+prometheus = { version="0.12.0", features=["process"] }
 rand = "0.8"
-rusqlite = { version = "0.24" }
+rusqlite = { version = "0.25" }
 tokio-compat-02 = "0.2"
 tokio-util = { version="0.6", features= ["codec"] }
 tokio = { version = "1.0", features = ["full"] }
