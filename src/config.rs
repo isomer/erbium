@@ -969,9 +969,7 @@ dns-search: ['example.com']
 addresses: [192.0.2.0/24, 2001:db8::/64]
 
 dhcp-listeners: [192.0.2.0:67]
-
-router-advertisements:
-    eth0:
+dns-listeners: [192.0.2.0:53]
 ",
     )?;
     Ok(())
