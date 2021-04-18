@@ -737,6 +737,7 @@ pub struct Config {
     pub captive_portal: Option<String>,
     pub addresses: Vec<Prefix>,
     pub listeners: Vec<nix::sys::socket::SockAddr>,
+    pub dhcp_listeners: Vec<nix::sys::socket::SockAddr>,
     pub acls: Vec<crate::acl::Acl>,
 }
 
@@ -758,6 +759,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut captive_portal = None;
         let mut addresses = None;
         let mut listeners = None;
+        let mut dhcp_listeners = None;
         let mut acls = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
@@ -783,6 +785,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 }
                 (Some("api-listeners"), s) => {
                     listeners = parse_array("api-listeners", s, parse_string_sockaddr)?;
+                }
+                (Some("dhcp-listeners"), s) => {
+                    dhcp_listeners = parse_array("dhcp-listeners", s, parse_string_sockaddr)?;
                 }
                 (Some("acls"), s) => {
                     acls = parse_array("acls", s, crate::acl::parse_acl)?;
@@ -814,6 +819,15 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                     nix::sys::socket::UnixAddr::new("/var/lib/erbium/control").unwrap(),
                 )]
             }),
+            dhcp_listeners: dhcp_listeners.unwrap_or_else(|| {
+                vec![nix::sys::socket::SockAddr::new_inet(
+                    nix::sys::socket::InetAddr::new(
+                        nix::sys::socket::IpAddr::new_v4(0, 0, 0, 0),
+                        67,
+                    ),
+                )]
+            }),
+
             acls: acls.unwrap_or_else(|| crate::acl::default_acls(&addresses)),
             addresses,
         };
@@ -920,6 +934,22 @@ addresses: [192.0.2.0/24, 2001:db8::/64]
 router-advertisements:
     eth0:
      lifetime: 1h
+",
+    )?;
+    Ok(())
+}
+
+#[test]
+fn test_listeners_parse() -> Result<(), Error> {
+    load_config_from_string(
+        "---
+dns-search: ['example.com']
+addresses: [192.0.2.0/24, 2001:db8::/64]
+
+dhcp-listeners: [192.0.2.0:67]
+
+router-advertisements:
+    eth0:
 ",
     )?;
     Ok(())

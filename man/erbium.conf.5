@@ -86,8 +86,13 @@ By default this is only a unix domain socket, which can be easily secured.
 IPv4 (ip:port) and IPv6 ([ip]:port) are also supported.
 You may wish to use ["/var/lib/erbium/control", "[::1]:9968"] to allow scraping
 prometheus metrics from ip6-localhost.
-This is currently an experimental feature and only enabled with
-\fB\-\-features=http\fP on the cargo build command line.
+
+.IP "\fBdhcp\-listeners:\fP \fIlist\-of\-socket\-addresses\fP"
+(defaults to [0.0.0.0:67])
+This sets the addresses that the DHCP server will listen on.
+By default this is the IPv6 DHCP server port for all interfaces (packets to
+interfaces that don't have configuration will be ignored), but can be changed
+to bind to individual addresses, or to listen on non-default ports to ease testing.
 
 .IP "\fBacls:\fP \fIarray-of-acls\fP"
 (default see the ACLs section below)
