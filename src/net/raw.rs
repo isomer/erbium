@@ -35,6 +35,7 @@ pub type IoVec<A> = nix::sys::uio::IoVec<A>;
 /* These should be refactored out somewhere */
 pub type ControlMessage = udp::ControlMessage;
 
+#[derive(Copy, Clone)]
 pub struct IpProto(u8);
 impl IpProto {
     pub const ICMP: IpProto = IpProto(1);
@@ -55,6 +56,7 @@ impl From<IpProto> for u16 {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct EthProto(u16);
 impl EthProto {
     pub const IP4: EthProto = EthProto(0x0800);

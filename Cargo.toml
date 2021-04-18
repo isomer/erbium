@@ -8,10 +8,11 @@ description = "Network services for small/home networks"
 license = "Apache-2.0"
 repository = "https://github.com/isomer/erbium.git"
 build = "src/build.rs"
+homepage = "https://github.com/isomer/erbium"
 
 [features]
 full=["dhcp", "radv", "http", "dns"]
-default=["dhcp", "radv", "http"]
+default=["dhcp", "radv", "http", "dns"]
 dhcp=[]
 dns=[] # Partially complete, not ready for use.
 radv=[]
@@ -21,6 +22,7 @@ http=["hyper", "dhcp"] # Currently can't compile http without dhcp.
 arbitrary = { version = "1.0", features = [ "derive" ]}
 async-std = { version = "1.6.2", features = ["tokio02"] }
 async-trait = { version = "0.1.42" }
+rust-crypto = { version = "0.2.36" }
 bytes = "1.0"
 env_logger = "0.8.2"
 futures = "0.3.8"
@@ -34,7 +36,7 @@ mio = { version = "0.7" }
 netlink-packet-route = "0.7"
 netlink-sys = { version="0.6", features=["tokio_socket"] }
 nix = { version = "0.20" }
-prometheus = { version="0.12.0", features=["process"] }
+prometheus = { version="0.12", features=["process"] }
 rand = "0.8"
 rusqlite = { version = "0.25" }
 tokio-compat-02 = "0.2"
@@ -59,5 +61,5 @@ lto = "fat"
 codegen-units = 1
 
 [build-dependencies]
-vergen = "3"
+vergen = "4"
 

@@ -287,7 +287,7 @@ impl<'l> PktParser<'l> {
         let rcode = dnspkt::RCode((flag2 & 0b0000_1111) as u16);
         if qcount != 1 {
             return Err(format!(
-                "Incorrect number of questions ({} / {:?} / {:?})",
+                "Incorrect number of questions ({} / {} / {})",
                 qcount, opcode, rcode
             ));
         }

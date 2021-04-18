@@ -352,6 +352,35 @@ This configures how long this prefix is considered valid and usable.
 The duration that addresses generated from the prefix via stateless address
 autoconfiguration remain preferred, and should be used for new connections.
 .RE
+.SH DNS Configuration
+.IP "\fBdns-listeners:\fP \fIlist-of-socket-addresses\fP"
+(defaults to [::]:53)
+This configures which addresses the DNS server will listen on.
+.IP "\fBdns-routes:\fP \fIlist-of-dns-routes\fP"
+(defaults to the empty list)
+This is a list of DNS routes.
+.RS
+.IP "\fBdomain-suffixes:\fP \fIlist-of-domain-suffixes\fP"
+(defaults to the empty list)
+This is the list of domain suffixes that this route should apply to.
+This will match this domain, and all sub\-domains.
+For example "example.com" matches "foo.example.com" and "example.com" but not "example.net".
+The longest suffix match wins.
+Use the empty string "" to use this as a default match.
+.IP "\fBtype:\fP \fIforward\fP|\fIforge-nxdomain\fP"
+(defaults to forward)
+This configures what to do with domain names that end in this suffix.
+.RS
+.IP forward
+This is used to forward queries that desire recursion to another set of nameservers.
+.IP forge-nxdomain
+This will forge a NXDOMAIN reply for this, and all subdomains.
+.RE
+.IP "\fBdns-servers:\fP \fIlist-of-socket-addresses\fP"
+(defaults to the empty list)
+Only used by type "forward".
+This specifies the nameservers that the queries should be forwarded to.
+.RE
 .SH ACLs (Access Control Lists)
 To change which clients can do what, erbium has a customisable ACL system.
 ACLs are defined under the heading "acls:" at the top level, and are an ordered list of rules of which clients this
@@ -434,6 +463,11 @@ router-advertisements:
     - prefix: 2001:db8:0:1::/64
    dns-servers:
     addresses: [2001:db8::53]
+
+dns-routes:
+  - domain-suffixes: [""]
+    type: forward
+    dns-servers: [2001:4860:4860::8888]
 .EE
 .PP
 Imagine a router with 3 interfaces.

@@ -144,7 +144,7 @@ impl Serialise {
 
 impl Default for Serialise {
     fn default() -> Self {
-        Serialise {
+        Self {
             v: Default::default(),
         }
     }
@@ -193,11 +193,12 @@ impl SerialiseInto for &str {
 fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
     let mut v: Serialise = Default::default();
     v.serialise(ND_ROUTER_ADVERT.0);
-    v.serialise(0u8); /* Code */
-    v.serialise(0u16); /* Checksum */
+    v.serialise(0_u8); /* Code */
+    v.serialise(0_u16); /* Checksum */
     v.serialise(a.hop_limit);
     v.serialise(
-        if a.flag_managed { 0x80u8 } else { 0x00u8 } | if a.flag_other { 0x40u8 } else { 0x00u8 },
+        if a.flag_managed { 0x80_u8 } else { 0x00_u8 }
+            | if a.flag_other { 0x40_u8 } else { 0x00_u8 },
     );
     v.serialise(a.lifetime.as_secs() as u16);
     v.serialise(a.reachable.as_millis() as u32);
@@ -206,32 +207,32 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
         match opt {
             NDOptionValue::SourceLLAddr(src) => {
                 v.serialise(SOURCE_LL_ADDR.0);
-                v.serialise(1u8);
+                v.serialise(1_u8);
                 v.serialise(src);
             }
             NDOptionValue::Mtu(mtu) => {
                 v.serialise(MTU.0);
-                v.serialise(1u8);
-                v.serialise(0u16);
+                v.serialise(1_u8);
+                v.serialise(0_u16);
                 v.serialise(*mtu);
             }
             NDOptionValue::Prefix(prefix) => {
                 v.serialise(PREFIX_INFO.0);
-                v.serialise(4u8);
+                v.serialise(4_u8);
                 v.serialise(prefix.prefixlen);
                 v.serialise(
-                    if prefix.onlink { 0x80u8 } else { 0x00u8 }
-                        | if prefix.autonomous { 0x40u8 } else { 0x00u8 },
+                    if prefix.onlink { 0x80_u8 } else { 0x00_u8 }
+                        | if prefix.autonomous { 0x40_u8 } else { 0x00_u8 },
                 );
                 v.serialise(prefix.valid.as_secs() as u32);
                 v.serialise(prefix.preferred.as_secs() as u32);
-                v.serialise(0u32);
+                v.serialise(0_u32);
                 v.serialise(&prefix.prefix);
             }
             NDOptionValue::RecursiveDnsServers((lifetime, servers)) => {
                 v.serialise(RDNSS.0);
                 v.serialise((1 + servers.len() * 2) as u8);
-                v.serialise(0u16); // Reserved / Padding.
+                v.serialise(0_u16); // Reserved / Padding.
                 v.serialise(lifetime.as_secs() as u32);
                 for server in servers {
                     v.serialise(server);
@@ -244,21 +245,21 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
                         dnssl.serialise(label.len() as u8);
                         dnssl.serialise(label);
                     }
-                    dnssl.serialise(0u8);
+                    dnssl.serialise(0_u8);
                 }
                 // Pad with 0x00 to the full size.
                 while dnssl.v.len() % 8 != 0 {
-                    dnssl.serialise(0u8);
+                    dnssl.serialise(0_u8);
                 }
                 v.serialise(DNSSL.0);
                 v.serialise(1 + (dnssl.v.len() / 8) as u8);
-                v.serialise(0u16); // Reserved / Padding.
+                v.serialise(0_u16); // Reserved / Padding.
                 v.serialise(lifetime.as_secs() as u32);
                 v.serialise(&dnssl.v);
             }
             NDOptionValue::Pref64((lifetime, prefixlen, prefix)) => {
                 v.serialise(PREF64.0);
-                v.serialise(2u8);
+                v.serialise(2_u8);
                 let scaled_lifetime = (lifetime.as_secs() / 8) as u16;
                 let plc = ((prefixlen - 32) / 8) as u16;
                 v.serialise((scaled_lifetime << 3) | plc);
@@ -270,7 +271,7 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
                 let mut b = url.clone().into_bytes();
                 // Pad with 0x00
                 while (b.len() + 2) & 8 != 0 {
-                    b.push(0x00u8);
+                    b.push(0x00_u8);
                 }
                 v.serialise(CAPTIVE_PORTAL.0);
                 v.serialise((1 + b.len() / 8) as u8);

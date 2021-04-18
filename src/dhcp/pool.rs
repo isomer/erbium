@@ -75,7 +75,7 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl Error {
-    fn emit(reason: String, e: rusqlite::Error) -> Error {
+    fn emit(reason: &str, e: &rusqlite::Error) -> Error {
         Error::DbError(format!("{} ({})", reason, e))
     }
 }
@@ -101,7 +101,7 @@ impl Pool {
             )",
                 rusqlite::params![],
             )
-            .map_err(|e| Error::emit("Creating table leases".into(), e))?;
+            .map_err(|e| Error::emit("Creating table leases", &e))?;
 
         Ok(self)
     }
@@ -113,15 +113,14 @@ impl Pool {
     //#[cfg(any(test, fuzzing))]
     pub fn new_in_memory() -> Result<Pool, Error> {
         let conn = rusqlite::Connection::open_in_memory()
-            .map_err(|e| Error::emit("Creating database in memory database".into(), e))?;
+            .map_err(|e| Error::emit("Creating database in memory database", &e))?;
 
         Self::new_with_conn(conn)
     }
 
     pub fn new() -> Result<Pool, Error> {
-        let conn = rusqlite::Connection::open("/var/lib/erbium/leases.sqlite").map_err(|e| {
-            Error::emit("Creating database /var/lib/erbium/leases.sqlite".into(), e)
-        })?;
+        let conn = rusqlite::Connection::open("/var/lib/erbium/leases.sqlite")
+            .map_err(|e| Error::emit("Creating database /var/lib/erbium/leases.sqlite", &e))?;
 
         Self::new_with_conn(conn)
     }
@@ -450,7 +449,7 @@ fn map_no_row_to_none<T>(e: rusqlite::Error) -> Result<Option<T>, Error> {
     if e == rusqlite::Error::QueryReturnedNoRows {
         Ok(None)
     } else {
-        Err(Error::emit("Database query Error".into(), e))
+        Err(Error::emit("Database query Error", &e))
     }
 }
 

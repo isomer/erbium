@@ -37,7 +37,7 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::InvalidSubnet => write!(f, "Invalid Subnet"),
+            Self::InvalidSubnet => write!(f, "Invalid Subnet"),
         }
     }
 }
@@ -62,7 +62,7 @@ impl Ipv4Subnet {
         (u32::from(self.addr) & u32::from(self.netmask())).into()
     }
     pub fn netmask(&self) -> std::net::Ipv4Addr {
-        (!(0xffff_ffffu64 >> self.prefixlen) as u32).into()
+        (!(0xffff_ffff_u64 >> self.prefixlen) as u32).into()
     }
     pub fn contains(&self, ip: std::net::Ipv4Addr) -> bool {
         u32::from(ip) & u32::from(self.netmask()) == u32::from(self.addr)

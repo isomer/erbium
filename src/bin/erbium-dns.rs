@@ -79,9 +79,11 @@ async fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     log::info!(
-        "erbium-dns {} ({})",
+        "erbium-dns {}{}",
         env!("CARGO_PKG_VERSION"),
-        env!("VERGEN_SHA_SHORT")
+        option_env!("VERGEN_GIT_SHA")
+            .map(|sha| format!(" ({})", sha))
+            .unwrap_or_else(|| "".into())
     );
     #[cfg(feature = "dns")]
     match go().await {

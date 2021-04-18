@@ -145,7 +145,7 @@ impl<'a> Fragment<'a> {
         let mut f = Fragment::from_tail(payload);
         f.push_u8(0x45); /* version 4, length 5*4 bytes */
         f.push_u8(0x00); /* ToS */
-        f.push_be16(20u16 + f.tail.len() as u16); /* Total Length */
+        f.push_be16(20_u16 + f.tail.len() as u16); /* Total Length */
         f.push_be16(0x0000); /* Identification */
         f.push_be16(0x0000); /* Flags + Frag Offset */
         f.push_u8(0x01); /* TTL */
@@ -156,7 +156,7 @@ impl<'a> Fragment<'a> {
         let netsum = finish_netsum(partial_netsum(0, &f.buffer));
         f.buffer[10] = (netsum >> 8) as u8;
         f.buffer[11] = (netsum & 0xFF) as u8;
-        Self::new_ethernet(dstmac, srcmac, 0x0800u16, Tail::Fragment(Box::new(f)))
+        Self::new_ethernet(dstmac, srcmac, 0x0800_u16, Tail::Fragment(Box::new(f)))
     }
 
     pub fn new_udp<'l>(
@@ -169,14 +169,14 @@ impl<'a> Fragment<'a> {
         let mut f = Self::from_tail(payload);
         f.push_be16(src.port());
         f.push_be16(dst.port());
-        f.push_be16(8u16 + f.tail.len() as u16); /* Length */
+        f.push_be16(8_u16 + f.tail.len() as u16); /* Length */
         f.push_be16(0x0000); /* TODO: Checksum */
         let l = f.len();
         let mut pseudohdr = Self::from_tail(Tail::Fragment(Box::new(f.clone())));
         let udp_protocol: u8 = 17;
         pseudohdr.push_bytes(&src.ip().octets());
         pseudohdr.push_bytes(&dst.ip().octets());
-        pseudohdr.push_u8(0x00u8);
+        pseudohdr.push_u8(0x00_u8);
         pseudohdr.push_u8(udp_protocol);
         pseudohdr.push_be16(l as u16);
         let netsum = pseudohdr.netsum();

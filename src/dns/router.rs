@@ -23,22 +23,60 @@ use super::dnspkt;
 use super::Error;
 
 pub struct DnsRouteHandler {
+    conf: crate::config::SharedConfig,
     next: super::cache::CacheHandler,
 }
 
 impl DnsRouteHandler {
-    pub fn new() -> Self {
+    pub async fn new(conf: crate::config::SharedConfig) -> Self {
         DnsRouteHandler {
-            next: super::cache::CacheHandler::new(),
+            conf,
+            next: super::cache::CacheHandler::new().await,
         }
     }
 
     pub async fn handle_query(&self, msg: &super::DnsMessage) -> Result<dnspkt::DNSPkt, Error> {
-        /* This is a stub, currently we just route all queries to 8.8.8.8 */
-        if !msg.in_query.rd {
-            Err(Error::NotAuthoritative)
+        let conf = self.conf.clone();
+        let locked_conf = conf.read().await;
+
+        let mut best_route = None;
+        let mut best_suffix: Option<&super::dnspkt::Domain> = None;
+        for route in 0..locked_conf.dns_routes.len() {
+            for suffix in &locked_conf.dns_routes[route].suffixes {
+                if msg.in_query.question.qdomain.ends_with(&suffix) {
+                    if let Some(ref best) = best_suffix {
+                        log::trace!("Comparing {} with {}", best, suffix);
+                        if super::dnspkt::compare_longest_suffix(best, &suffix)
+                            == std::cmp::Ordering::Greater
+                        {
+                            best_route = Some(route);
+                            best_suffix = Some(suffix);
+                        }
+                    } else {
+                        best_route = Some(route);
+                        best_suffix = Some(suffix);
+                    }
+                }
+            }
+        }
+
+        if let Some(route_num) = best_route {
+            let ref route = locked_conf.dns_routes[route_num];
+            log::trace!("{} is the best route", best_suffix.unwrap());
+            use super::config::Handler;
+            match route.dest {
+                Handler::Forward(ref dest) => {
+                    if !msg.in_query.rd {
+                        // We will only forward queries when requested to do so.
+                        Err(Error::NotAuthoritative)
+                    } else {
+                        self.next.handle_query(msg, dest[0]).await
+                    }
+                }
+                Handler::ForgeNxDomain => Err(Error::Blocked),
+            }
         } else {
-            self.next.handle_query(msg).await
+            return Err(Error::NoRouteConfigured);
         }
     }
 }

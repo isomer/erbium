@@ -61,6 +61,7 @@ pub const RR_NAPTR: Type = Type(35);
 pub const RR_OPT: Type = Type(41);
 pub const RR_NSEC: Type = Type(47);
 pub const RR_NSEC3: Type = Type(50);
+pub const RR_ANY: Type = Type(255);
 
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -113,9 +114,26 @@ pub const BADCOOKIE: RCode = RCode(23);
 impl fmt::Display for RCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &FORMERR => write!(f, "FORMERR"),
             &NOERROR => write!(f, "NOERROR"),
+            &FORMERR => write!(f, "FORMERR"),
+            &SERVFAIL => write!(f, "SERVFAIL"),
             &NXDOMAIN => write!(f, "NXDOMAIN"),
+            &NOTIMP => write!(f, "NOTIMP"),
+            &REFUSED => write!(f, "REFUSED"),
+            &YXDOMAIN => write!(f, "YXDOMAIN"),
+            &YXRRSET => write!(f, "YXRRSET"),
+            &NXRRSET => write!(f, "NXRRSET"),
+            &NOTAUTH => write!(f, "NOTAUTH"),
+            &NOTZONE => write!(f, "NOTZONE"),
+            &DSOTYPENI => write!(f, "DSOTYPENI"),
+            &BADVERS => write!(f, "BADVERS/BADSIG"),
+            &BADKEY => write!(f, "BADKEY"),
+            &BADTIME => write!(f, "BADTIME"),
+            &BADMODE => write!(f, "BADMODE"),
+            &BADNAME => write!(f, "BADNAME"),
+            &BADALG => write!(f, "BADALG"),
+            &BADTRUNC => write!(f, "BADTRUNC"),
+            &BADCOOKIE => write!(f, "BADCOOKIE"),
             RCode(x) => write!(f, "RCode#{}", x),
         }
     }
@@ -174,6 +192,12 @@ impl<'a> Arbitrary<'a> for Label {
 #[cfg_attr(fuzzing, derive(Arbitrary))]
 pub struct Domain(Vec<Label>);
 
+impl Domain {
+    pub fn ends_with(&self, other: &Self) -> bool {
+        self.0.ends_with(&other.0)
+    }
+}
+
 impl From<Vec<Label>> for Domain {
     fn from(mut v: Vec<Label>) -> Self {
         v.shrink_to_fit();
@@ -201,15 +225,48 @@ impl fmt::Debug for Domain {
     }
 }
 
-#[cfg_attr(test, derive(Debug))]
-pub enum ParseDomainError {
-    ParseError,
+impl std::str::FromStr for Domain {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut it = s.chars();
+        let mut v = vec![];
+        let mut l = vec![];
+        while let Some(c) = it.next() {
+            match c {
+                '\\' => return Err("\\ not yet supported"), // TODO
+                '.' => {
+                    if l.is_empty() {
+                        return Err("illegal empty label");
+                    }
+                    l.shrink_to_fit();
+                    v.push(Label(l));
+                    l = vec![]
+                }
+                ch if ch.is_ascii() => l.push(ch as u8),
+                _ => return Err("illegal charactor in label"),
+            }
+        }
+        if !l.is_empty() {
+            l.shrink_to_fit();
+            v.push(Label(l));
+        }
+        v.shrink_to_fit();
+        Ok(Domain(v))
+    }
 }
 
-impl std::str::FromStr for Domain {
-    type Err = ParseDomainError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Domain(s.split('.').map(|l| Label(l.into())).collect()))
+// We want to sort longer suffixes first.
+pub fn compare_longest_suffix(lhs: &Domain, rhs: &Domain) -> std::cmp::Ordering {
+    use std::cmp::Ordering::*;
+    if lhs.0.len() != rhs.0.len() {
+        if lhs.0.len() < rhs.0.len() {
+            Greater // Because we want the largest first, not smallest first.
+        } else {
+            Less
+        }
+    } else {
+        // If they are the same length, then just compare based on the text
+        lhs.0.cmp(&rhs.0)
     }
 }
 
@@ -322,11 +379,35 @@ impl fmt::Display for EdeCode {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 #[cfg_attr(fuzzing, derive(Arbitrary))]
 pub struct EdnsOption {
     pub code: EdnsCode,
     pub data: Vec<u8>,
+}
+
+impl fmt::Debug for EdnsOption {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.code {
+            EDNS_EDE => write!(
+                f,
+                "EdnsOption({}: {})",
+                self.code,
+                String::from_utf8_lossy(&self.data[..])
+            ),
+            EDNS_COOKIE => write!(
+                f,
+                "EdnsOption({}: {})",
+                self.code,
+                self.data[..]
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join("")
+            ),
+            ref code => write!(f, "EdnsOption({}: {:?})", code, self.data),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
@@ -787,6 +868,35 @@ impl EdnsData {
         self.0.iter().find(|o| o.code == *opt)
     }
 
+    pub fn get_nsid(&self) -> Option<&[u8]> {
+        self.get_opt(&EDNS_NSID).map(|opt| &opt.data[..])
+    }
+
+    pub fn set_nsid(&mut self, nsid: &[u8]) {
+        self.set_opt(EdnsOption {
+            code: EDNS_NSID,
+            data: nsid.to_vec(),
+        });
+    }
+
+    pub fn get_cookie(&self) -> Option<(&[u8], Option<&[u8]>)> {
+        self.get_opt(&EDNS_COOKIE)
+            .map(|opt| (&opt.data[..8], opt.data.get(8..)))
+    }
+
+    pub fn set_cookie(&mut self, client: &[u8], server: &[u8]) {
+        assert!(client.len() == 8);
+        assert!(server.len() >= 8 && server.len() <= 32);
+        let mut data = vec![];
+        data.reserve(client.len() + server.len());
+        data.extend(client);
+        data.extend(server);
+        self.set_opt(EdnsOption {
+            code: EDNS_COOKIE,
+            data,
+        })
+    }
+
     pub fn get_extended_dns_error(&self) -> Option<(EdeCode, String)> {
         self.get_opt(&EDNS_EDE).map(|opt| {
             (
@@ -887,11 +997,22 @@ fn push_rr(v: &mut Vec<u8>, rr: &RR, offsets: &mut DomainOffsets) {
 }
 
 impl DNSPkt {
+    pub fn status(&self) -> String {
+        match self
+            .edns
+            .as_ref()
+            .and_then(|e| e.get_extended_dns_error())
+            .map(|e| e.0)
+        {
+            Some(x) => format!("{} ({})", self.rcode, x),
+            None => format!("{}", self.rcode),
+        }
+    }
     pub fn serialise(&self) -> Vec<u8> {
         self.serialise_with_size(65536)
     }
     pub fn serialise_with_size(&self, size: usize) -> Vec<u8> {
-        assert!(size > 512);
+        assert!(size >= 512);
         let mut ret: Vec<u8> = Vec::new();
         let mut offsets = DomainOffsets::new();
         assert!(self.rcode.0 <= 0b1111_1111_1111);
@@ -1196,4 +1317,17 @@ fn test_pkt_roundtrip() {
     let v = orig_pkt.serialise();
     let mut p = super::parse::PktParser::new(&v);
     assert_eq!(orig_pkt, p.get_dns().unwrap());
+}
+
+#[test]
+fn domain_from_str() {
+    assert_eq!(
+        "example.com".parse(),
+        Ok(Domain(vec![
+            Label(vec![
+                'e' as u8, 'x' as u8, 'a' as u8, 'm' as u8, 'p' as u8, 'l' as u8, 'e' as u8
+            ]),
+            Label(vec!['c' as u8, 'o' as u8, 'm' as u8])
+        ]))
+    );
 }

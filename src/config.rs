@@ -558,7 +558,7 @@ impl PrefixOps for Prefix4 {
         (u32::from(self.addr) & u32::from(self.netmask())).into()
     }
     fn netmask(&self) -> std::net::Ipv4Addr {
-        (!0xffffffffu32
+        (!0xffffffff_u32
             .checked_shr(self.prefixlen as u32)
             .unwrap_or(0))
         .into()
@@ -611,7 +611,7 @@ impl PrefixOps for Prefix6 {
         (u128::from(self.addr) & u128::from(self.netmask())).into()
     }
     fn netmask(&self) -> std::net::Ipv6Addr {
-        (!(0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffffu128
+        (!(0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffff_u128
             .checked_shr(self.prefixlen as u32)
             .unwrap_or(0)))
         .into()
@@ -738,6 +738,8 @@ pub struct Config {
     pub addresses: Vec<Prefix>,
     pub listeners: Vec<nix::sys::socket::SockAddr>,
     pub dhcp_listeners: Vec<nix::sys::socket::SockAddr>,
+    pub dns_listeners: Vec<nix::sys::socket::SockAddr>,
+    pub dns_routes: Vec<crate::dns::config::Route>,
     pub acls: Vec<crate::acl::Acl>,
 }
 
@@ -754,12 +756,17 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut ra = None;
         #[cfg(feature = "dhcp")]
         let mut dhcp = None;
+        #[cfg(feature = "dns")]
+        let mut dns_servers = vec![INTERFACE4, INTERFACE6];
+        #[cfg(not(feature = "dns"))]
         let mut dns_servers = vec![];
         let mut dns_search = vec![];
         let mut captive_portal = None;
         let mut addresses = None;
         let mut listeners = None;
         let mut dhcp_listeners = None;
+        let mut dns_listeners = None;
+        let mut dns_routes = None;
         let mut acls = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
@@ -789,8 +796,14 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 (Some("dhcp-listeners"), s) => {
                     dhcp_listeners = parse_array("dhcp-listeners", s, parse_string_sockaddr)?;
                 }
+                (Some("dns-listeners"), s) => {
+                    dns_listeners = parse_array("dns-listeners",s, parse_string_sockaddr)?;
+                }
                 (Some("acls"), s) => {
                     acls = parse_array("acls", s, crate::acl::parse_acl)?;
+                }
+                (Some("dns-routes"), s) => {
+                    dns_routes = crate::dns::config::parse_dns_routes("dns-routes", s)?;
                 }
                 (Some(x), _) => {
                     return Err(Error::InvalidConfig(format!(
@@ -813,6 +826,15 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             ra: ra.unwrap_or_else(crate::radv::config::Config::default),
             dns_servers,
             dns_search,
+            dns_listeners: dns_listeners.unwrap_or_else(|| {
+                vec![nix::sys::socket::SockAddr::new_inet(
+                    nix::sys::socket::InetAddr::new(
+                        nix::sys::socket::IpAddr::new_v6(0, 0, 0, 0, 0, 0, 0, 0),
+                        53,
+                    ),
+                )]
+            }),
+            dns_routes: dns_routes.unwrap_or_else(Vec::new),
             captive_portal,
             listeners: listeners.unwrap_or_else(|| {
                 vec![nix::sys::socket::SockAddr::Unix(
