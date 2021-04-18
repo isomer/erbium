@@ -772,10 +772,12 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             match (k.as_str(), v) {
                 (Some("dhcp"), _) => return Err(Error::InvalidConfig("The dhcp section has been replaced with dhcp-policies section, please see the manpage for more details".into())),
                 #[cfg(feature = "dhcp")]
-                (Some("dhcp-policies"), d) => dhcp = crate::dhcp::config::Config::new(d)?,
+                (Some("dhcp-policies"), d) => dhcp = crate::dhcp::config::Config::new(d)
+                    .map_err(|e| e.annotate("while parsing dhcp-policies"))?,
                 #[cfg(not(feature = "dhcp"))]
                 (Some("dhcp-policies"), _) => (),
-                (Some("router-advertisements"), r) => ra = crate::radv::config::parse(r)?,
+                (Some("router-advertisements"), r) => ra = crate::radv::config::parse(r)
+                    .map_err(|e| e.annotate("while parsing router-advertisements"))?,
                 (Some("dns-servers"), s) => {
                     dns_servers = parse_array("dns-servers", s, parse_string_ip)?
                         .ok_or_else(|| Error::InvalidConfig("dns-servers cannot be null".into()))?
