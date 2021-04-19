@@ -61,7 +61,7 @@ impl DnsRouteHandler {
         }
 
         if let Some(route_num) = best_route {
-            let ref route = locked_conf.dns_routes[route_num];
+            let route = &locked_conf.dns_routes[route_num];
             log::trace!("{} is the best route", best_suffix.unwrap());
             use super::config::Handler;
             match route.dest {

@@ -1,3 +1,5 @@
+0.2.12-rc2
+   - Merged in the new DNS branch.
 0.2.9
    - Workaround for not compiling on NixOS.
 0.2.8

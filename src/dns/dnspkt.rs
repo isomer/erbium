@@ -228,10 +228,9 @@ impl fmt::Debug for Domain {
 impl std::str::FromStr for Domain {
     type Err = &'static str;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut it = s.chars();
         let mut v = vec![];
         let mut l = vec![];
-        while let Some(c) = it.next() {
+        for c in s.chars() {
             match c {
                 '\\' => return Err("\\ not yet supported"), // TODO
                 '.' => {
