@@ -131,15 +131,9 @@ rec {
       };
       "anyhow" = rec {
         crateName = "anyhow";
-<<<<<<< HEAD
         version = "1.0.40";
         edition = "2018";
         sha256 = "0fq6qxlzp3bwrjbs3wp4i470k8vsvlkpx3q2wpl79gawvf9cvci8";
-=======
-        version = "1.0.39";
-        edition = "2018";
-        sha256 = "0rr7gd6m8wn724q64m7w7s5fxph8zwa9gin79ik6g0v2j5gxrkc1";
->>>>>>> dns
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -534,9 +528,9 @@ rec {
       };
       "async-trait" = rec {
         crateName = "async-trait";
-        version = "0.1.49";
+        version = "0.1.50";
         edition = "2018";
-        sha256 = "0j3vv30ky9mfxaxjjw6bvf8b40jp892y2fybgqg5scybgk7555jq";
+        sha256 = "08m7xim7dvcjw5cx2ryz3wndxc0vib2s02qrvabxvg2cpd5yi60b";
         procMacro = true;
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
@@ -727,11 +721,6 @@ rec {
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
-<<<<<<< HEAD
-        features = {
-          "parallel" = [ "jobserver" ];
-        };
-=======
         dependencies = [
           {
             name = "jobserver";
@@ -743,7 +732,6 @@ rec {
           "parallel" = [ "jobserver" ];
         };
         resolvedDefaultFeatures = [ "jobserver" "parallel" ];
->>>>>>> dns
       };
       "cfg-if" = rec {
         crateName = "cfg-if";
@@ -1009,7 +997,7 @@ rec {
       };
       "erbium" = rec {
         crateName = "erbium";
-        version = "0.2.11";
+        version = "0.2.12-rc2";
         edition = "2018";
         crateBin = [
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
@@ -1111,11 +1099,7 @@ rec {
           }
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             features = [ "full" ];
           }
           {
@@ -1139,7 +1123,7 @@ rec {
           }
         ];
         features = {
-          "default" = [ "dhcp" "radv" "http" ];
+          "default" = [ "dhcp" "radv" "http" "dns" ];
           "full" = [ "dhcp" "radv" "http" "dns" ];
           "http" = [ "hyper" "dhcp" ];
         };
@@ -1255,8 +1239,6 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
-<<<<<<< HEAD
-=======
       "form_urlencoded" = rec {
         crateName = "form_urlencoded";
         version = "1.0.1";
@@ -1287,7 +1269,6 @@ rec {
         ];
         
       };
->>>>>>> dns
       "futures" = rec {
         crateName = "futures";
         version = "0.3.14";
@@ -1720,9 +1701,9 @@ rec {
       };
       "git2" = rec {
         crateName = "git2";
-        version = "0.13.17";
+        version = "0.13.18";
         edition = "2018";
-        sha256 = "11i9w46yil9f8px8z0bnvdsif4hawxvkb1f276yq8s1jh9ghy98x";
+        sha256 = "1iq3arga2bw5zw74d6910yd4f1b21w7dbvxly6fhj8al2k1cd0xl";
         authors = [
           "Josh Triplett <josh@joshtriplett.org>"
           "Alex Crichton <alex@alexcrichton.com>"
@@ -2040,16 +2021,12 @@ rec {
           }
           {
             name = "socket2";
-            packageId = "socket2 0.3.19";
+            packageId = "socket2";
             optional = true;
           }
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             features = [ "sync" ];
           }
           {
@@ -2076,11 +2053,7 @@ rec {
           }
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             features = [ "fs" "macros" "io-std" "io-util" "rt" "rt-multi-thread" "sync" "time" "test-util" ];
           }
         ];
@@ -2095,9 +2068,9 @@ rec {
       };
       "idna" = rec {
         crateName = "idna";
-        version = "0.2.2";
+        version = "0.2.3";
         edition = "2018";
-        sha256 = "08ccsjp86296ppm4v1m9948vcwwiwdzk7b572j1k8gf2d5frm0l9";
+        sha256 = "1y7ca2w5qp9msgl57n03zqp78gq1bk2crqzg6kv7a542mdphm2j1";
         authors = [
           "The rust-url developers"
         ];
@@ -2149,19 +2122,11 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
-<<<<<<< HEAD
-      "js-sys" = rec {
-        crateName = "js-sys";
-        version = "0.3.50";
-        edition = "2018";
-        sha256 = "0k526bcp63ma05pwxjwzfmn9zhmiqfxlqnzg8vw6g3sbx3izk69d";
-=======
       "jobserver" = rec {
         crateName = "jobserver";
-        version = "0.1.21";
+        version = "0.1.22";
         edition = "2018";
-        sha256 = "1wm7h76xf7a4d0q6583agbsyl2s46vndrlnr015zffclpcz32waw";
->>>>>>> dns
+        sha256 = "1zg7p4khibisbvd8b1lqvvni6lr00g49d4bq2zj6m76bs7jmlbwp";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
@@ -2174,13 +2139,11 @@ rec {
         ];
         
       };
-<<<<<<< HEAD
-=======
       "js-sys" = rec {
         crateName = "js-sys";
-        version = "0.3.49";
+        version = "0.3.50";
         edition = "2018";
-        sha256 = "08f8avgmlwb44jqjmw4gjhx6rzw1adpl3flm1kv7al0jja9y65fw";
+        sha256 = "0k526bcp63ma05pwxjwzfmn9zhmiqfxlqnzg8vw6g3sbx3izk69d";
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -2192,7 +2155,6 @@ rec {
         ];
         
       };
->>>>>>> dns
       "kv-log-macro" = rec {
         crateName = "kv-log-macro";
         version = "1.0.7";
@@ -2224,15 +2186,9 @@ rec {
       };
       "libc" = rec {
         crateName = "libc";
-<<<<<<< HEAD
         version = "0.2.93";
         edition = "2015";
         sha256 = "0hcd6xzln31gmi8bpydrbikgq3pj7s9cnqaslqd28nqhyrmzd1ck";
-=======
-        version = "0.2.90";
-        edition = "2015";
-        sha256 = "1bll4c76xv9aa1mcmijpqb0m15wif26br4v9vh8p8qf37zlfsjms";
->>>>>>> dns
         authors = [
           "The Rust Project Developers"
         ];
@@ -2245,9 +2201,9 @@ rec {
       };
       "libgit2-sys" = rec {
         crateName = "libgit2-sys";
-        version = "0.12.18+1.1.0";
+        version = "0.12.19+1.1.0";
         edition = "2018";
-        sha256 = "11g8wvkzpc60yzaha04q68sp29ac4px2y8fsxkhpxhwgm0ns99ix";
+        sha256 = "1rj3ck5p8qixlhj8scv3jjkni7mlif8gc10sk6z9x2scaxfia8pk";
         libName = "libgit2_sys";
         libPath = "lib.rs";
         authors = [
@@ -2285,9 +2241,9 @@ rec {
       };
       "libsqlite3-sys" = rec {
         crateName = "libsqlite3-sys";
-        version = "0.22.0";
+        version = "0.22.1";
         edition = "2018";
-        sha256 = "1271w382a5cyrc099jxh1x8dcpih7fxrvam6an6lg15a9pck4qrg";
+        sha256 = "0k8nw8qbp2mshvkis6r79zbpq0j51pjg0pjymjclg0szvvzixjqr";
         authors = [
           "The rusqlite developers"
         ];
@@ -2490,52 +2446,7 @@ rec {
       };
       "mio" = rec {
         crateName = "mio";
-<<<<<<< HEAD
         version = "0.7.11";
-=======
-        version = "0.7.10";
-        edition = "2018";
-        sha256 = "0ffqz2bg0x76wqsnk9c01ad4b8lv13p2r5xikhrgbwxpycia30i1";
-        authors = [
-          "Carl Lerche <me@carllerche.com>"
-          "Thomas de Zeeuw <thomasdezeeuw@gmail.com>"
-          "Tokio Contributors <team@tokio.rs>"
-        ];
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-            target = { target, features }: target."unix";
-          }
-          {
-            name = "log";
-            packageId = "log";
-          }
-          {
-            name = "miow";
-            packageId = "miow";
-            target = { target, features }: target."windows";
-          }
-          {
-            name = "ntapi";
-            packageId = "ntapi";
-            target = { target, features }: target."windows";
-          }
-          {
-            name = "winapi";
-            packageId = "winapi";
-            target = { target, features }: target."windows";
-          }
-        ];
-        features = {
-          "default" = [ "with-deprecated" ];
-        };
-        resolvedDefaultFeatures = [ "default" "with-deprecated" ];
-      };
-      "mio 0.7.10" = rec {
-        crateName = "mio";
-        version = "0.7.10";
->>>>>>> dns
         edition = "2018";
         sha256 = "0mi9ah60l270761sz6qdhhn0hkn5msc8689b53bhnkmk0glx706g";
         authors = [
@@ -2565,12 +2476,7 @@ rec {
           }
           {
             name = "winapi";
-<<<<<<< HEAD
             packageId = "winapi";
-=======
-            packageId = "winapi 0.3.9";
->>>>>>> master
->>>>>>> dns
             target = { target, features }: target."windows";
             features = [ "winsock2" "mswsock" "mstcpip" ];
           }
@@ -2595,13 +2501,6 @@ rec {
         ];
         dependencies = [
           {
-<<<<<<< HEAD
-=======
-            name = "socket2";
-            packageId = "socket2 0.3.19";
-          }
-          {
->>>>>>> dns
             name = "winapi";
             packageId = "winapi";
             features = [ "std" "fileapi" "handleapi" "ioapiset" "minwindef" "namedpipeapi" "ntdef" "synchapi" "winerror" "winsock2" "ws2def" "ws2ipdef" ];
@@ -2609,32 +2508,6 @@ rec {
         ];
         
       };
-<<<<<<< HEAD
-=======
-      "nb-connect" = rec {
-        crateName = "nb-connect";
-        version = "1.1.0";
-        edition = "2018";
-        sha256 = "0pd4kwvasgklpvyfc6z3a3vsm06cfjl14vg2qarv4pp9xvkh16d1";
-        authors = [
-          "Stjepan Glavina <stjepang@gmail.com>"
-          "Jayce Fayne <jayce.fayne@mailbox.org>"
-        ];
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-            target = { target, features }: target."unix";
-          }
-          {
-            name = "socket2";
-            packageId = "socket2 0.4.0";
-            features = [ "all" ];
-          }
-        ];
-        
-      };
->>>>>>> dns
       "netlink-packet-core" = rec {
         crateName = "netlink-packet-core";
         version = "0.2.4";
@@ -2751,11 +2624,7 @@ rec {
           }
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             optional = true;
             usesDefaultFeatures = false;
             features = [ "net" ];
@@ -2764,11 +2633,7 @@ rec {
         devDependencies = [
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             usesDefaultFeatures = false;
             features = [ "net" "macros" "rt-multi-thread" ];
           }
@@ -3731,9 +3596,9 @@ rec {
       };
       "rusqlite" = rec {
         crateName = "rusqlite";
-        version = "0.25.0";
+        version = "0.25.1";
         edition = "2018";
-        sha256 = "1npik4ikgccrjhflddrfi8ig477wi064q3jc5khb1rr74vsinf28";
+        sha256 = "1lkf7zmgvv23fbldiyvmjrdag1k71fh1zb1v00w86q5fvnvq7izv";
         authors = [
           "The rusqlite developers"
         ];
@@ -3941,42 +3806,7 @@ rec {
         features = {
         };
       };
-      "socket2 0.3.19" = rec {
-        crateName = "socket2";
-        version = "0.4.0";
-        edition = "2018";
-        sha256 = "18ny6m1gnf6cwp5ax0b5hr36w6yg16z7faj76b31aq2jghhgqgcy";
-        authors = [
-          "Alex Crichton <alex@alexcrichton.com>"
-          "Thomas de Zeeuw <thomasdezeeuw@gmail.com>"
-        ];
-        dependencies = [
-          {
-<<<<<<< HEAD
-=======
-            name = "cfg-if";
-            packageId = "cfg-if";
-            target = { target, features }: target."unix";
-          }
-          {
->>>>>>> dns
-            name = "libc";
-            packageId = "libc";
-            target = { target, features }: target."unix";
-          }
-          {
-            name = "winapi";
-            packageId = "winapi";
-            target = { target, features }: target."windows";
-            features = [ "handleapi" "ws2ipdef" "ws2tcpip" ];
-          }
-        ];
-        features = {
-        };
-<<<<<<< HEAD
-=======
-      };
-      "socket2 0.4.0" = rec {
+      "socket2" = rec {
         crateName = "socket2";
         version = "0.4.0";
         edition = "2018";
@@ -4000,7 +3830,6 @@ rec {
         ];
         features = {
         };
->>>>>>> dns
         resolvedDefaultFeatures = [ "all" ];
       };
       "syn" = rec {
@@ -4125,9 +3954,9 @@ rec {
       };
       "tinyvec" = rec {
         crateName = "tinyvec";
-        version = "1.1.1";
+        version = "1.2.0";
         edition = "2018";
-        sha256 = "08qhf0a9vxf85bj1hd38i8qzwiwm6v4vvwd11k7c728f59bwlz1i";
+        sha256 = "0hn3fkpb9nca9nf9znz2dxlp4ccv37hnbh67aczpzpmpbgq20ljv";
         authors = [
           "Lokathor <zefria@gmail.com>"
         ];
@@ -4204,19 +4033,11 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "num_cpus" "rt-core" "rt-threaded" "slab" ];
       };
-<<<<<<< HEAD
       "tokio 1.5.0" = rec {
         crateName = "tokio";
         version = "1.5.0";
         edition = "2018";
         sha256 = "199pf7dy992rjpxygrj6790pzbyhhzvvlm9hcq5vbnmdq3kwiw43";
-=======
-      "tokio 1.4.0" = rec {
-        crateName = "tokio";
-        version = "1.4.0";
-        edition = "2018";
-        sha256 = "08hpiws3i094nlm12bl2zm4a7y4v7y5rlp2hy3q4bmjqsy2zhjhk";
->>>>>>> dns
         authors = [
           "Tokio Contributors <team@tokio.rs>"
         ];
@@ -4333,11 +4154,7 @@ rec {
           }
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
           }
           {
             name = "tokio-stream";
@@ -4347,11 +4164,7 @@ rec {
         devDependencies = [
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             features = [ "full" ];
           }
         ];
@@ -4402,22 +4215,14 @@ rec {
           }
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             features = [ "sync" ];
           }
         ];
         devDependencies = [
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             features = [ "full" "test-util" ];
           }
         ];
@@ -4434,15 +4239,9 @@ rec {
       };
       "tokio-util" = rec {
         crateName = "tokio-util";
-<<<<<<< HEAD
         version = "0.6.6";
         edition = "2018";
         sha256 = "13hyc0vm8l9g5h9bfaqh414zwgqqpv0lx84vvnl1xhv5jg4i42ll";
-=======
-        version = "0.6.5";
-        edition = "2018";
-        sha256 = "0gs4kysvchglf4xi57sqnc2zfb9cws8djm2ldz1zpxssx14x0hsi";
->>>>>>> dns
         authors = [
           "Tokio Contributors <team@tokio.rs>"
         ];
@@ -4469,22 +4268,14 @@ rec {
           }
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             features = [ "sync" ];
           }
         ];
         devDependencies = [
           {
             name = "tokio";
-<<<<<<< HEAD
             packageId = "tokio 1.5.0";
-=======
-            packageId = "tokio 1.4.0";
->>>>>>> dns
             features = [ "full" ];
           }
         ];
@@ -4586,9 +4377,9 @@ rec {
       };
       "unicode-bidi" = rec {
         crateName = "unicode-bidi";
-        version = "0.3.4";
-        edition = "2015";
-        sha256 = "1malx8ljgm7v1gbaazkn7iicy5wj0bwcyadj3l727a38ch6bvwj9";
+        version = "0.3.5";
+        edition = "2018";
+        sha256 = "1q07h5kp9jszwf0bkrpa1v5wmv04dv920x3w2xy6pjdikchbxf7f";
         libName = "unicode_bidi";
         authors = [
           "The Servo Project Developers"
@@ -4751,10 +4542,6 @@ rec {
             name = "thiserror";
             packageId = "thiserror";
           }
-          {
-            name = "rustc_version";
-            packageId = "rustc_version";
-          }
         ];
         buildDependencies = [
           {
@@ -4826,15 +4613,9 @@ rec {
       };
       "wasm-bindgen" = rec {
         crateName = "wasm-bindgen";
-<<<<<<< HEAD
         version = "0.2.73";
         edition = "2018";
         sha256 = "1n93yq72c7bd2464gg48405yzgvwakwc0cqzz647864xcm4ha943";
-=======
-        version = "0.2.72";
-        edition = "2018";
-        sha256 = "1ghgmhxv7yj0v472qp84w7aix1k619xdqcl19md68pcfp8fzds4g";
->>>>>>> dns
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -4860,15 +4641,9 @@ rec {
       };
       "wasm-bindgen-backend" = rec {
         crateName = "wasm-bindgen-backend";
-<<<<<<< HEAD
         version = "0.2.73";
         edition = "2018";
         sha256 = "1bkxxkmxfy182aav9qqkcq7mz48yxgmx61kdr8ak55fa24j64w5f";
-=======
-        version = "0.2.72";
-        edition = "2018";
-        sha256 = "1lqzvkdzw66wdhm7wgs80aih0zx349dvmd3w5h3xlqphiyjynv04";
->>>>>>> dns
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -4910,15 +4685,9 @@ rec {
       };
       "wasm-bindgen-futures" = rec {
         crateName = "wasm-bindgen-futures";
-<<<<<<< HEAD
         version = "0.4.23";
         edition = "2018";
         sha256 = "1sk3zhmrwvz3aa9b63yz7ms04agd1dlqn5pjig0nmpi3mxkvgf41";
-=======
-        version = "0.4.22";
-        edition = "2018";
-        sha256 = "0s1lxjm3y30dd60d4wdi9nj39hy7s6phk82rpdjbavzjkbxpw5bk";
->>>>>>> dns
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -4948,15 +4717,9 @@ rec {
       };
       "wasm-bindgen-macro" = rec {
         crateName = "wasm-bindgen-macro";
-<<<<<<< HEAD
         version = "0.2.73";
         edition = "2018";
         sha256 = "0vqgbnbnh6zs339v6g9w3j9idi8m3s1dws8rnkypn5rz8j8lswry";
-=======
-        version = "0.2.72";
-        edition = "2018";
-        sha256 = "16w1frwyqcaqaj6pm6b3rk4ibipkyngramvwg5ph9nkcsc0smy8f";
->>>>>>> dns
         procMacro = true;
         authors = [
           "The wasm-bindgen Developers"
@@ -4979,15 +4742,9 @@ rec {
       };
       "wasm-bindgen-macro-support" = rec {
         crateName = "wasm-bindgen-macro-support";
-<<<<<<< HEAD
         version = "0.2.73";
         edition = "2018";
         sha256 = "0b0vcb8pvg03cmq9sg5b94a0p05bp1rc6m6dvc7qp9n813zkjdym";
-=======
-        version = "0.2.72";
-        edition = "2018";
-        sha256 = "0pbknfjlh57zyzvk9aslxgvqnhan72sxp4ish5d58czfnb0lbswn";
->>>>>>> dns
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -5022,15 +4779,9 @@ rec {
       };
       "wasm-bindgen-shared" = rec {
         crateName = "wasm-bindgen-shared";
-<<<<<<< HEAD
         version = "0.2.73";
         edition = "2018";
         sha256 = "12a4kq5wvy3znkqlqn6ib25ips1k9apxjpknpca3s8xacsp479fr";
-=======
-        version = "0.2.72";
-        edition = "2018";
-        sha256 = "1yjzil4mndy1bzvm1xr1pbmw86ianjzhp9pa8sin0jgvjr38y55p";
->>>>>>> dns
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -5038,15 +4789,9 @@ rec {
       };
       "web-sys" = rec {
         crateName = "web-sys";
-<<<<<<< HEAD
         version = "0.3.50";
         edition = "2018";
         sha256 = "1gl1akzrzprc3hc16h1lcai2f3dm1xkr6cvd8ihqiv4g91zda1d9";
-=======
-        version = "0.3.49";
-        edition = "2018";
-        sha256 = "0413s7f96k5xdk55cpap04warrfaz89p4xs6dqzw1b2x1zbikzjr";
->>>>>>> dns
         authors = [
           "The wasm-bindgen Developers"
         ];
@@ -5523,11 +5268,7 @@ rec {
         features = {
           "debug" = [ "impl-debug" ];
         };
-<<<<<<< HEAD
         resolvedDefaultFeatures = [ "cfg" "consoleapi" "errhandlingapi" "evntrace" "fileapi" "handleapi" "in6addr" "inaddr" "ioapiset" "minwinbase" "minwindef" "mstcpip" "mswsock" "namedpipeapi" "ntdef" "ntsecapi" "ntstatus" "processenv" "profileapi" "std" "synchapi" "sysinfoapi" "threadpoollegacyapiset" "timezoneapi" "winbase" "wincon" "windef" "winerror" "winioctl" "winnt" "winsock2" "ws2def" "ws2ipdef" "ws2tcpip" ];
-=======
-        resolvedDefaultFeatures = [ "cfg" "consoleapi" "errhandlingapi" "evntrace" "fileapi" "handleapi" "in6addr" "inaddr" "ioapiset" "minwinbase" "minwindef" "mswsock" "namedpipeapi" "ntdef" "ntsecapi" "ntstatus" "processenv" "profileapi" "std" "synchapi" "sysinfoapi" "threadpoollegacyapiset" "timezoneapi" "winbase" "wincon" "windef" "winerror" "winioctl" "winnt" "winsock2" "ws2def" "ws2ipdef" "ws2tcpip" ];
->>>>>>> dns
       };
       "winapi-i686-pc-windows-gnu" = rec {
         crateName = "winapi-i686-pc-windows-gnu";
