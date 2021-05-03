@@ -20,7 +20,7 @@ To download, compile, link and install erbium you can use the following command:
 $ cargo install erbium --bin erbium --root /usr/local
 ```
 
-You will need a [configuration file][erbium.conf.example]
+You will need a [configuration file](erbium.conf.example)
 
 IRC
 ===
