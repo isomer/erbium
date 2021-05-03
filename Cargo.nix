@@ -997,7 +997,7 @@ rec {
       };
       "erbium" = rec {
         crateName = "erbium";
-        version = "0.2.12-rc2";
+        version = "0.2.12-rc3";
         edition = "2018";
         crateBin = [
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
