@@ -346,7 +346,7 @@ dependencies = [
 
 [[package]]
 name = "erbium"
-version = "0.2.12-rc2"
+version = "0.2.12-rc3"
 dependencies = [
  "arbitrary",
  "async-std",

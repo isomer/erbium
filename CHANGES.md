@@ -1,4 +1,4 @@
-0.2.12-rc3 unreleased
+0.2.12-rc3
    - DHCP should not silently ignore prefixes that don't have 0 bits in the network address.
 0.2.12-rc2
    - Merged in the new DNS branch.
