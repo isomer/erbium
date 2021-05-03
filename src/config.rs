@@ -528,7 +528,7 @@ pub fn parse_duration(
     }
 }
 
-trait PrefixOps {
+pub trait PrefixOps {
     type Ip;
     fn network(&self) -> Self::Ip;
     fn netmask(&self) -> Self::Ip;

@@ -671,17 +671,16 @@ pub async fn build_default_config(
         .filter_map(|prefix| {
             if let super::config::Prefix::V4(p4) = prefix {
                 use crate::config::Match as _;
-                // TODO: Currently if the subnet is invalid, then we just skip adding it.
-                // This is probably fine for now, but is likely to cause confusion in the future.
-                let subnet = crate::net::Ipv4Subnet::new(p4.addr, p4.prefixlen).ok()?;
+                use crate::config::PrefixOps as _;
+                let subnet = crate::net::Ipv4Subnet::new(p4.network(), p4.prefixlen).ok()?;
                 let mut ret = config::Policy {
                     match_subnet: Some(subnet),
                     apply_address: Some(
                         (1..((1 << (32 - p4.prefixlen)) - 2))
                             .map(|offset| (u32::from(subnet.network()) + offset).into())
                             // TODO: This removes one IP from the list, it should also remove any
-                            // others found on the local machine.  Again, fine for now, but likely
-                            // to cause confusion in the future.
+                            // others found on the local machine.  Probably fine for now, but
+                            // likely to cause confusion in the future.
                             .filter(|ip4| *ip4 != request.serverip)
                             .collect::<pool::PoolAddresses>()
                             .sub(&all_addrs),
@@ -1319,5 +1318,29 @@ async fn test_base() {
         resp.options
             .get_option::<Vec<String>>(&dhcppkt::OPTION_DOMAINSEARCH),
         Some(vec![String::from("example.org")])
+    );
+}
+
+#[tokio::test]
+/* There was a bug that if the suffix bits in the prefix were not 0, then it would silently ignore
+ * the address.  Now we set them to 0 ourselves explicitly.
+ */
+async fn test_non_network_prefix() {
+    let conf = crate::config::load_config_from_string_for_test(
+        "---
+addresses: [192.0.2.53/24]
+",
+    )
+    .unwrap();
+
+    let pkt = test::mk_dhcp_request();
+    let base = build_default_config(&*conf.read().await, &pkt).await;
+
+    let network = crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap();
+
+    assert_eq!(base.policies[0].match_subnet.unwrap().addr, network.addr);
+    assert_eq!(
+        base.policies[0].match_subnet.unwrap().prefixlen,
+        network.prefixlen
     );
 }
