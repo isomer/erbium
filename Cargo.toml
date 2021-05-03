@@ -17,6 +17,7 @@ dhcp=[]
 dns=[] # Partially complete, not ready for use.
 radv=[]
 http=["hyper", "dhcp"] # Currently can't compile http without dhcp.
+static=["rusqlite/bundled"] # Statically link dependencies.
 
 [dependencies]
 arbitrary = { version = "1.0", features = [ "derive" ]}
