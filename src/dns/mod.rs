@@ -1044,8 +1044,8 @@ impl DnsListenerHandler {
     }
 
     async fn run_tcp_listener(
-        tcp: tokio::net::TcpListener,
-        s: std::sync::Arc<tokio::sync::RwLock<Self>>,
+        tcp: &tokio::net::TcpListener,
+        s: &std::sync::Arc<tokio::sync::RwLock<Self>>,
     ) -> Result<(), Error> {
         let (sock, sock_addr) = tcp.accept().await.map_err(Error::ListenError)?;
         let local_s = s.clone();
@@ -1064,14 +1064,40 @@ impl DnsListenerHandler {
             services.push(tokio::spawn(async move {
                 let shared_listener = listener.into();
                 loop {
-                    Self::run_udp(&shared_listener, &s_clone).await?
+                    match Self::run_udp(&shared_listener, &s_clone).await {
+                        Ok(()) => (),
+                        Err(err) => {
+                            log::warn!(
+                                "{}: {}",
+                                shared_listener
+                                    .local_addr()
+                                    .map(|a| format!("{}", a))
+                                    .unwrap_or_else(|e| format!("<unknown: {}>", e)),
+                                err
+                            )
+                        }
+                    }
                 }
             }));
         }
         for listener in my_self.tcp_listeners.drain(..) {
             let s_clone = s.clone();
             services.push(tokio::spawn(async move {
-                Self::run_tcp_listener(listener, s_clone).await
+                loop {
+                    match Self::run_tcp_listener(&listener, &s_clone).await {
+                        Ok(()) => (),
+                        Err(err) => {
+                            log::warn!(
+                                "{}: {}",
+                                listener
+                                    .local_addr()
+                                    .map(|a| format!("{}", a))
+                                    .unwrap_or_else(|e| format!("<unknown: {}>", e)),
+                                err
+                            )
+                        }
+                    }
+                }
             }));
         }
 

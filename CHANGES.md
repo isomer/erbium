@@ -1,3 +1,5 @@
+0.2.12-rc4 unreleased
+   - Harden DNS listeners to avoid premature exits.
 0.2.12-rc3
    - DHCP should not silently ignore prefixes that don't have 0 bits in the network address.
 0.2.12-rc2
