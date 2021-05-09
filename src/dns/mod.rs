@@ -870,14 +870,14 @@ impl DnsListenerHandler {
         match msg.validate_cookie().await {
             CookieStatus::Good => {
                 // If we can tell it's not spoofed, don't ratelimit.
-                log::trace!("Cookie status: Good");
+                log::trace!("[{:x}] Cookie status: Good", msg.in_query.qid);
                 return false;
             }
             CookieStatus::Bad => {
-                log::trace!("Cookie status: Bad");
+                log::trace!("[{:x}] Cookie status: Bad", msg.in_query.qid);
             }
             CookieStatus::Missing => {
-                log::trace!("Cookie status: Missing");
+                log::trace!("[{:x}] Cookie status: Missing", msg.in_query.qid);
             }
         }
 
@@ -951,7 +951,7 @@ impl DnsListenerHandler {
                             .expect("Failed to send reply"); // TODO: Better error handling
                     } else {
                         IN_QUERY_DROPPED.inc();
-                        log::warn!("Not Sending Reply: Rate Limit");
+                        log::warn!("[{:x}] Not Sending Reply: Rate Limit", msg.in_query.qid);
                     }
                 }
                 Err(err) => {
@@ -1023,8 +1023,8 @@ impl DnsListenerHandler {
                     in_reply_bytes.reserve(2 + serialised.len());
                     in_reply_bytes.extend((serialised.len() as u16).to_be_bytes().iter());
                     in_reply_bytes.extend(serialised);
-                    if let Err(msg) = sock.write(&in_reply_bytes).await {
-                        log::warn!("Failed to send DNS reply: {}", msg);
+                    if let Err(io) = sock.write(&in_reply_bytes).await {
+                        log::warn!("[{:x}] Failed to send DNS reply: {}", msg.in_query.qid, io);
                         IN_QUERY_RESULT
                             .with_label_values(&[&"TCP", &"send fail"])
                             .inc();

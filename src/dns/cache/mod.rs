@@ -261,7 +261,7 @@ impl CacheHandler {
         let q = &msg.in_query.question;
         /* Only do caching for IN queries */
         if q.qclass != dnspkt::CLASS_IN {
-            log::trace!("Not caching non-IN query");
+            log::trace!("[{:x}] Not caching non-IN query", msg.in_query.qid);
             DNS_CACHE.with_label_values(&[&"UNCACHABLE_CLASS"]).inc();
             return self.next.handle_query(msg, addr).await;
         }
@@ -290,8 +290,8 @@ impl CacheHandler {
         }
 
         match &out_result {
-            Ok(x) => log::trace!("OutReply: {:?}", x),
-            Err(e) => log::trace!("OutReply: {}", e),
+            Ok(x) => log::trace!("[{:x}] OutReply: {:?}", msg.in_query.qid, x),
+            Err(e) => log::trace!("[{:x}] OutReply: {}", msg.in_query.qid, e),
         };
 
         out_result

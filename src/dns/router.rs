@@ -62,7 +62,11 @@ impl DnsRouteHandler {
 
         if let Some(route_num) = best_route {
             let route = &locked_conf.dns_routes[route_num];
-            log::trace!("{} is the best route", best_suffix.unwrap());
+            log::trace!(
+                "[{:x}] \"{}\" is the best route",
+                msg.in_query.qid,
+                best_suffix.unwrap()
+            );
             use super::config::Handler;
             match route.dest {
                 Handler::Forward(ref dest) => {
@@ -76,7 +80,7 @@ impl DnsRouteHandler {
                 Handler::ForgeNxDomain => Err(Error::Blocked),
             }
         } else {
-            return Err(Error::NoRouteConfigured);
+            Err(Error::NoRouteConfigured)
         }
     }
 }
