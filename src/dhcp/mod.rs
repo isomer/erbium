@@ -789,7 +789,7 @@ pub struct DhcpService {
     rawsock: std::sync::Arc<crate::net::raw::RawSocket>,
     pool: std::sync::Arc<sync::Mutex<pool::Pool>>,
     serverids: SharedServerIds,
-    listeners: Vec<UdpSocket>,
+    listener: UdpSocket,
 }
 
 impl DhcpService {
@@ -963,27 +963,31 @@ impl DhcpService {
         ));
         let serverids: SharedServerIds =
             Arc::new(sync::Mutex::new(std::collections::HashSet::new()));
-        let mut listeners = vec![];
-        for addr in &conf.read().await.dhcp_listeners {
-            let listener = UdpSocket::bind(&[crate::net::socket::nix_to_std_sockaddr(*addr)])
+        let listener = UdpSocket::bind(
+            &tokio::net::lookup_host("0.0.0.0:67")
                 .await
-                .map_err(RunError::ListenError)?;
-            listener
-                .set_opt_ipv4_packet_info(true)
-                .map_err(RunError::ListenError)?;
-            log::info!(
-                "Listening for DHCP on {}",
-                listener.local_addr().map_err(RunError::Io)?
-            );
-            listeners.push(listener);
-        }
+                .unwrap()
+                .collect::<Vec<_>>(),
+        )
+        .await
+        .map_err(RunError::ListenError)?;
+        listener
+            .set_opt_ipv4_packet_info(true)
+            .map_err(RunError::ListenError)?;
+        listener
+            .set_opt_reuse_port(true)
+            .map_err(RunError::ListenError)?;
+        log::info!(
+            "Listening for DHCP on {}",
+            listener.local_addr().map_err(RunError::Io)?
+        );
         Ok(Self {
             netinfo,
             conf,
             rawsock,
             pool,
             serverids,
-            listeners,
+            listener,
         })
     }
 
@@ -1024,18 +1028,10 @@ impl DhcpService {
     }
 
     pub async fn run(self: std::sync::Arc<Self>) -> Result<(), String> {
-        use futures::StreamExt as _;
-        let mut listeners = futures::stream::FuturesUnordered::new();
-        for listener in 0..self.listeners.len() {
-            let me = self.clone();
-            listeners.push(tokio::spawn(async move {
-                match me.run_internal(&me.listeners[listener]).await {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err(e.to_string()),
-                }
-            }));
+        match self.run_internal(&self.listener).await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e.to_string()),
         }
-        listeners.next().await.unwrap().unwrap()
     }
 
     pub async fn update_metrics(self: &std::sync::Arc<Self>) {

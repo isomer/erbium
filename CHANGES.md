@@ -1,5 +1,9 @@
-0.2.12-rc4 unreleased
+0.2.12-rc4
    - Harden DNS listeners to avoid premature exits.
+   - Add `default-listen-style` to allow multiple DNS servers on one host.
+   - Removed `dhcp-listeners` as the feature could never possibly work: If you
+     bind to an address, you don't receive broadcast packets and thus never see
+     DHCP requests.
 0.2.12-rc3
    - DHCP should not silently ignore prefixes that don't have 0 bits in the network address.
 0.2.12-rc2

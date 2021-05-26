@@ -130,7 +130,8 @@ lazy_static::lazy_static! {
 
 #[cfg_attr(test, derive(Debug))]
 pub enum Error {
-    ListenError(std::io::Error),
+    ListenError(std::io::Error, nix::sys::socket::SockAddr),
+    AcceptError(std::io::Error),
     RecvError(std::io::Error),
     ParseError(String),
     RefusedByAcl(crate::acl::AclError),
@@ -145,7 +146,8 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use Error::*;
         match self {
-            ListenError(io) => write!(f, "Failed to listen for DNS: {}", io),
+            ListenError(io, addr) => write!(f, "Failed to listen for DNS on {}: {}", addr, io),
+            AcceptError(io) => write!(f, "Failed to accept new TCP connection for DNS: {}", io),
             RecvError(io) => write!(f, "Failed to receive DNS in query: {}", io),
             ParseError(msg) => write!(f, "Failed to parse DNS in query: {}", msg),
             RefusedByAcl(why) => write!(f, "Query refused by policy: {}", why),
@@ -602,14 +604,44 @@ impl DnsListenerHandler {
         _conf: &crate::config::SharedConfig,
         addr: &nix::sys::socket::SockAddr,
     ) -> Result<UdpSocket, Error> {
-        let udp = UdpSocket::bind(&[udp::nix_to_std_sockaddr(*addr)])
-            .await
-            .map_err(Error::ListenError)?;
+        let mut count: i32 = 0;
+        let udp = loop {
+            match UdpSocket::bind(&[udp::nix_to_std_sockaddr(*addr)]).await {
+                Ok(sock) => break sock,
+                Err(e) if e.kind() == std::io::ErrorKind::AddrNotAvailable => {
+                    // Due to duplicate address detection, the IPv6 address we're binding to might
+                    // still be in the "tentative" state, which prevents binding.  Retry a few
+                    // times with exponential backoff to see if it will become ready.
+                    //
+                    // Ideally we would just not bind to it, and get a signal later from netinfo
+                    // when it becomes ready and bind to it then, but that would require a massive
+                    // restructuring of netinfo.
+                    if count > 2 {
+                        return Err(Error::ListenError(e, *addr));
+                    }
+                    log::warn!(
+                        "Failed to bind DNS UDP to {} ({}): Retrying after {}s",
+                        addr,
+                        e,
+                        1 << count
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(1 << count)).await;
+                    count += 1;
+                    continue;
+                }
+                Err(e) => return Err(Error::ListenError(e, *addr)),
+            }
+        };
 
-        udp.set_opt_ipv4_packet_info(true)
-            .map_err(Error::ListenError)?;
-        udp.set_opt_ipv6_packet_info(true)
-            .map_err(Error::ListenError)?;
+        match addr {
+            nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::V4(_)) => udp
+                .set_opt_ipv4_packet_info(true)
+                .map_err(|e| Error::ListenError(e, *addr))?,
+            nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::V6(_)) => udp
+                .set_opt_ipv6_packet_info(true)
+                .map_err(|e| Error::ListenError(e, *addr))?,
+            _ => (),
+        }
 
         log::info!(
             "Listening for DNS on UDP {}",
@@ -627,7 +659,7 @@ impl DnsListenerHandler {
     ) -> Result<tokio::net::TcpListener, Error> {
         let tcp = tokio::net::TcpListener::bind(udp::nix_to_std_sockaddr(*addr))
             .await
-            .map_err(Error::ListenError)?;
+            .map_err(|e| Error::ListenError(e, *addr))?;
 
         log::info!(
             "Listening for DNS on TCP {}",
@@ -639,12 +671,22 @@ impl DnsListenerHandler {
         Ok(tcp)
     }
 
-    async fn new(conf: crate::config::SharedConfig) -> Result<Self, Error> {
+    async fn new(
+        conf: crate::config::SharedConfig,
+        netinfo: &crate::net::netinfo::SharedNetInfo,
+    ) -> Result<Self, Error> {
         let mut udp_listeners = vec![];
         let mut tcp_listeners = vec![];
-        for addr in &conf.read().await.dns_listeners {
-            udp_listeners.push(Self::listen_udp(&conf, addr).await?);
-            tcp_listeners.push(Self::listen_tcp(&conf, addr).await?);
+        {
+            let roconf = conf.read().await;
+            for addr in &roconf
+                .dns_listeners
+                .as_sockaddrs(&roconf.addresses, &netinfo, 53)
+                .await
+            {
+                udp_listeners.push(Self::listen_udp(&conf, addr).await?);
+                tcp_listeners.push(Self::listen_tcp(&conf, addr).await?);
+            }
         }
         let rate_limiter = IpRateLimiter::new().into();
 
@@ -721,7 +763,8 @@ impl DnsListenerHandler {
         let rcode;
         match err {
             /* These errors mean we never get a packet to reply to. */
-            ListenError(_) => unreachable!(),
+            ListenError(..) => unreachable!(),
+            AcceptError(..) => unreachable!(),
             RecvError(_) => unreachable!(),
             ParseError(_) => unreachable!(),
             RefusedByAcl(why) => {
@@ -1047,7 +1090,7 @@ impl DnsListenerHandler {
         tcp: &tokio::net::TcpListener,
         s: &std::sync::Arc<tokio::sync::RwLock<Self>>,
     ) -> Result<(), Error> {
-        let (sock, sock_addr) = tcp.accept().await.map_err(Error::ListenError)?;
+        let (sock, sock_addr) = tcp.accept().await.map_err(Error::AcceptError)?;
         let local_s = s.clone();
 
         tokio::spawn(async move { Self::run_tcp(&local_s, sock, sock_addr).await });
@@ -1118,9 +1161,12 @@ impl DnsService {
         }
     }
 
-    pub async fn new(conf: crate::config::SharedConfig) -> Result<Self, Error> {
+    pub async fn new(
+        conf: crate::config::SharedConfig,
+        netinfo: &crate::net::netinfo::SharedNetInfo,
+    ) -> Result<Self, Error> {
         Ok(Self {
-            next: tokio::sync::RwLock::new(DnsListenerHandler::new(conf).await?).into(),
+            next: tokio::sync::RwLock::new(DnsListenerHandler::new(conf, netinfo).await?).into(),
         })
     }
 }

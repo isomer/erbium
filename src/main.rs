@@ -59,18 +59,19 @@ async fn go() -> Result<(), Error> {
     } else {
         std::path::Path::new(&args[1])
     };
+    /* Build the shared network information database that various systems depend on */
+    let netinfo = net::netinfo::SharedNetInfo::new().await;
+
+    /* Load the configuration from disk */
     let conf = erbium::config::load_config_from_path(config_file)
         .await
         .map_err(|e| Error::Config(config_file.to_path_buf(), e))?;
-
-    /* Build the shared network information database that various systems depend on */
-    let netinfo = net::netinfo::SharedNetInfo::new().await;
 
     /* Initialise each of the services, and record them */
     let mut services = futures::stream::FuturesUnordered::new();
     #[cfg(feature = "dns")]
     {
-        let dns = dns::DnsService::new(conf.clone())
+        let dns = dns::DnsService::new(conf.clone(), &netinfo)
             .await
             .map_err(|err| Error::Service(err.to_string()))?;
         services.push(tokio::spawn(async move {

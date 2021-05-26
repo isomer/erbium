@@ -54,7 +54,9 @@ dns-routes:
 ### Listener addresses
 # api-listeners: ["/var/lib/erbium/control", "@erbium", "[::]:9968"]
 # dns-listeners: ["[::]:53"]
-# dhcp-listeners: [0.0.0.0:67]
+## This lets you configure the default bind style.  Set this to "bind-interfaces-addresses" if you're having
+## problems with address already in use.
+# default-listen-style: bind-unspecified
 
 ### ACLs
 ## ACLs are a list of match rules, and permissions to apply if the match rule

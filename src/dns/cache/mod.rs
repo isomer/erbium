@@ -105,7 +105,8 @@ fn clone_out_reply(reply: &Result<dnspkt::DNSPkt, Error>) -> Result<dnspkt::DNSP
         Err(Blocked) => Err(Blocked),
         Err(NoRouteConfigured) => Err(NoRouteConfigured),
         /* These errors cannot occur */
-        Err(ListenError(_)) => unreachable!(),
+        Err(ListenError(..)) => unreachable!(),
+        Err(AcceptError(..)) => unreachable!(),
         Err(RecvError(_)) => unreachable!(),
         Err(ParseError(_)) => unreachable!(),
         Err(RefusedByAcl(_)) => unreachable!(),

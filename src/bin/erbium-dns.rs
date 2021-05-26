@@ -55,10 +55,13 @@ async fn go() -> Result<(), Error> {
         tokio::task::JoinHandle<std::result::Result<(), String>>,
     > = futures::stream::FuturesUnordered::new();
 
+    let netinfo = erbium::net::netinfo::SharedNetInfo::new().await;
+
     let dns = dns::DnsService::new(
         erbium::config::load_config_from_path(config_file)
             .await
             .map_err(Error::Config)?,
+        &netinfo,
     )
     .await
     .map_err(Error::Dns)?;

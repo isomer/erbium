@@ -577,6 +577,17 @@ impl SharedNetInfo {
             .map(|x| x.lladdr.clone())
     }
 
+    pub async fn get_if_prefixes(&self) -> Vec<(std::net::IpAddr, u8)> {
+        self.0
+            .read()
+            .await
+            .intf
+            .iter()
+            .map(|(_ifidx, x)| x.addresses.clone())
+            .flatten()
+            .collect()
+    }
+
     pub async fn get_prefixes_by_ifidx(&self, ifidx: u32) -> Option<Vec<(std::net::IpAddr, u8)>> {
         self.0
             .read()

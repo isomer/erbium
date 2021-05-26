@@ -727,6 +727,55 @@ impl Match<std::net::Ipv6Addr> for Prefix {
     }
 }
 
+#[derive(Debug)]
+// Sometimes you want to only bind to interfaces that are necessary, rather than the unspecified
+// address.  This allows multiple processes to cooperate in providing a particular service on
+// differing interfaces.
+//
+// To support this, we look at the "addresses" configuration option, and only bind to addresses of
+// interfaces that match a prefix there.
+//
+// If this heuristic is incorrect, then people can override this with "dns-listeners".
+pub enum AddressType {
+    Addresses(Vec<nix::sys::socket::SockAddr>),
+    BindInterface,
+}
+
+enum DefaultAddressType {
+    Unspecified,
+    Interface,
+}
+
+impl AddressType {
+    pub async fn as_sockaddrs(
+        &self,
+        addresses: &[Prefix],
+        netinfo: &crate::net::netinfo::SharedNetInfo,
+        port: u16,
+    ) -> Vec<nix::sys::socket::SockAddr> {
+        match self {
+            AddressType::Addresses(addrs) => addrs.clone(),
+            AddressType::BindInterface => find_listener_addresses(addresses, netinfo)
+                .await
+                .iter()
+                .map(|addr| {
+                    nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::new(*addr, port))
+                })
+                .collect(),
+        }
+    }
+}
+
+impl Default for AddressType {
+    fn default() -> Self {
+        use nix::sys::socket::{InetAddr, IpAddr, SockAddr};
+        AddressType::Addresses(vec![SockAddr::Inet(InetAddr::new(
+            IpAddr::from_std(&std::net::Ipv6Addr::UNSPECIFIED.into()),
+            0,
+        ))])
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Config {
     #[cfg(feature = "dhcp")]
@@ -737,13 +786,28 @@ pub struct Config {
     pub captive_portal: Option<String>,
     pub addresses: Vec<Prefix>,
     pub listeners: Vec<nix::sys::socket::SockAddr>,
-    pub dhcp_listeners: Vec<nix::sys::socket::SockAddr>,
-    pub dns_listeners: Vec<nix::sys::socket::SockAddr>,
+    pub dns_listeners: AddressType,
     pub dns_routes: Vec<crate::dns::config::Route>,
     pub acls: Vec<crate::acl::Acl>,
 }
 
 pub type SharedConfig = std::sync::Arc<tokio::sync::RwLock<Config>>;
+
+async fn find_listener_addresses(
+    addresses: &[Prefix],
+    netinfo: &crate::net::netinfo::SharedNetInfo,
+) -> Vec<nix::sys::socket::IpAddr> {
+    let mut ret = vec![];
+    for (ifaddr, _len) in netinfo.get_if_prefixes().await {
+        for addr in addresses {
+            use crate::config::Match as _;
+            if addr.contains(ifaddr) {
+                ret.push(nix::sys::socket::IpAddr::from_std(&ifaddr))
+            }
+        }
+    }
+    ret
+}
 
 fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
     let y = yaml::YamlLoader::load_from_str(cfg).map_err(Error::YamlError)?;
@@ -764,9 +828,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut captive_portal = None;
         let mut addresses = None;
         let mut listeners = None;
-        let mut dhcp_listeners = None;
         let mut dns_listeners = None;
         let mut dns_routes = None;
+        let mut default_listen_style = DefaultAddressType::Unspecified;
         let mut acls = None;
         for (k, v) in fragment {
             match (k.as_str(), v) {
@@ -795,12 +859,22 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 (Some("api-listeners"), s) => {
                     listeners = parse_array("api-listeners", s, parse_string_sockaddr)?;
                 }
-                (Some("dhcp-listeners"), s) => {
-                    dhcp_listeners = parse_array("dhcp-listeners", s, parse_string_sockaddr)?;
+                (Some("dhcp-listeners"), _) => {
+                    return Err(Error::InvalidConfig("dhcp-listeners is deprecated, because it cannot work correclty".into()));
                 }
                 (Some("dns-listeners"), s) => {
-                    dns_listeners = parse_array("dns-listeners",s, parse_string_sockaddr)?;
+                    dns_listeners = parse_array("dns-listeners",s, parse_string_sockaddr)?
+                        .map(AddressType::Addresses);
                 }
+                (Some("default-listen-style"), s) => {
+                    match s.as_str() {
+                        None => return Err(Error::InvalidConfig(format!("invalid default-listen-style type: {}",
+                                type_to_name(s)))),
+                        Some("bind-addresses-interfaces") => default_listen_style = DefaultAddressType::Interface,
+                        Some("bind-unspecified") => default_listen_style = DefaultAddressType::Unspecified,
+                        Some(o) => return Err(Error::InvalidConfig(format!("invalid default-listen-style {}, expected bind-addresses-interfaces or bind-unspecified", o))),
+                    }
+                },
                 (Some("acls"), s) => {
                     acls = parse_array("acls", s, crate::acl::parse_acl)?;
                 }
@@ -822,19 +896,23 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             }
         }
         let addresses = addresses.unwrap_or_else(Vec::new);
+        println!("Listeners: {:?}", dns_listeners);
         let conf = Config {
             #[cfg(feature = "dhcp")]
             dhcp: dhcp.unwrap_or_else(crate::dhcp::config::Config::default),
             ra: ra.unwrap_or_else(crate::radv::config::Config::default),
             dns_servers,
             dns_search,
-            dns_listeners: dns_listeners.unwrap_or_else(|| {
-                vec![nix::sys::socket::SockAddr::new_inet(
-                    nix::sys::socket::InetAddr::new(
-                        nix::sys::socket::IpAddr::new_v6(0, 0, 0, 0, 0, 0, 0, 0),
-                        53,
-                    ),
-                )]
+            dns_listeners: dns_listeners.unwrap_or_else(|| match default_listen_style {
+                DefaultAddressType::Unspecified => {
+                    AddressType::Addresses(vec![nix::sys::socket::SockAddr::new_inet(
+                        nix::sys::socket::InetAddr::new(
+                            nix::sys::socket::IpAddr::new_v6(0, 0, 0, 0, 0, 0, 0, 0),
+                            53,
+                        ),
+                    )])
+                }
+                DefaultAddressType::Interface => AddressType::BindInterface,
             }),
             dns_routes: dns_routes.unwrap_or_else(Vec::new),
             captive_portal,
@@ -843,15 +921,6 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                     nix::sys::socket::UnixAddr::new("/var/lib/erbium/control").unwrap(),
                 )]
             }),
-            dhcp_listeners: dhcp_listeners.unwrap_or_else(|| {
-                vec![nix::sys::socket::SockAddr::new_inet(
-                    nix::sys::socket::InetAddr::new(
-                        nix::sys::socket::IpAddr::new_v4(0, 0, 0, 0),
-                        67,
-                    ),
-                )]
-            }),
-
             acls: acls.unwrap_or_else(|| crate::acl::default_acls(&addresses)),
             addresses,
         };
@@ -969,8 +1038,6 @@ fn test_listeners_parse() -> Result<(), Error> {
         "---
 dns-search: ['example.com']
 addresses: [192.0.2.0/24, 2001:db8::/64]
-
-dhcp-listeners: [192.0.2.0:67]
 dns-listeners: [192.0.2.0:53]
 ",
     )?;
