@@ -25,7 +25,7 @@ You will need a [configuration file](erbium.conf.example)
 IRC
 ===
 
-We discuss erbium on #erbium on irc.freenode.net
+We discuss erbium on #erbium on irc.libera.chat
 
 
 [^0]: Erbium is the 68th element in the periodic table, the same as the client
