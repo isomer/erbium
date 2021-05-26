@@ -997,7 +997,7 @@ rec {
       };
       "erbium" = rec {
         crateName = "erbium";
-        version = "0.2.12-rc3";
+        version = "0.2.12-rc4-unreleased";
         edition = "2018";
         crateBin = [
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
@@ -3537,9 +3537,9 @@ rec {
       };
       "redox_syscall" = rec {
         crateName = "redox_syscall";
-        version = "0.2.7";
+        version = "0.2.8";
         edition = "2018";
-        sha256 = "1why6kw3mbilpnca2xmxn6qh8byiydvizq8i75imqdgphvjr5pc5";
+        sha256 = "1z27f6rzm0lcpszbr2dmfyna7qmpmx4yb98yhzg1956l3kj3j9vl";
         libName = "syscall";
         authors = [
           "Jeremy Soller <jackpot51@gmail.com>"
@@ -3851,9 +3851,9 @@ rec {
       };
       "syn" = rec {
         crateName = "syn";
-        version = "1.0.71";
+        version = "1.0.72";
         edition = "2018";
-        sha256 = "0wsk7p1havw4ngwm41d4kf0ihx1hjziby5v8mjr1g48g8z4lq65d";
+        sha256 = "10mb1cqmq2vpl5v6qjgqqyvhgs9yf9xv9f0dbskababrzfzcvs51";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
