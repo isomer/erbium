@@ -896,7 +896,6 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             }
         }
         let addresses = addresses.unwrap_or_else(Vec::new);
-        println!("Listeners: {:?}", dns_listeners);
         let conf = Config {
             #[cfg(feature = "dhcp")]
             dhcp: dhcp.unwrap_or_else(crate::dhcp::config::Config::default),
