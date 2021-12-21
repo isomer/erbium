@@ -335,7 +335,7 @@ pub async fn run(
                         break;
                     }
                 } else if let Some(name) = s.as_abstract() {
-                    let mut name_bytes = vec![0x00u8];
+                    let mut name_bytes = vec![0x00_u8];
                     name_bytes.extend(name);
                     let sock_name = String::from_utf8(name_bytes)
                         .map_err(|_| Error::InvalidName(String::from_utf8_lossy(name).into()))?;

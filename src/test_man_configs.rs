@@ -38,3 +38,26 @@ async fn man_page_example_configs() {
     }
     assert_ne!(examples, 0); /* We need to test at least one example */
 }
+
+#[tokio::test]
+async fn validate_example_config() {
+    use tokio::io::AsyncReadExt as _;
+
+    let mut contents = Default::default();
+    tokio::fs::File::open("erbium.conf.example")
+        .await
+        .unwrap()
+        .read_to_string(&mut contents)
+        .await
+        .unwrap();
+    // If the line is indented, replace the "#" with a " ", keeping the indentation.
+    contents = contents.replace("\n#  ", "\n  ");
+    // If the line is not indented, then strip the leading "# "
+    contents = contents.replace("\n# ", "\n");
+    contents = contents.replace(
+        "the-contents-of-the-top-level-addresses-field",
+        "192.0.2.0/24",
+    );
+    println!("Parsing contents: {}", contents);
+    super::config::load_config_from_string_for_test(&contents).unwrap();
+}

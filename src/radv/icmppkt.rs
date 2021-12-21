@@ -28,10 +28,10 @@ pub const PREF64: NDOption = NDOption(38);
 #[derive(Clone, Debug)]
 pub enum NDOptionValue {
     SourceLLAddr(Vec<u8>),
-    MTU(u32),
+    Mtu(u32),
     Prefix(AdvPrefix),
-    RDNSS((std::time::Duration, Vec<std::net::Ipv6Addr>)),
-    DNSSL((std::time::Duration, Vec<String>)), // TODO: String is probably the wrong type here.
+    RecursiveDnsServers((std::time::Duration, Vec<std::net::Ipv6Addr>)),
+    DnsSearchList((std::time::Duration, Vec<String>)), // TODO: String is probably the wrong type here.
     CaptivePortal(String),
     Pref64((std::time::Duration, u8, std::net::Ipv6Addr)),
 }
@@ -49,9 +49,9 @@ impl NDOptions {
         self.0
             .iter()
             .filter(|x| match (&o, &x) {
-                (&RDNSS, &NDOptionValue::RDNSS(_)) => true,
+                (&RDNSS, &NDOptionValue::RecursiveDnsServers(_)) => true,
                 (&RDNSS, _) => false,
-                (&DNSSL, &NDOptionValue::DNSSL(_)) => true,
+                (&DNSSL, &NDOptionValue::DnsSearchList(_)) => true,
                 (&DNSSL, _) => false,
                 (&CAPTIVE_PORTAL, &NDOptionValue::CaptivePortal(_)) => true,
                 (&CAPTIVE_PORTAL, _) => false,
@@ -144,7 +144,7 @@ impl Serialise {
 
 impl Default for Serialise {
     fn default() -> Self {
-        Serialise {
+        Self {
             v: Default::default(),
         }
     }
@@ -193,11 +193,12 @@ impl SerialiseInto for &str {
 fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
     let mut v: Serialise = Default::default();
     v.serialise(ND_ROUTER_ADVERT.0);
-    v.serialise(0u8); /* Code */
-    v.serialise(0u16); /* Checksum */
+    v.serialise(0_u8); /* Code */
+    v.serialise(0_u16); /* Checksum */
     v.serialise(a.hop_limit);
     v.serialise(
-        if a.flag_managed { 0x80u8 } else { 0x00u8 } | if a.flag_other { 0x40u8 } else { 0x00u8 },
+        if a.flag_managed { 0x80_u8 } else { 0x00_u8 }
+            | if a.flag_other { 0x40_u8 } else { 0x00_u8 },
     );
     v.serialise(a.lifetime.as_secs() as u16);
     v.serialise(a.reachable.as_millis() as u32);
@@ -206,59 +207,59 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
         match opt {
             NDOptionValue::SourceLLAddr(src) => {
                 v.serialise(SOURCE_LL_ADDR.0);
-                v.serialise(1u8);
+                v.serialise(1_u8);
                 v.serialise(src);
             }
-            NDOptionValue::MTU(mtu) => {
+            NDOptionValue::Mtu(mtu) => {
                 v.serialise(MTU.0);
-                v.serialise(1u8);
-                v.serialise(0u16);
+                v.serialise(1_u8);
+                v.serialise(0_u16);
                 v.serialise(*mtu);
             }
             NDOptionValue::Prefix(prefix) => {
                 v.serialise(PREFIX_INFO.0);
-                v.serialise(4u8);
+                v.serialise(4_u8);
                 v.serialise(prefix.prefixlen);
                 v.serialise(
-                    if prefix.onlink { 0x80u8 } else { 0x00u8 }
-                        | if prefix.autonomous { 0x40u8 } else { 0x00u8 },
+                    if prefix.onlink { 0x80_u8 } else { 0x00_u8 }
+                        | if prefix.autonomous { 0x40_u8 } else { 0x00_u8 },
                 );
                 v.serialise(prefix.valid.as_secs() as u32);
                 v.serialise(prefix.preferred.as_secs() as u32);
-                v.serialise(0u32);
+                v.serialise(0_u32);
                 v.serialise(&prefix.prefix);
             }
-            NDOptionValue::RDNSS((lifetime, servers)) => {
+            NDOptionValue::RecursiveDnsServers((lifetime, servers)) => {
                 v.serialise(RDNSS.0);
                 v.serialise((1 + servers.len() * 2) as u8);
-                v.serialise(0u16); // Reserved / Padding.
+                v.serialise(0_u16); // Reserved / Padding.
                 v.serialise(lifetime.as_secs() as u32);
                 for server in servers {
                     v.serialise(server);
                 }
             }
-            NDOptionValue::DNSSL((lifetime, suffixes)) => {
+            NDOptionValue::DnsSearchList((lifetime, suffixes)) => {
                 let mut dnssl = Serialise::default();
                 for suffix in suffixes {
                     for label in suffix.split('.') {
                         dnssl.serialise(label.len() as u8);
                         dnssl.serialise(label);
                     }
-                    dnssl.serialise(0u8);
+                    dnssl.serialise(0_u8);
                 }
                 // Pad with 0x00 to the full size.
                 while dnssl.v.len() % 8 != 0 {
-                    dnssl.serialise(0u8);
+                    dnssl.serialise(0_u8);
                 }
                 v.serialise(DNSSL.0);
                 v.serialise(1 + (dnssl.v.len() / 8) as u8);
-                v.serialise(0u16); // Reserved / Padding.
+                v.serialise(0_u16); // Reserved / Padding.
                 v.serialise(lifetime.as_secs() as u32);
                 v.serialise(&dnssl.v);
             }
             NDOptionValue::Pref64((lifetime, prefixlen, prefix)) => {
                 v.serialise(PREF64.0);
-                v.serialise(2u8);
+                v.serialise(2_u8);
                 let scaled_lifetime = (lifetime.as_secs() / 8) as u16;
                 let plc = ((prefixlen - 32) / 8) as u16;
                 v.serialise((scaled_lifetime << 3) | plc);
@@ -270,7 +271,7 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
                 let mut b = url.clone().into_bytes();
                 // Pad with 0x00
                 while (b.len() + 2) & 8 != 0 {
-                    b.push(0x00u8);
+                    b.push(0x00_u8);
                 }
                 v.serialise(CAPTIVE_PORTAL.0);
                 v.serialise((1 + b.len() / 8) as u8);
@@ -306,7 +307,7 @@ fn test_reflexitivity() {
         reachable: Duration::from_secs(30),
         retrans: Duration::from_secs(1),
         options: NDOptions(vec![
-            NDOptionValue::MTU(1480),
+            NDOptionValue::Mtu(1480),
             NDOptionValue::SourceLLAddr(vec![0, 1, 2, 3, 4, 5]),
             NDOptionValue::Prefix(AdvPrefix {
                 prefixlen: 64,
@@ -316,11 +317,11 @@ fn test_reflexitivity() {
                 preferred: Duration::from_secs(3600),
                 prefix: "2001:db8::".parse().unwrap(),
             }),
-            NDOptionValue::RDNSS((
+            NDOptionValue::RecursiveDnsServers((
                 Duration::from_secs(600),
                 vec!["2001:db8::53".parse().unwrap()],
             )),
-            NDOptionValue::DNSSL((
+            NDOptionValue::DnsSearchList((
                 Duration::from_secs(600),
                 vec!["example.com".into(), "example.net".into()],
             )),

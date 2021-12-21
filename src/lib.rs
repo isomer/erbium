@@ -21,7 +21,7 @@ pub mod acl;
 pub mod config;
 #[cfg(feature = "dhcp")]
 pub mod dhcp;
-#[cfg(feature = "dns")]
+#[cfg(any(feature = "dns", fuzzing))]
 pub mod dns;
 #[cfg(feature = "http")]
 pub mod http;

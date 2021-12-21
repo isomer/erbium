@@ -354,9 +354,11 @@ pub fn parse(fragment: &yaml::Yaml) -> Result<Option<Config>, Error> {
                 (Some(interface), yaml::Yaml::Null) => conf.interfaces.push(
                     parse_interface(interface, &yaml::Yaml::Hash(Default::default()))?.unwrap(),
                 ),
-                (Some(interface), intf) => conf
-                    .interfaces
-                    .push(parse_interface(interface, intf)?.unwrap()),
+                (Some(interface), intf) => conf.interfaces.push(
+                    parse_interface(interface, intf)
+                        .map_err(|e| e.annotate(&format!("while parsing interface {}", interface)))?
+                        .unwrap(),
+                ),
                 (None, _) => {
                     return Err(Error::InvalidConfig(format!(
                         "router-advertisement keys should be names of interfaces, not {}",

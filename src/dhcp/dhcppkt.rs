@@ -501,7 +501,7 @@ impl DhcpOptionTypeValue {
                         o.push(label.len() as u8);
                         o.extend(label.as_bytes());
                     }
-                    o.push(0u8)
+                    o.push(0_u8)
                 }
                 o
             }
@@ -684,28 +684,28 @@ impl DhcpParse for Vec<u8> {
 impl DhcpParse for u64 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0u64, |acc, &v| (acc << 8) + (v as Self)))
+        Some(v.iter().fold(0_u64, |acc, &v| (acc << 8) + (v as Self)))
     }
 }
 
 impl DhcpParse for u32 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0u32, |acc, &v| (acc << 8) + (v as Self)))
+        Some(v.iter().fold(0_u32, |acc, &v| (acc << 8) + (v as Self)))
     }
 }
 
 impl DhcpParse for u16 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0u16, |acc, &v| (acc << 8) + (v as Self)))
+        Some(v.iter().fold(0_u16, |acc, &v| (acc << 8) + (v as Self)))
     }
 }
 
 impl DhcpParse for i32 {
     type Item = Self;
     fn parse_into(v: &[u8]) -> Option<Self> {
-        Some(v.iter().fold(0i32, |acc, &v| (acc << 8) + (v as Self)))
+        Some(v.iter().fold(0_i32, |acc, &v| (acc << 8) + (v as Self)))
     }
 }
 
@@ -812,7 +812,7 @@ impl DhcpOptions {
 }
 
 #[derive(PartialEq)]
-pub struct DHCP {
+pub struct Dhcp {
     pub op: DhcpOp,
     pub htype: HwType,
     pub hlen: u8,
@@ -830,9 +830,9 @@ pub struct DHCP {
     pub options: DhcpOptions,
 }
 
-impl std::fmt::Debug for DHCP {
+impl std::fmt::Debug for Dhcp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DHCP")
+        f.debug_struct("Dhcp")
             .field("op", &self.op)
             .field("htype", &self.htype)
             .field("hlen", &self.hlen)
@@ -883,7 +883,7 @@ fn null_terminated(mut v: Vec<u8>) -> Vec<u8> {
     v
 }
 
-pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
+pub fn parse(pkt: &[u8]) -> Result<Dhcp, ParseError> {
     let mut buf = pktparser::Buffer::new(pkt);
     let op = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
     let htype = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
@@ -929,7 +929,7 @@ pub fn parse(pkt: &[u8]) -> Result<DHCP, ParseError> {
 
     let options = DhcpOptions { other: raw_options };
 
-    Ok(DHCP {
+    Ok(Dhcp {
         op: DhcpOp(op),
         htype: HwType(htype),
         hlen,
@@ -1046,7 +1046,7 @@ impl Serialise for DhcpOptions {
         }
 
         /* Add end of options marker */
-        (255u8).serialise(v);
+        (255_u8).serialise(v);
     }
 }
 
@@ -1059,7 +1059,7 @@ fn serialise_fixed(out: &[u8], l: usize, v: &mut Vec<u8>) {
     }
 }
 
-impl DHCP {
+impl Dhcp {
     pub fn serialise(&self) -> Vec<u8> {
         let mut v: Vec<u8> = Vec::new();
         self.op.0.serialise(&mut v);
@@ -1079,7 +1079,7 @@ impl DHCP {
         serialise_fixed(&self.file, 128, &mut v);
 
         /* DHCP Magic */
-        0x6382_5363u32.serialise(&mut v);
+        0x6382_5363_u32.serialise(&mut v);
 
         self.options.serialise(&mut v);
 

@@ -33,8 +33,8 @@ pub(super) struct DnsAclHandler {
 impl DnsAclHandler {
     pub async fn new(config: config::SharedConfig) -> Self {
         Self {
-            config,
-            next: router::DnsRouteHandler::new(),
+            config: config.clone(),
+            next: router::DnsRouteHandler::new(config).await,
         }
     }
 
@@ -47,6 +47,11 @@ impl DnsAclHandler {
             acl::PermissionType::DnsRecursion,
         )
         .map_err(Error::RefusedByAcl)?;
+        if msg.in_query.question.qtype == dnspkt::RR_ANY {
+            return Err(Error::Denied("ANY queries are not allowed".into()));
+        } else if msg.remote_addr.port() == 53 {
+            return Err(Error::Denied("Invalid Source Port".into()));
+        }
         self.next.handle_query(msg).await
     }
 }

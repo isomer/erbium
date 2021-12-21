@@ -55,10 +55,13 @@ async fn go() -> Result<(), Error> {
         tokio::task::JoinHandle<std::result::Result<(), String>>,
     > = futures::stream::FuturesUnordered::new();
 
+    let netinfo = erbium::net::netinfo::SharedNetInfo::new().await;
+
     let dns = dns::DnsService::new(
         erbium::config::load_config_from_path(config_file)
             .await
             .map_err(Error::Config)?,
+        &netinfo,
     )
     .await
     .map_err(Error::Dns)?;
@@ -79,9 +82,11 @@ async fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     log::info!(
-        "erbium-dns {} ({})",
+        "erbium-dns {}{}",
         env!("CARGO_PKG_VERSION"),
-        env!("VERGEN_SHA_SHORT")
+        option_env!("VERGEN_GIT_SHA")
+            .map(|sha| format!(" ({})", sha))
+            .unwrap_or_else(|| "".into())
     );
     #[cfg(feature = "dns")]
     match go().await {

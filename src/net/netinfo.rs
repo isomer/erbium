@@ -27,8 +27,6 @@ use netlink_packet_route::{
 use netlink_sys::TokioSocket as Socket;
 use netlink_sys::{protocols, SocketAddr};
 
-use tokio_compat_02::FutureExt;
-
 #[derive(Clone, PartialEq)]
 pub enum LinkLayer {
     Ethernet([u8; 6]),
@@ -521,7 +519,7 @@ impl SharedNetInfo {
         let shared = SharedNetInfo(std::sync::Arc::new(
             tokio::sync::RwLock::new(NetInfo::new()),
         ));
-        tokio::spawn(NetLinkNetInfo::run(shared.clone(), s).compat());
+        tokio::spawn(NetLinkNetInfo::run(shared.clone(), s));
         // We want to block and wait until all the data is loaded, otherwise we'll cause confusion.
         c.recv().await;
         shared
@@ -577,6 +575,17 @@ impl SharedNetInfo {
             .intf
             .get(&ifidx)
             .map(|x| x.lladdr.clone())
+    }
+
+    pub async fn get_if_prefixes(&self) -> Vec<(std::net::IpAddr, u8)> {
+        self.0
+            .read()
+            .await
+            .intf
+            .iter()
+            .map(|(_ifidx, x)| x.addresses.clone())
+            .flatten()
+            .collect()
     }
 
     pub async fn get_prefixes_by_ifidx(&self, ifidx: u32) -> Option<Vec<(std::net::IpAddr, u8)>> {

@@ -138,6 +138,18 @@ pub enum PermissionType {
     HttpMetrics,
 }
 
+impl std::fmt::Display for PermissionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use PermissionType::*;
+        match self {
+            DnsRecursion => write!(f, "DNS Recursion"),
+            Http => write!(f, "HTTP"),
+            HttpLeases => write!(f, "HTTP Leases"),
+            HttpMetrics => write!(f, "HTTP Metrics"),
+        }
+    }
+}
+
 #[cfg_attr(test, derive(Debug))]
 #[derive(Eq, PartialEq)]
 pub enum AclError {
@@ -185,8 +197,8 @@ pub fn require_permission(
         (Ok(perms), Http) => check_permission(perms.allow_http, "http"),
         (Ok(perms), HttpLeases) => check_permission(perms.allow_http_leases, "http-leases"),
         (Ok(perms), HttpMetrics) => check_permission(perms.allow_http_metrics, "http-metrics"),
-        (Err(err), _) => {
-            log::warn!("{}: {}", client, err);
+        (Err(err), perm) => {
+            log::warn!("{}: {}: {}", client, perm, err);
             Err(err)
         }
     }

@@ -18,14 +18,7 @@
  */
 
 use futures::StreamExt as _;
-use lazy_static::*;
 use log::{error, info};
-use prometheus::register_int_counter;
-
-lazy_static! {
-    static ref HIGH_FIVE_COUNTER: prometheus::IntCounter =
-        register_int_counter!("highfives", "Number of high fives received").unwrap();
-}
 
 use erbium::*;
 
@@ -37,15 +30,15 @@ enum Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Config(path, e) => write!(
+        match *self {
+            Self::Config(ref path, ref e) => write!(
                 f,
                 "Failed to load config from {}: {}",
                 path.to_string_lossy(),
                 e
             ),
-            Error::Service(msg) => write!(f, "{}", msg),
-            Error::CommandLine(msg) => write!(f, "{}", msg),
+            Self::Service(ref msg) => write!(f, "{}", msg),
+            Self::CommandLine(ref msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -66,18 +59,19 @@ async fn go() -> Result<(), Error> {
     } else {
         std::path::Path::new(&args[1])
     };
+    /* Build the shared network information database that various systems depend on */
+    let netinfo = net::netinfo::SharedNetInfo::new().await;
+
+    /* Load the configuration from disk */
     let conf = erbium::config::load_config_from_path(config_file)
         .await
         .map_err(|e| Error::Config(config_file.to_path_buf(), e))?;
-
-    /* Build the shared network information database that various systems depend on */
-    let netinfo = net::netinfo::SharedNetInfo::new().await;
 
     /* Initialise each of the services, and record them */
     let mut services = futures::stream::FuturesUnordered::new();
     #[cfg(feature = "dns")]
     {
-        let dns = dns::DnsService::new(conf.clone())
+        let dns = dns::DnsService::new(conf.clone(), &netinfo)
             .await
             .map_err(|err| Error::Service(err.to_string()))?;
         services.push(tokio::spawn(async move {
@@ -125,9 +119,11 @@ async fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     info!(
-        "erbium {} ({})",
+        "erbium {}{}",
         env!("CARGO_PKG_VERSION"),
-        env!("VERGEN_SHA_SHORT")
+        option_env!("VERGEN_GIT_SHA")
+            .map(|sha| format!(" ({})", sha))
+            .unwrap_or_else(|| "".into())
     );
     match go().await {
         Ok(()) => (),

@@ -178,30 +178,30 @@ impl<'l> PktParser<'l> {
         let rdlen = self.get_u16()? as usize;
         match rtype {
             dnspkt::RR_CNAME => {
-                Ok(CNAME(self.get_domain()?))
+                Ok(CName(self.get_domain()?))
                 // TODO: assert the domain == rdlen.
             }
             dnspkt::RR_NS => {
-                Ok(NS(self.get_domain()?))
+                Ok(Ns(self.get_domain()?))
                 // TODO: assert the domain == rdlen.
             }
             dnspkt::RR_PTR => {
-                Ok(PTR(self.get_domain()?))
+                Ok(Ptr(self.get_domain()?))
                 // TODO: assert the domain == rdlen.
             }
-            dnspkt::RR_AFSDB => Ok(dnspkt::RData::AFSDB(dnspkt::AFSDBData {
+            dnspkt::RR_AFSDB => Ok(dnspkt::RData::AfsDb(dnspkt::AFSDBData {
                 subtype: self.get_u16()?,
                 hostname: self.get_domain()?,
             })),
-            dnspkt::RR_RP => Ok(dnspkt::RData::RP(dnspkt::RPData {
+            dnspkt::RR_RP => Ok(dnspkt::RData::Rp(dnspkt::RPData {
                 mbox: self.get_domain()?,
                 txt: self.get_domain()?,
             })),
-            dnspkt::RR_RT => Ok(dnspkt::RData::RT(dnspkt::PrefDomainData {
+            dnspkt::RR_RT => Ok(dnspkt::RData::Rt(dnspkt::PrefDomainData {
                 pref: self.get_u16()?,
                 domain: self.get_domain()?,
             })),
-            dnspkt::RR_MX => Ok(dnspkt::RData::MX(dnspkt::PrefDomainData {
+            dnspkt::RR_MX => Ok(dnspkt::RData::Mx(dnspkt::PrefDomainData {
                 pref: self.get_u16()?,
                 domain: self.get_domain()?,
             })),
@@ -212,7 +212,7 @@ impl<'l> PktParser<'l> {
                 let services = self.get_string()?;
                 let regexp = self.get_string()?;
                 let replacement = self.get_domain()?;
-                Ok(dnspkt::RData::NAPTR(dnspkt::NAPTRData {
+                Ok(dnspkt::RData::NaPtr(dnspkt::NAPTRData {
                     order,
                     preference,
                     flags,
@@ -223,9 +223,9 @@ impl<'l> PktParser<'l> {
             }
             dnspkt::RR_OPT => {
                 let rdata = self.get_bytes(rdlen)?;
-                Ok(dnspkt::RData::OPT(EdnsParser::new(&rdata).get_options()?))
+                Ok(dnspkt::RData::Opt(EdnsParser::new(&rdata).get_options()?))
             }
-            dnspkt::RR_SOA => Ok(dnspkt::RData::SOA(dnspkt::SoaData {
+            dnspkt::RR_SOA => Ok(dnspkt::RData::Soa(dnspkt::SoaData {
                 mname: self.get_domain()?,
                 rname: self.get_domain()?,
                 serial: self.get_u32()?,
@@ -260,8 +260,8 @@ impl<'l> PktParser<'l> {
 
         Ok(dnspkt::RR {
             domain,
-            rrtype,
             class,
+            rrtype,
             ttl,
             rdata,
         })
@@ -287,7 +287,7 @@ impl<'l> PktParser<'l> {
         let rcode = dnspkt::RCode((flag2 & 0b0000_1111) as u16);
         if qcount != 1 {
             return Err(format!(
-                "Incorrect number of questions ({} / {:?} / {:?})",
+                "Incorrect number of questions ({} / {} / {})",
                 qcount, opcode, rcode
             ));
         }
@@ -356,7 +356,7 @@ impl<'l> PktParser<'l> {
         });
 
         let edns = opt.map(|x| match &x.rdata {
-            dnspkt::RData::OPT(o) => o.clone(),
+            dnspkt::RData::Opt(o) => o.clone(),
             _ => panic!("opt record does not contain opt data"),
         });
 
@@ -380,8 +380,8 @@ impl<'l> PktParser<'l> {
             edns_do: edo,
             question: dnspkt::Question {
                 qdomain,
-                qtype,
                 qclass,
+                qtype,
             },
             answer,
             nameserver,

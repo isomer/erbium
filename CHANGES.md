@@ -1,8 +1,21 @@
-0.2.10 (UNRELEASED)
+0.2.12-rc5 (UNRELEASED)
    - DHCP: Bug Fix: If there are multiple active leases for a host, don't flip
      between them, but instead try and keep one.
+0.2.12-rc4
+   - Harden DNS listeners to avoid premature exits.
+   - Add `default-listen-style` to allow multiple DNS servers on one host.
+   - Removed `dhcp-listeners` as the feature could never possibly work: If you
+     bind to an address, you don't receive broadcast packets and thus never see
+     DHCP requests.
+0.2.12-rc3
+   - DHCP should not silently ignore prefixes that don't have 0 bits in the network address.
+0.2.12-rc2
+   - Merged in the new DNS branch.
 0.2.9
    - Workaround for not compiling on NixOS.
+0.2.8
+   - Cookies are now sent on error
+   - Fixed some metrics bugs.
 0.2.7
    - Added ACL subsystem.
    - Massive restructuring of the DNS service to start to get it into shape.

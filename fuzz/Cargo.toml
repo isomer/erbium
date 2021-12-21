@@ -19,6 +19,9 @@ path = ".."
 [workspace]
 members = ["."]
 
+[features]
+full=[]
+
 [[bin]]
 name = "fuzz_dns"
 path = "fuzz_targets/fuzz_dns.rs"

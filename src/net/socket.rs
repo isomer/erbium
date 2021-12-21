@@ -204,10 +204,8 @@ impl RecvMsg {
     pub fn local_intf(&self) -> Option<i32> {
         if let Some(pi) = self.ipv6pktinfo {
             Some(pi.ipi6_ifindex as i32)
-        } else if let Some(pi) = self.ipv4pktinfo {
-            Some(pi.ipi_ifindex as i32)
         } else {
-            None
+            self.ipv4pktinfo.map(|pi| pi.ipi_ifindex as i32)
         }
     }
 }

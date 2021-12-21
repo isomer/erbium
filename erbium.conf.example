@@ -1,0 +1,133 @@
+##   Copyright 2021 Perry Lorier
+##
+##  Licensed under the Apache License, Version 2.0 (the "License");
+##  you may not use this file except in compliance with the License.
+##  You may obtain a copy of the License at
+##
+##      http://www.apache.org/licenses/LICENSE-2.0
+##
+##  Unless required by applicable law or agreed to in writing, software
+##  distributed under the License is distributed on an "AS IS" BASIS,
+##  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+##  See the License for the specific language governing permissions and
+##  limitations under the License.
+##
+##  SPDX-License-Identifier: Apache-2.0
+##
+##
+## Example configuration for erbium
+##
+## See erbium.conf(5) for more details.
+
+### Minimal required to get running.
+
+## The addresses you want to hand out.
+## This becomes the default addresses for Router Advertisements (for v6) and DHCP (for v4).
+## Addresses will be assigned on interfaces that have an address that is included within the range.
+addresses: [192.0.2.0/24, 2001:db8::/64]
+
+## DNS routing for where to relay DNS queries.
+dns-routes:
+  # An empty domain suffix matches all.
+  - domain-suffixes: [""]
+    # Domains with this suffix should be forwarded
+    type: forward
+    # Forward to Google Public DNS.  Change this to relay elsewhere.
+    # Currently only one address is supported here, despite it being a list.
+    dns-servers: [8.8.8.8]
+  # Other routes are possible, the most specific suffix is used.
+  - domain-suffixes: ["invalid"]
+    # forge-nxdomain forges a "does not exist" for this and all subdomains.
+    type: forge-nxdomain
+
+### DNS search path
+## This is included in DHCP (for v4) and Router Advertisments DNSSL (for v6) by default.
+## This defaults to the empty list.
+# dns-search: [example.com, example.org]
+
+### DNS servers
+## This is the DNS servers included in DHCP (for v4) and Router Advertisements RDNSS (for v6) by default.
+## $self4 and $self6 are the v4 and v6 receiving addresses respectively.
+## This defaults to [$self4, $self6]
+# dns-servers: [$self4, $self6]
+
+### Listener addresses
+# api-listeners: ["/var/lib/erbium/control", "@erbium", "[::]:9968"]
+# dns-listeners: ["[::]:53"]
+## This lets you configure the default bind style.  Set this to "bind-interfaces-addresses" if you're having
+## problems with address already in use.
+# default-listen-style: bind-unspecified
+
+### ACLs
+## ACLs are a list of match rules, and permissions to apply if the match rule
+## succeeds.  First match wins.  If nothing matches, no permissions are granted.
+## See erbium.conf(5) for descriptions of the permissions.  If any ACLs are
+## specified, the defaults are overridden, so remember to include the other
+## entries if you want to change just one.
+#
+# acls:
+#  # Allow addresses we hand out to use our services (dns, http api)
+#  - match-subnets: [the-contents-of-the-top-level-addresses-field]
+#    apply-access: ["dns-recursion", "http-ro"]
+#  # Allow localhost/ip6-localhost to use our services
+#  - match-subnets: [127.0.0.0/8, ::1/128]
+#    apply-access: ["dns-recursion", "http-ro"]
+#  # Allow readonly access to the API server over the unix domain socket.
+#  - match-unix: true
+#    apply-access: ["http-ro"]
+
+### Router Advertisements
+## This lets you override the defaults for router advertisements.
+## You can use "null" to unset a default.
+# router-advertisements:
+#  # This is a list of interface names
+#  eth0:
+#    hop-limit: 64 # The hop limit to use on this interface
+#    managed: false # Should the client get an address from DHCPv6
+#    other: false # Should the client get other configuration from DHCPv6
+#    lifetime: 1h  # How long this router should be considered a viable default route
+#    reachable: 5m # How long a neighbour is considered reachable after comfirmation.
+#    mtu: 1480 # The Maximum Transfer Unit for this interface.
+#    dns-servers:
+#     addresses: [2001:4860:4860::8888]
+#     lifetime: 1h
+#    dns-search:
+#     domains: [custom.example.com]
+#     lifetime: 1h
+#    pref64:
+#     prefix: 64:ff9b::/96
+#     lifetime: 10m
+#    prefixes:
+#     - prefix: 2001:db8:0:1::/64
+#       on-link: true    # Can other hosts with this prefix be talked to
+#                        # directly, or should they go through the default gateway
+#       autonomous: true # Should hosts allocate themselves an address from this prefix.
+#       valid: 30d       # How long this prefix is valid for.
+#       preferred: 7d    # How long this prefix should be used as a preferred prefix.
+
+### DHCP policy
+## This lets you override and customise the DHCP configuration
+## First match wins.
+# dhcp-policies:
+#   - apply-ntp-servers: [192.0.2.123]
+#     policies:
+#       - match-subnet: 198.51.100.0/24
+#         apply-range:
+#           start: 198.51.100.100
+#           end: 198.51.100.199
+#         apply-routes:
+#           - prefix: 203.0.113.0/24
+#             next-hop: $self4
+#         policies:
+#         # This is an example of how to provide configuration per host, including static IPs
+#           - { match-hardware-address: 00:00:5E:00:53:01, apply-address: 198.51.100.110 }
+#           # This doesn't have a match, so won't apply to anything, but will reserve the address.
+#           # This is useful to reserve addresses for hosts that have static IP configuration.
+#           - { apply-address: 198.51.100.120 }
+#
+#       # This has no match block, so noone will be allocated this by default
+#       - apply-subnet: 203.0.113.0/24
+#         policies:
+#           # This policy has a match, but no addresses, so it will allocate an address out of the parent.
+#           - { match-hardware-address: 00:00:5E:00:53:F0 }
+

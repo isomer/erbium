@@ -79,6 +79,23 @@ This is supported by both the DHCP and router advertisements protocols.
 This sets the URL to the captive portal, as specified in RFC8910.
 This is used by both DHCP and router advertisements.
 
+.IP "\fBdefault-listen-style\fP \fBbind-unspecified\fP|\fBbind-addresses-interfaces\fP"
+(defaults to bind-unspecified)
+This sets the default bind style for DNS and DHCP requests.
+.RS
+.IP \fBbind-unspecified\fP
+This binds to the unspecified address (0.0.0.0 or [::]).
+This means that interfaces do not need to be fully operational when erbium
+starts.
+Erbium will discard packets that have no matching configuration.
+This is the default.
+.IP \fBbind-addresses-interfaces\fP
+This binds to addresses that are configured on interfaces that are within the prefixes listed in the "addresses" field.
+This allows erbium to share a machine with systemd-resolved or other DNS/DHCP servers that are used for other
+interfaces.
+This however has the downside that the interfaces must be up and fully configured before erbium can start, which can
+cause race conditions with dynamic addressing systems and duplicate address detection.
+.RE
 .IP "\fBapi\-listeners:\fP \fIlist\-of\-socket\-addresses\fP"
 (defaults to [/var/lib/erbium/control])
 This sets the addresses that the API HTTP server will listen on.
@@ -86,8 +103,6 @@ By default this is only a unix domain socket, which can be easily secured.
 IPv4 (ip:port) and IPv6 ([ip]:port) are also supported.
 You may wish to use ["/var/lib/erbium/control", "[::1]:9968"] to allow scraping
 prometheus metrics from ip6-localhost.
-This is currently an experimental feature and only enabled with
-\fB\-\-features=http\fP on the cargo build command line.
 
 .IP "\fBacls:\fP \fIarray-of-acls\fP"
 (default see the ACLs section below)
@@ -347,6 +362,35 @@ This configures how long this prefix is considered valid and usable.
 The duration that addresses generated from the prefix via stateless address
 autoconfiguration remain preferred, and should be used for new connections.
 .RE
+.SH DNS Configuration
+.IP "\fBdns\-listeners:\fP \fIlist-of-socket-addresses\fP"
+(defaults to [::]:53 if default-listen-style is bind-unspecified, otherwise the interface addresses listed in addresses)
+This configures which addresses the DNS server will listen on.
+.IP "\fBdns\-routes:\fP \fIlist-of-dns-routes\fP"
+(defaults to the empty list)
+This is a list of DNS routes.
+.RS
+.IP "\fBdomain\-suffixes:\fP \fIlist-of-domain-suffixes\fP"
+(defaults to the empty list)
+This is the list of domain suffixes that this route should apply to.
+This will match this domain, and all sub\-domains.
+For example "example.com" matches "foo.example.com" and "example.com" but not "example.net".
+The longest suffix match wins.
+Use the empty string "" to use this as a default match.
+.IP "\fBtype:\fP \fIforward\fP|\fIforge-nxdomain\fP"
+(defaults to forward)
+This configures what to do with domain names that end in this suffix.
+.RS
+.IP forward
+This is used to forward queries that desire recursion to another set of nameservers.
+.IP forge-nxdomain
+This will forge a NXDOMAIN reply for this, and all subdomains.
+.RE
+.IP "\fBdns-servers:\fP \fIlist-of-socket-addresses\fP"
+(defaults to the empty list)
+Only used by type "forward".
+This specifies the nameservers that the queries should be forwarded to.
+.RE
 .SH ACLs (Access Control Lists)
 To change which clients can do what, erbium has a customisable ACL system.
 ACLs are defined under the heading "acls:" at the top level, and are an ordered list of rules of which clients this
@@ -433,6 +477,11 @@ router-advertisements:
     - prefix: 2001:db8:0:1::/64
    dns-servers:
     addresses: [2001:db8::53]
+
+dns-routes:
+  - domain-suffixes: [""]
+    type: forward
+    dns-servers: [2001:4860:4860::8888]
 .EE
 .PP
 Imagine a router with 3 interfaces.

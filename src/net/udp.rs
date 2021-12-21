@@ -137,4 +137,13 @@ impl UdpSocket {
         )
         .map_err(nix_to_io_error)
     }
+
+    pub fn set_opt_reuse_port(&self, b: bool) -> Result<(), io::Error> {
+        nix::sys::socket::setsockopt(
+            self.fd.get_ref().as_raw_fd(),
+            nix::sys::socket::sockopt::ReusePort,
+            &b,
+        )
+        .map_err(nix_to_io_error)
+    }
 }

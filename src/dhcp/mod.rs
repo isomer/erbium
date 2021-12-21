@@ -125,7 +125,7 @@ impl DhcpError {
 #[derive(Debug)]
 pub struct DHCPRequest {
     /// The DHCP request packet.
-    pub pkt: dhcppkt::DHCP,
+    pub pkt: dhcppkt::Dhcp,
     /// The IP address that the request was received on.
     pub serverip: std::net::Ipv4Addr,
     /// The interface index that the request was received on.
@@ -138,7 +138,7 @@ pub struct DHCPRequest {
 impl std::default::Default for DHCPRequest {
     fn default() -> Self {
         DHCPRequest {
-            pkt: dhcppkt::DHCP {
+            pkt: dhcppkt::Dhcp {
                 op: dhcppkt::OP_BOOTREQUEST,
                 htype: dhcppkt::HWTYPE_ETHERNET,
                 hlen: 6,
@@ -373,10 +373,10 @@ struct Response {
 fn handle_discover<'l>(
     pools: &mut pool::Pool,
     req: &DHCPRequest,
-    _serverids: ServerIds,
+    _serverids: &ServerIds,
     base: &[config::Policy],
     conf: &'l super::config::Config,
-) -> Result<dhcppkt::DHCP, DhcpError> {
+) -> Result<dhcppkt::Dhcp, DhcpError> {
     /* Build the default response we are about to reply with, it will be filled in later */
     let mut response: Response = Response {
         options: ResponseOptions {
@@ -414,7 +414,7 @@ fn handle_discover<'l>(
                     lease.lease_type
                 );
 
-                Ok(dhcppkt::DHCP {
+                Ok(dhcppkt::Dhcp {
                     op: dhcppkt::OP_BOOTREPLY,
                     htype: dhcppkt::HWTYPE_ETHERNET,
                     hlen: 6,
@@ -448,10 +448,10 @@ fn handle_discover<'l>(
 fn handle_request(
     pools: &mut pool::Pool,
     req: &DHCPRequest,
-    serverids: ServerIds,
+    serverids: &ServerIds,
     base: &[config::Policy],
     conf: &super::config::Config,
-) -> Result<dhcppkt::DHCP, DhcpError> {
+) -> Result<dhcppkt::Dhcp, DhcpError> {
     if let Some(si) = req.pkt.options.get_serverid() {
         if !serverids.contains(&si) {
             return Err(DhcpError::OtherServer(si));
@@ -491,7 +491,7 @@ fn handle_request(
                     lease.expire,
                     lease.lease_type
                 );
-                Ok(dhcppkt::DHCP {
+                Ok(dhcppkt::Dhcp {
                     op: dhcppkt::OP_BOOTREPLY,
                     htype: dhcppkt::HWTYPE_ETHERNET,
                     hlen: 6,
@@ -531,7 +531,7 @@ fn format_mac(v: &[u8]) -> String {
         .join(":")
 }
 
-fn format_client(req: &dhcppkt::DHCP) -> String {
+fn format_client(req: &dhcppkt::Dhcp) -> String {
     format!(
         "{} ({})",
         format_mac(&req.chaddr),
@@ -543,7 +543,7 @@ fn format_client(req: &dhcppkt::DHCP) -> String {
     )
 }
 
-fn log_options(req: &dhcppkt::DHCP) {
+fn log_options(req: &dhcppkt::Dhcp) {
     log::info!(
         "{}: Options: {}",
         format_client(&req),
@@ -671,17 +671,16 @@ pub async fn build_default_config(
         .filter_map(|prefix| {
             if let super::config::Prefix::V4(p4) = prefix {
                 use crate::config::Match as _;
-                // TODO: Currently if the subnet is invalid, then we just skip adding it.
-                // This is probably fine for now, but is likely to cause confusion in the future.
-                let subnet = crate::net::Ipv4Subnet::new(p4.addr, p4.prefixlen).ok()?;
+                use crate::config::PrefixOps as _;
+                let subnet = crate::net::Ipv4Subnet::new(p4.network(), p4.prefixlen).ok()?;
                 let mut ret = config::Policy {
                     match_subnet: Some(subnet),
                     apply_address: Some(
                         (1..((1 << (32 - p4.prefixlen)) - 2))
                             .map(|offset| (u32::from(subnet.network()) + offset).into())
                             // TODO: This removes one IP from the list, it should also remove any
-                            // others found on the local machine.  Again, fine for now, but likely
-                            // to cause confusion in the future.
+                            // others found on the local machine.  Probably fine for now, but
+                            // likely to cause confusion in the future.
                             .filter(|ip4| *ip4 != request.serverip)
                             .collect::<pool::PoolAddresses>()
                             .sub(&all_addrs),
@@ -720,15 +719,15 @@ pub async fn handle_pkt(
     request: &DHCPRequest,
     serverids: ServerIds,
     conf: &super::config::Config,
-) -> Result<dhcppkt::DHCP, DhcpError> {
+) -> Result<dhcppkt::Dhcp, DhcpError> {
     match request.pkt.options.get_messagetype() {
         Some(dhcppkt::DHCPDISCOVER) => {
             let base = [build_default_config(&conf, &request).await];
-            handle_discover(&mut pools, &request, serverids, &base, conf)
+            handle_discover(&mut pools, &request, &serverids, &base, conf)
         }
         Some(dhcppkt::DHCPREQUEST) => {
             let base = [build_default_config(&conf, &request).await];
-            handle_request(&mut pools, &request, serverids, &base, conf)
+            handle_request(&mut pools, &request, &serverids, &base, conf)
         }
         Some(x) => Err(DhcpError::UnknownMessageType(x)),
         None => Err(DhcpError::ParseError(dhcppkt::ParseError::InvalidPacket)),
@@ -767,6 +766,8 @@ fn to_array(mac: &[u8]) -> Option<[u8; 6]> {
 }
 
 enum RunError {
+    ListenError(std::io::Error),
+    RecvError(std::io::Error),
     Io(std::io::Error),
     PoolError(pool::Error),
 }
@@ -776,6 +777,8 @@ impl ToString for RunError {
         match self {
             RunError::Io(e) => format!("I/O Error in DHCP: {}", e),
             RunError::PoolError(e) => format!("DHCP Pool Error: {}", e),
+            RunError::ListenError(e) => format!("Failed to listen on DHCP: {}", e),
+            RunError::RecvError(e) => format!("Failed to receive a packet for DHCP: {}", e),
         }
     }
 }
@@ -953,7 +956,8 @@ impl DhcpService {
         netinfo: crate::net::netinfo::SharedNetInfo,
         conf: super::config::SharedConfig,
     ) -> Result<Self, RunError> {
-        let rawsock = Arc::new(raw::RawSocket::new(raw::EthProto::ALL).map_err(RunError::Io)?);
+        let rawsock =
+            Arc::new(raw::RawSocket::new(raw::EthProto::ALL).map_err(RunError::ListenError)?);
         let pool = Arc::new(sync::Mutex::new(
             pool::Pool::new().map_err(RunError::PoolError)?,
         ));
@@ -962,14 +966,17 @@ impl DhcpService {
         let listener = UdpSocket::bind(
             &tokio::net::lookup_host("0.0.0.0:67")
                 .await
-                .map_err(RunError::Io)?
+                .unwrap()
                 .collect::<Vec<_>>(),
         )
         .await
-        .map_err(RunError::Io)?;
+        .map_err(RunError::ListenError)?;
         listener
             .set_opt_ipv4_packet_info(true)
-            .map_err(RunError::Io)?;
+            .map_err(RunError::ListenError)?;
+        listener
+            .set_opt_reuse_port(true)
+            .map_err(RunError::ListenError)?;
         log::info!(
             "Listening for DHCP on {}",
             listener.local_addr().map_err(RunError::Io)?
@@ -978,9 +985,9 @@ impl DhcpService {
             netinfo,
             conf,
             rawsock,
+            pool,
             serverids,
             listener,
-            pool,
         })
     }
 
@@ -994,15 +1001,17 @@ impl DhcpService {
         }
     }
 
-    async fn run_internal(self: std::sync::Arc<Self>) -> Result<(), RunError> {
-        log::info!("Starting DHCP service");
+    async fn run_internal(
+        self: &std::sync::Arc<Self>,
+        listener: &UdpSocket,
+    ) -> Result<(), RunError> {
         loop {
             let rm;
-            match self.listener.recv_msg(65536, udp::MsgFlags::empty()).await {
+            match listener.recv_msg(65536, udp::MsgFlags::empty()).await {
                 Ok(m) => rm = m,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => return Err(RunError::Io(e)),
+                Err(e) => return Err(RunError::RecvError(e)),
             }
             DHCP_RX_PACKETS.inc();
             let self2 = self.clone();
@@ -1019,7 +1028,7 @@ impl DhcpService {
     }
 
     pub async fn run(self: std::sync::Arc<Self>) -> Result<(), String> {
-        match self.run_internal().await {
+        match self.run_internal(&self.listener).await {
             Ok(_) => Ok(()),
             Err(e) => Err(e.to_string()),
         }
@@ -1109,7 +1118,7 @@ dhcp-policies:
     };
     if !apply_policies(
         &DHCPRequest {
-            pkt: dhcppkt::DHCP {
+            pkt: dhcppkt::Dhcp {
                 op: dhcppkt::OP_BOOTREQUEST,
                 htype: dhcppkt::HWTYPE_ETHERNET,
                 hlen: 6,
@@ -1156,7 +1165,7 @@ dhcp-policies:
 
 #[test]
 fn test_format_client() {
-    let req = dhcppkt::DHCP {
+    let req = dhcppkt::Dhcp {
         op: dhcppkt::OP_BOOTREQUEST,
         htype: dhcppkt::HWTYPE_ETHERNET,
         hlen: 6,
@@ -1204,7 +1213,7 @@ async fn test_defaults() {
     let base = [build_default_config(&conf, &pkt).await];
     println!("base={:?}", base);
     let resp =
-        handle_discover(&mut p, &pkt, serverids, &base, &conf).expect("Failed to handle request");
+        handle_discover(&mut p, &pkt, &serverids, &base, &conf).expect("Failed to handle request");
     assert_eq!(
         resp.options
             .get_option::<Vec<std::net::Ipv4Addr>>(&dhcppkt::OPTION_DOMAINSERVER),
@@ -1279,7 +1288,7 @@ async fn test_base() {
         .contains(&"192.0.2.3".parse().unwrap()));
     println!("base={:#?}", base);
     println!("pkt={:?}", pkt);
-    let resp = handle_discover(&mut pool, &pkt, serverids, &[base], &conf)
+    let resp = handle_discover(&mut pool, &pkt, &serverids, &[base], &conf)
         .expect("Failed to handle request");
     assert_eq!(
         resp.options
@@ -1305,5 +1314,29 @@ async fn test_base() {
         resp.options
             .get_option::<Vec<String>>(&dhcppkt::OPTION_DOMAINSEARCH),
         Some(vec![String::from("example.org")])
+    );
+}
+
+#[tokio::test]
+/* There was a bug that if the suffix bits in the prefix were not 0, then it would silently ignore
+ * the address.  Now we set them to 0 ourselves explicitly.
+ */
+async fn test_non_network_prefix() {
+    let conf = crate::config::load_config_from_string_for_test(
+        "---
+addresses: [192.0.2.53/24]
+",
+    )
+    .unwrap();
+
+    let pkt = test::mk_dhcp_request();
+    let base = build_default_config(&*conf.read().await, &pkt).await;
+
+    let network = crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap();
+
+    assert_eq!(base.policies[0].match_subnet.unwrap().addr, network.addr);
+    assert_eq!(
+        base.policies[0].match_subnet.unwrap().prefixlen,
+        network.prefixlen
     );
 }
