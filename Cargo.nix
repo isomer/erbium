@@ -151,9 +151,9 @@ rec {
       };
       "anyhow" = rec {
         crateName = "anyhow";
-        version = "1.0.40";
+        version = "1.0.42";
         edition = "2018";
-        sha256 = "0fq6qxlzp3bwrjbs3wp4i470k8vsvlkpx3q2wpl79gawvf9cvci8";
+        sha256 = "11n4mf7psp5pyy9zjp6yg2kqx822f7q9jyq6nmf5bm30gbx3qpar";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -308,9 +308,9 @@ rec {
       };
       "async-io" = rec {
         crateName = "async-io";
-        version = "1.4.1";
+        version = "1.6.0";
         edition = "2018";
-        sha256 = "0frwa13kyqk28szifippqmp1z3wgbz2fcmw4x84fkccl4z7xbgsb";
+        sha256 = "0yv0xv7nhkdhyz9z5q1hq9bavlmkrysrd1q30h69yhzjg6jfc4d8";
         authors = [
           "Stjepan Glavina <stjepang@gmail.com>"
         ];
@@ -318,10 +318,6 @@ rec {
           {
             name = "concurrent-queue";
             packageId = "concurrent-queue";
-          }
-          {
-            name = "fastrand";
-            packageId = "fastrand";
           }
           {
             name = "futures-lite";
@@ -500,7 +496,7 @@ rec {
           }
           {
             name = "pin-project-lite";
-            packageId = "pin-project-lite 0.2.6";
+            packageId = "pin-project-lite 0.2.7";
             optional = true;
           }
           {
@@ -671,9 +667,9 @@ rec {
       };
       "bumpalo" = rec {
         crateName = "bumpalo";
-        version = "3.6.1";
+        version = "3.7.0";
         edition = "2018";
-        sha256 = "1gndni6ng6z1v14lq5zgm1k2y9320w4bc2ijzgyz9qwx9f56nfb3";
+        sha256 = "0ccn025n0x1gc0ijjlabin2xs7dkx5yfagkskr93yw9c06pyfncw";
         authors = [
           "Nick Fitzgerald <fitzgen@gmail.com>"
         ];
@@ -734,10 +730,10 @@ rec {
       };
       "cc" = rec {
         crateName = "cc";
-        version = "1.0.68";
+        version = "1.0.69";
         edition = "2018";
         crateBin = [];
-        sha256 = "11ypa8b7iwhjf5fg5j3hvbn2116h9g8v67vyd9s7ljgzq52c4wja";
+        sha256 = "1cly36mskqby2yqiygls7myd0qjcfrvxcyw2cf4qdqbc5kvc4377";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
@@ -850,9 +846,9 @@ rec {
       };
       "crossbeam-utils" = rec {
         crateName = "crossbeam-utils";
-        version = "0.8.4";
+        version = "0.8.5";
         edition = "2018";
-        sha256 = "0y52m693x5s65z4f54r35ak6m0gmxic8x4hmxldghsjd1lgj7ssg";
+        sha256 = "1ny481cx8a5pdknypb41jqym03dl8x26i2ldyyp3yb3zrq8zqb6q";
         authors = [
           "The Crossbeam Project Developers"
         ];
@@ -865,12 +861,6 @@ rec {
             name = "lazy_static";
             packageId = "lazy_static";
             optional = true;
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "autocfg";
-            packageId = "autocfg";
           }
         ];
         features = {
@@ -975,9 +965,9 @@ rec {
       };
       "env_logger" = rec {
         crateName = "env_logger";
-        version = "0.8.3";
+        version = "0.8.4";
         edition = "2018";
-        sha256 = "0gwx1pvbv99fj9wpicknyv4p2vj997xpva8ac5dg03m35q0jlf8p";
+        sha256 = "1qzw8g11dbdfi7ixm44ldykwcqsxqkh8vx5cgpd88zmclgz8g4d1";
         authors = [
           "The Rust Project Developers"
         ];
@@ -1017,7 +1007,7 @@ rec {
       };
       "erbium" = rec {
         crateName = "erbium";
-        version = "0.2.12-rc4";
+        version = "0.2.12-rc5";
         edition = "2018";
         crateBin = [
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
@@ -1107,7 +1097,7 @@ rec {
           }
           {
             name = "rand";
-            packageId = "rand 0.8.3";
+            packageId = "rand 0.8.4";
           }
           {
             name = "rusqlite";
@@ -1119,7 +1109,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             features = [ "full" ];
           }
           {
@@ -1186,9 +1176,9 @@ rec {
       };
       "fastrand" = rec {
         crateName = "fastrand";
-        version = "1.4.1";
+        version = "1.5.0";
         edition = "2018";
-        sha256 = "1nqv9s76ifsnbym89aik22g87xban90a2vfzq9igg1qykn10bdvp";
+        sha256 = "0birvh29m4x6nwjdyrmiyiypw9l52bmvk15ksdw96hjs50yyv55k";
         authors = [
           "Stjepan Glavina <stjepang@gmail.com>"
         ];
@@ -1452,9 +1442,9 @@ rec {
       };
       "futures-lite" = rec {
         crateName = "futures-lite";
-        version = "1.11.3";
+        version = "1.12.0";
         edition = "2018";
-        sha256 = "1ywmyvpy4f348jri8rxhpj59a7bvy12pspm59x5207fys061sj5l";
+        sha256 = "0j5zzjcq1ib2kf1mm3apqf9g2ly1jjw1d1d4v9vjqi9rrnd4i53n";
         authors = [
           "Stjepan Glavina <stjepang@gmail.com>"
           "Contributors to futures-rs"
@@ -1478,7 +1468,7 @@ rec {
           {
             name = "memchr";
             packageId = "memchr";
-            usesDefaultFeatures = false;
+            optional = true;
           }
           {
             name = "parking";
@@ -1487,7 +1477,7 @@ rec {
           }
           {
             name = "pin-project-lite";
-            packageId = "pin-project-lite 0.2.6";
+            packageId = "pin-project-lite 0.2.7";
           }
           {
             name = "waker-fn";
@@ -1497,9 +1487,9 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
-          "std" = [ "alloc" "fastrand" "futures-io" "parking" "memchr/std" "waker-fn" ];
+          "std" = [ "alloc" "fastrand" "futures-io" "parking" "memchr" "waker-fn" ];
         };
-        resolvedDefaultFeatures = [ "alloc" "default" "fastrand" "futures-io" "parking" "std" "waker-fn" ];
+        resolvedDefaultFeatures = [ "alloc" "default" "fastrand" "futures-io" "memchr" "parking" "std" "waker-fn" ];
       };
       "futures-macro" = rec {
         crateName = "futures-macro";
@@ -1618,7 +1608,7 @@ rec {
           }
           {
             name = "pin-project-lite";
-            packageId = "pin-project-lite 0.2.6";
+            packageId = "pin-project-lite 0.2.7";
           }
           {
             name = "pin-utils";
@@ -1857,9 +1847,9 @@ rec {
       };
       "hermit-abi" = rec {
         crateName = "hermit-abi";
-        version = "0.1.18";
+        version = "0.1.19";
         edition = "2018";
-        sha256 = "0p6czgbk1izviwxzm6ypy3vz2wqj1yd3ab03wp82xqjng7klsbrj";
+        sha256 = "0cxcm8093nf5fyn114w8vxbrbcyvv91d4015rdnlgfll7cs6gd32";
         authors = [
           "Stefan Lankes"
         ];
@@ -1966,7 +1956,7 @@ rec {
           }
           {
             name = "pin-project-lite";
-            packageId = "pin-project-lite 0.2.6";
+            packageId = "pin-project-lite 0.2.7";
           }
         ];
         
@@ -2006,9 +1996,9 @@ rec {
       };
       "hyper" = rec {
         crateName = "hyper";
-        version = "0.14.8";
+        version = "0.14.11";
         edition = "2018";
-        sha256 = "0d7ywizjvqclx8q48qydg1qkk1pq7wvraivvg8jzi8skx9z1mxyk";type = [ "lib" "staticlib" "cdylib" ];
+        sha256 = "04gvzwq66p5dv3spdcp19ccjkjj44bf82yy9a9inxkzb38nwyq8b";type = [ "lib" "staticlib" "cdylib" ];
         authors = [
           "Sean McArthur <sean@seanmonstar.com>"
         ];
@@ -2052,8 +2042,8 @@ rec {
             packageId = "itoa";
           }
           {
-            name = "pin-project";
-            packageId = "pin-project";
+            name = "pin-project-lite";
+            packageId = "pin-project-lite 0.2.7";
           }
           {
             name = "socket2";
@@ -2062,7 +2052,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             features = [ "sync" ];
           }
           {
@@ -2089,7 +2079,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             features = [ "fs" "macros" "io-std" "io-util" "rt" "rt-multi-thread" "sync" "time" "test-util" ];
           }
         ];
@@ -2128,9 +2118,9 @@ rec {
       };
       "instant" = rec {
         crateName = "instant";
-        version = "0.1.9";
+        version = "0.1.10";
         edition = "2018";
-        sha256 = "1v659qqm55misvjijfbl1p7azjp4yynjbwldan8836ynpgp4w4k1";
+        sha256 = "0ka75wmkh22bkxjw5smhmlwl3xpqnj2xv50w03pmgl892a5k5q5y";
         authors = [
           "sebcrozet <developer@crozet.re>"
         ];
@@ -2222,9 +2212,9 @@ rec {
       };
       "libc" = rec {
         crateName = "libc";
-        version = "0.2.95";
+        version = "0.2.98";
         edition = "2015";
-        sha256 = "0dlam5y9c1kvnndk3hx10n306v6plhi57z2s2zz6z1hv7zcsd7bq";
+        sha256 = "144728k6d98k3hplzklqn18a134nq6nw0jzdxy1s98sx2xvzw31j";
         authors = [
           "The Rust Project Developers"
         ];
@@ -2487,9 +2477,9 @@ rec {
       };
       "mio" = rec {
         crateName = "mio";
-        version = "0.7.11";
+        version = "0.7.13";
         edition = "2018";
-        sha256 = "0mi9ah60l270761sz6qdhhn0hkn5msc8689b53bhnkmk0glx706g";
+        sha256 = "05mvlrn3r2vqps4fflmknw15r0rs8xld4g99sdf8647c2iixnawc";
         authors = [
           "Carl Lerche <me@carllerche.com>"
           "Thomas de Zeeuw <thomasdezeeuw@gmail.com>"
@@ -2579,9 +2569,9 @@ rec {
       };
       "netlink-packet-route" = rec {
         crateName = "netlink-packet-route";
-        version = "0.7.0";
+        version = "0.7.1";
         edition = "2018";
-        sha256 = "0wcv68x4mj8a0ql3j0gwbr66y5q658mpa5wfiysnz6948dmzh6ys";
+        sha256 = "1wf05v9i5fxm5bgwmxpjicmnm2fa2f1d4j0wh456vzi8cmmai4jc";
         authors = [
           "Corentin Henry <corentinhenry@gmail.com>"
         ];
@@ -2615,9 +2605,9 @@ rec {
       };
       "netlink-packet-utils" = rec {
         crateName = "netlink-packet-utils";
-        version = "0.4.0";
+        version = "0.4.1";
         edition = "2018";
-        sha256 = "0kg5fdb1ppzw8996h2qcxm1rvf9qhidz43azx00cffhfklaznakc";
+        sha256 = "1137gb12679aiqz00cjvmmmdj6420ya6sn9r4d5rcvmnb3vvdksz";
         authors = [
           "Corentin Henry <corentinhenry@gmail.com>"
         ];
@@ -2665,7 +2655,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             optional = true;
             usesDefaultFeatures = false;
             features = [ "net" ];
@@ -2674,7 +2664,7 @@ rec {
         devDependencies = [
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             usesDefaultFeatures = false;
             features = [ "net" "macros" "rt-multi-thread" ];
           }
@@ -2806,9 +2796,9 @@ rec {
       };
       "once_cell" = rec {
         crateName = "once_cell";
-        version = "1.7.2";
+        version = "1.8.0";
         edition = "2018";
-        sha256 = "18qmpyfigg4ibdhjy5mwcjhzk9adwlgfaqv7nj430ivm86q0i2xg";
+        sha256 = "0mkbbxg6416z11r2yzsq91cqrkj9w1iyx5hakq15h5sbnriwnbv9";
         authors = [
           "Aleksey Kladov <aleksey.kladov@gmail.com>"
         ];
@@ -2944,49 +2934,6 @@ rec {
           "pretty-print" = [ "serde" "serde_json" ];
         };
       };
-      "pin-project" = rec {
-        crateName = "pin-project";
-        version = "1.0.7";
-        edition = "2018";
-        sha256 = "1964rh32hiy5v2ircli8wv8fxq9h2nkgfalda6j407040v0rql67";
-        authors = [
-          "Taiki Endo <te316e89@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "pin-project-internal";
-            packageId = "pin-project-internal";
-            usesDefaultFeatures = false;
-          }
-        ];
-        
-      };
-      "pin-project-internal" = rec {
-        crateName = "pin-project-internal";
-        version = "1.0.7";
-        edition = "2018";
-        sha256 = "0vs289my2262ziwxj60mnzr2k41ibga73z8yddah1dc34l9m1ja8";
-        procMacro = true;
-        authors = [
-          "Taiki Endo <te316e89@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "proc-macro2";
-            packageId = "proc-macro2";
-          }
-          {
-            name = "quote";
-            packageId = "quote";
-          }
-          {
-            name = "syn";
-            packageId = "syn";
-            features = [ "full" "visit-mut" ];
-          }
-        ];
-        
-      };
       "pin-project-lite 0.1.12" = rec {
         crateName = "pin-project-lite";
         version = "0.1.12";
@@ -2997,11 +2944,11 @@ rec {
         ];
         
       };
-      "pin-project-lite 0.2.6" = rec {
+      "pin-project-lite 0.2.7" = rec {
         crateName = "pin-project-lite";
-        version = "0.2.6";
+        version = "0.2.7";
         edition = "2018";
-        sha256 = "01g96zxghb33s1vsjmjpn9l3a2nxdqj7glf9lhq7q5wjkhjiy3nw";
+        sha256 = "0hwl8iyx3h9i3i3jr2vqj07nf4ay1v1w1ga29cbjmdd6d4fd2ccd";
         authors = [
           "Taiki Endo <te316e89@gmail.com>"
         ];
@@ -3029,9 +2976,9 @@ rec {
       };
       "polling" = rec {
         crateName = "polling";
-        version = "2.0.3";
+        version = "2.1.0";
         edition = "2018";
-        sha256 = "0yqbb0c9d2bg3rjg7h0sl4c0vd03l1n0gx0kmvmyk7kr9rvjvhag";
+        sha256 = "098zk8glik948jk4m0kzzzry672y1m22vn7lgr1shkm3kxvisd4j";
         authors = [
           "Stjepan Glavina <stjepang@gmail.com>"
         ];
@@ -3050,9 +2997,10 @@ rec {
             packageId = "log";
           }
           {
-            name = "wepoll-sys";
-            packageId = "wepoll-sys";
+            name = "wepoll-ffi";
+            packageId = "wepoll-ffi";
             target = { target, features }: target."windows";
+            features = [ "null-overlapped-wakeups-patch" ];
           }
           {
             name = "winapi";
@@ -3169,9 +3117,9 @@ rec {
       };
       "proc-macro2" = rec {
         crateName = "proc-macro2";
-        version = "1.0.27";
+        version = "1.0.28";
         edition = "2018";
-        sha256 = "0f3h0zl5w5090ajmmvpmhkpr4iwqnn5rip3afacabhc657vwmn7h";
+        sha256 = "04k6kwfsl56xqv46f9k88jmj7x4544hhbr6xswzfm1mqqywdhzjw";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
           "David Tolnay <dtolnay@gmail.com>"
@@ -3290,9 +3238,9 @@ rec {
       };
       "protobuf" = rec {
         crateName = "protobuf";
-        version = "2.23.0";
+        version = "2.24.1";
         edition = "2018";
-        sha256 = "1mjqfkirw0nh9l3r0xhdlzkq2q3lmha2xqnq2kayfn41m33lyq25";
+        sha256 = "0rq20xr5vhj4ys4qv4mpn656kc4h3bm332n57p6qqicnw5xffl6v";
         authors = [
           "Stepan Koltsov <stepan.koltsov@gmail.com>"
         ];
@@ -3389,11 +3337,11 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "libc" "std" ];
       };
-      "rand 0.8.3" = rec {
+      "rand 0.8.4" = rec {
         crateName = "rand";
-        version = "0.8.3";
+        version = "0.8.4";
         edition = "2018";
-        sha256 = "0zldxfx4gi551n2fna4zz9ab22zsnzw1mj5hzi5nfs24dgkfgy8f";
+        sha256 = "1n5wska2fbfj4dsfz8mc0pd0dgjlrb6c9anpk5mwym345rip6x9f";
         authors = [
           "The Rand Project Developers"
           "The Rust Project Developers"
@@ -3415,7 +3363,7 @@ rec {
           }
           {
             name = "rand_core";
-            packageId = "rand_core 0.6.2";
+            packageId = "rand_core 0.6.3";
           }
           {
             name = "rand_hc";
@@ -3434,7 +3382,7 @@ rec {
           "alloc" = [ "rand_core/alloc" ];
           "default" = [ "std" "std_rng" ];
           "getrandom" = [ "rand_core/getrandom" ];
-          "serde1" = [ "serde" ];
+          "serde1" = [ "serde" "rand_core/serde1" ];
           "simd_support" = [ "packed_simd" ];
           "std" = [ "rand_core/std" "rand_chacha/std" "alloc" "getrandom" "libc" ];
           "std_rng" = [ "rand_chacha" "rand_hc" ];
@@ -3443,9 +3391,9 @@ rec {
       };
       "rand_chacha" = rec {
         crateName = "rand_chacha";
-        version = "0.3.0";
+        version = "0.3.1";
         edition = "2018";
-        sha256 = "03df2xh5nbdvwr17qm3sviaxa95r8yhm1nil2pr0pqf90p7ka9z1";
+        sha256 = "123x2adin558xbhvqb8w4f6syjsdkmqff8cxwhmjacpsl1ihmhg6";
         authors = [
           "The Rand Project Developers"
           "The Rust Project Developers"
@@ -3460,11 +3408,12 @@ rec {
           }
           {
             name = "rand_core";
-            packageId = "rand_core 0.6.2";
+            packageId = "rand_core 0.6.3";
           }
         ];
         features = {
           "default" = [ "std" ];
+          "serde1" = [ "serde" ];
           "std" = [ "ppv-lite86/std" ];
         };
         resolvedDefaultFeatures = [ "std" ];
@@ -3505,11 +3454,11 @@ rec {
           "std" = [ "alloc" ];
         };
       };
-      "rand_core 0.6.2" = rec {
+      "rand_core 0.6.3" = rec {
         crateName = "rand_core";
-        version = "0.6.2";
+        version = "0.6.3";
         edition = "2018";
-        sha256 = "1rvas1afjvd2827b8mf2ilg78h3ksl9npkrdds3wbw9x33mndkrl";
+        sha256 = "1rxlxc3bpzgwphcg9c9yasvv9idipcg2z2y4j0vlb52jyl418kyk";
         authors = [
           "The Rand Project Developers"
           "The Rust Project Developers"
@@ -3529,16 +3478,16 @@ rec {
       };
       "rand_hc" = rec {
         crateName = "rand_hc";
-        version = "0.3.0";
+        version = "0.3.1";
         edition = "2018";
-        sha256 = "0wra6ar22zdjkry9dsq1mg620m4h3qb9s8rfykkz4im4crqfz41i";
+        sha256 = "1rwpykyvhkxs4jvqdja3mzp9dqaqamzn113cxaigs9z2dmcry7nm";
         authors = [
           "The Rand Project Developers"
         ];
         dependencies = [
           {
             name = "rand_core";
-            packageId = "rand_core 0.6.2";
+            packageId = "rand_core 0.6.3";
           }
         ];
         
@@ -3565,9 +3514,9 @@ rec {
       };
       "redox_syscall" = rec {
         crateName = "redox_syscall";
-        version = "0.2.8";
+        version = "0.2.9";
         edition = "2018";
-        sha256 = "1z27f6rzm0lcpszbr2dmfyna7qmpmx4yb98yhzg1956l3kj3j9vl";
+        sha256 = "1vpyfnfrw5ki262720yks8m7vn1a2mg89s4rqi5ir7izvyx9md2s";
         libName = "syscall";
         authors = [
           "Jeremy Soller <jackpot51@gmail.com>"
@@ -3812,9 +3761,9 @@ rec {
       };
       "signal-hook-registry" = rec {
         crateName = "signal-hook-registry";
-        version = "1.3.0";
+        version = "1.4.0";
         edition = "2015";
-        sha256 = "19hirq0h33jjyh505s8hf9q5dq0ky80ygivkl3vshjv0y7zd1w8n";
+        sha256 = "1c2mhijg54y6c1zi4630yki1vpq3z96ljfnsrdy0rb64ilr767p5";
         authors = [
           "Michal 'vorner' Vaner <vorner@vorner.cz>"
           "Masaki Hara <ackie.h.gmai@gmail.com>"
@@ -3879,9 +3828,9 @@ rec {
       };
       "syn" = rec {
         crateName = "syn";
-        version = "1.0.72";
+        version = "1.0.74";
         edition = "2018";
-        sha256 = "10mb1cqmq2vpl5v6qjgqqyvhgs9yf9xv9f0dbskababrzfzcvs51";
+        sha256 = "175j336afigixhzixxs821sgw2xh38v023y2vg1qhi8dalrdhwqq";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -3929,9 +3878,9 @@ rec {
       };
       "thiserror" = rec {
         crateName = "thiserror";
-        version = "1.0.25";
+        version = "1.0.26";
         edition = "2018";
-        sha256 = "1ip9j8riar3xffp261yls4phpasz768xhnafxdz4qlargx2pcvzs";
+        sha256 = "1qmz542pq4wmz3p0s4kavsqv09h0x99klkf3k33ydjy1x97rw4ck";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -3945,9 +3894,9 @@ rec {
       };
       "thiserror-impl" = rec {
         crateName = "thiserror-impl";
-        version = "1.0.25";
+        version = "1.0.26";
         edition = "2018";
-        sha256 = "139i3bxidyncjd1sphkn4c577nkba8lzmphhr9gb26xz1y67cdla";
+        sha256 = "0ia72qiynlws5avb8f1xqlazp4g6bqgzjbwy5vs6nyg7myh6j386";
         procMacro = true;
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
@@ -3999,9 +3948,9 @@ rec {
       };
       "tinyvec" = rec {
         crateName = "tinyvec";
-        version = "1.2.0";
+        version = "1.3.1";
         edition = "2018";
-        sha256 = "0hn3fkpb9nca9nf9znz2dxlp4ccv37hnbh67aczpzpmpbgq20ljv";
+        sha256 = "0f2kkgsf1ivxdjyznzg6xlcivc99krs9584nbqxpbxmrh48ix2l4";
         authors = [
           "Lokathor <zefria@gmail.com>"
         ];
@@ -4078,11 +4027,11 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "num_cpus" "rt-core" "rt-threaded" "slab" ];
       };
-      "tokio 1.6.0" = rec {
+      "tokio 1.9.0" = rec {
         crateName = "tokio";
-        version = "1.6.0";
+        version = "1.9.0";
         edition = "2018";
-        sha256 = "0dzgrsc5grf5znx2gld52iqy6kgb25f8j548iy5i666cr2spcc5x";
+        sha256 = "0k3b6vi6j8fchxw92q9c6n55wbqm5mhkx1bn29npw15726gk8ysb";
         authors = [
           "Tokio Contributors <team@tokio.rs>"
         ];
@@ -4125,7 +4074,7 @@ rec {
           }
           {
             name = "pin-project-lite";
-            packageId = "pin-project-lite 0.2.6";
+            packageId = "pin-project-lite 0.2.7";
           }
           {
             name = "signal-hook-registry";
@@ -4160,11 +4109,10 @@ rec {
           }
         ];
         features = {
-          "fs" = [ "libc" ];
           "full" = [ "fs" "io-util" "io-std" "macros" "net" "parking_lot" "process" "rt" "rt-multi-thread" "signal" "sync" "time" ];
           "io-util" = [ "memchr" "bytes" ];
           "macros" = [ "tokio-macros" ];
-          "net" = [ "libc" "mio/os-poll" "mio/os-util" "mio/tcp" "mio/udp" "mio/uds" ];
+          "net" = [ "libc" "mio/os-poll" "mio/os-util" "mio/tcp" "mio/udp" "mio/uds" "winapi/namedpipeapi" ];
           "process" = [ "bytes" "once_cell" "libc" "mio/os-poll" "mio/os-util" "mio/uds" "signal-hook-registry" "winapi/threadpoollegacyapiset" ];
           "rt-multi-thread" = [ "num_cpus" "rt" ];
           "signal" = [ "once_cell" "libc" "mio/os-poll" "mio/uds" "mio/os-util" "signal-hook-registry" "winapi/consoleapi" ];
@@ -4190,7 +4138,7 @@ rec {
           }
           {
             name = "pin-project-lite";
-            packageId = "pin-project-lite 0.2.6";
+            packageId = "pin-project-lite 0.2.7";
           }
           {
             name = "tokio";
@@ -4200,7 +4148,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
           }
           {
             name = "tokio-stream";
@@ -4210,7 +4158,7 @@ rec {
         devDependencies = [
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             features = [ "full" ];
           }
         ];
@@ -4218,9 +4166,9 @@ rec {
       };
       "tokio-macros" = rec {
         crateName = "tokio-macros";
-        version = "1.2.0";
+        version = "1.3.0";
         edition = "2018";
-        sha256 = "0drws4ji260pmbv5afb72mb1ql6qamkm0wk40j3gpnj173s3v7n4";
+        sha256 = "045igm2h1mfjakbi68hrl07dflgs2rfvvjff17ylxgjf3zk3nisl";
         procMacro = true;
         authors = [
           "Tokio Contributors <team@tokio.rs>"
@@ -4244,9 +4192,9 @@ rec {
       };
       "tokio-stream" = rec {
         crateName = "tokio-stream";
-        version = "0.1.6";
+        version = "0.1.7";
         edition = "2018";
-        sha256 = "0rj0k7s2qnchf6viif7flscaq3bjjb47lr297a2c0g6vdxq4v1pq";
+        sha256 = "0zvj8d2i1147s4i3ml3lh3h6fypncjmbw0h1mhck3w2kh9lkybvv";
         authors = [
           "Tokio Contributors <team@tokio.rs>"
         ];
@@ -4257,18 +4205,18 @@ rec {
           }
           {
             name = "pin-project-lite";
-            packageId = "pin-project-lite 0.2.6";
+            packageId = "pin-project-lite 0.2.7";
           }
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             features = [ "sync" ];
           }
         ];
         devDependencies = [
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             features = [ "full" "test-util" ];
           }
         ];
@@ -4310,18 +4258,18 @@ rec {
           }
           {
             name = "pin-project-lite";
-            packageId = "pin-project-lite 0.2.6";
+            packageId = "pin-project-lite 0.2.7";
           }
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             features = [ "sync" ];
           }
         ];
         devDependencies = [
           {
             name = "tokio";
-            packageId = "tokio 1.6.0";
+            packageId = "tokio 1.9.0";
             features = [ "full" ];
           }
         ];
@@ -4361,7 +4309,7 @@ rec {
           }
           {
             name = "pin-project-lite";
-            packageId = "pin-project-lite 0.2.6";
+            packageId = "pin-project-lite 0.2.7";
           }
           {
             name = "tracing-core";
@@ -4444,9 +4392,9 @@ rec {
       };
       "unicode-normalization" = rec {
         crateName = "unicode-normalization";
-        version = "0.1.17";
+        version = "0.1.19";
         edition = "2018";
-        sha256 = "1vzajca1hk9plka5d3z3426frmnr7229fd2kidz58zd9r3hzryq7";
+        sha256 = "1yabhmg8zlcksda3ajly9hpbzqgbhknxwch8dwkfkaa1569r0ifm";
         authors = [
           "kwantam <kwantam@gmail.com>"
           "Manish Goregaokar <manishsmail@gmail.com>"
@@ -4537,9 +4485,9 @@ rec {
       };
       "vcpkg" = rec {
         crateName = "vcpkg";
-        version = "0.2.13";
+        version = "0.2.15";
         edition = "2015";
-        sha256 = "1ajg5vqyhd4n72y6048bpdrmb3ppvsaabhavipjhf6by005f8p02";
+        sha256 = "09i4nf5y8lig6xgj3f7fyrvzd3nlaw4znrihw8psidvv5yk4xkdc";
         authors = [
           "Jim McGrath <jimmc2@gmail.com>"
         ];
@@ -5271,13 +5219,13 @@ rec {
         };
         resolvedDefaultFeatures = [ "Event" "EventTarget" "MessageEvent" "Window" "Worker" "WorkerGlobalScope" ];
       };
-      "wepoll-sys" = rec {
-        crateName = "wepoll-sys";
-        version = "3.0.1";
+      "wepoll-ffi" = rec {
+        crateName = "wepoll-ffi";
+        version = "0.1.2";
         edition = "2018";
-        sha256 = "1zvpkr4dz3ny0k20mg1wdlp8vawz5p4gnya7h8j24119m7g19jqg";
+        sha256 = "1yxpkva08d5f6ih3b5hdb8h45mkz3jq3dh1bzjspfhy6qpnzshyp";
         authors = [
-          "Yorick Peterse <yorickpeterse@gmail.com>"
+          "Philip Degarmo <aclysma@gmail.com>"
         ];
         buildDependencies = [
           {
@@ -5287,7 +5235,7 @@ rec {
         ];
         features = {
         };
-        resolvedDefaultFeatures = [ "default" ];
+        resolvedDefaultFeatures = [ "null-overlapped-wakeups-patch" ];
       };
       "winapi" = rec {
         crateName = "winapi";
