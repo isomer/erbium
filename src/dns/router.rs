@@ -43,10 +43,10 @@ impl DnsRouteHandler {
         let mut best_suffix: Option<&super::dnspkt::Domain> = None;
         for route in 0..locked_conf.dns_routes.len() {
             for suffix in &locked_conf.dns_routes[route].suffixes {
-                if msg.in_query.question.qdomain.ends_with(&suffix) {
+                if msg.in_query.question.qdomain.ends_with(suffix) {
                     if let Some(ref best) = best_suffix {
                         log::trace!("Comparing {} with {}", best, suffix);
-                        if super::dnspkt::compare_longest_suffix(best, &suffix)
+                        if super::dnspkt::compare_longest_suffix(best, suffix)
                             == std::cmp::Ordering::Greater
                         {
                             best_route = Some(route);

@@ -114,9 +114,9 @@ pub enum Error {
     FailedToSendMsg(String),
     FailedToRecv(std::io::Error),
     FailedToRecvMsg(String),
-    TcpConnectionError(String),
-    ParseError(String),
-    InternalError(String),
+    TcpConnection(String),
+    Parse(String),
+    Internal(String),
 }
 
 impl std::fmt::Display for Error {
@@ -128,11 +128,11 @@ impl std::fmt::Display for Error {
             FailedToSendMsg(msg) => write!(f, "Failed to send out query: {}", msg),
             FailedToRecv(err) => write!(f, "Failed to receive out query: {}", err),
             FailedToRecvMsg(msg) => write!(f, "Failed to receive out query: {}", msg),
-            TcpConnectionError(err) => {
+            TcpConnection(err) => {
                 write!(f, "TCP connection error while waiting for result: {}", err)
             }
-            ParseError(err) => write!(f, "Failed to parse out reply: {}", err),
-            InternalError(err) => write!(f, "Internal error in out query handling: {}", err),
+            Parse(err) => write!(f, "Failed to parse out reply: {}", err),
+            Internal(err) => write!(f, "Internal error in out query handling: {}", err),
         }
     }
 }
@@ -149,7 +149,7 @@ fn increment_result(dns_server: &str, result: &Result<dnspkt::DNSPkt, Error>) {
                     .as_ref()
                     .and_then(|edns| edns.get_extended_dns_error())
                 {
-                    Some((code, _msg)) => format!("{} ({})", pkt.rcode.to_string(), code),
+                    Some((code, _msg)) => format!("{} ({})", pkt.rcode, code),
                     _ => pkt.rcode.to_string(),
                 },
                 Err(Error::Timeout) => "TIMEOUT".into(),
@@ -157,9 +157,9 @@ fn increment_result(dns_server: &str, result: &Result<dnspkt::DNSPkt, Error>) {
                 Err(Error::FailedToRecv(io)) => format!("RECV: {}", io),
                 Err(Error::FailedToSendMsg(msg)) => format!("SEND: {}", msg),
                 Err(Error::FailedToRecvMsg(msg)) => format!("RECV: {}", msg),
-                Err(Error::ParseError(msg)) => format!("PARSE_ERROR: {}", msg),
-                Err(Error::InternalError(msg)) => format!("INTERNAL: {}", msg),
-                Err(Error::TcpConnectionError(msg)) => format!("TCP: {}", msg),
+                Err(Error::Parse(msg)) => format!("PARSE_ERROR: {}", msg),
+                Err(Error::Internal(msg)) => format!("INTERNAL: {}", msg),
+                Err(Error::TcpConnection(msg)) => format!("TCP: {}", msg),
             },
         ])
         .inc()
@@ -215,13 +215,10 @@ impl TcpNameserver {
             out_reply: tx,
         })
         .await
-        .map_err(|err| Error::InternalError(format!("Channel send failed: {}", err)))?;
+        .map_err(|err| Error::Internal(format!("Channel send failed: {}", err)))?;
         match rx.await {
             Ok(ret) => ret,
-            Err(err) => Err(Error::InternalError(format!(
-                "Channel recv failed: {}",
-                err
-            ))),
+            Err(err) => Err(Error::Internal(format!("Channel recv failed: {}", err))),
         }
     }
 
@@ -282,10 +279,7 @@ impl TcpNameserver {
     }
 
     async fn handle_reply(&mut self, buf: &[u8]) {
-        let pkt = match parse::PktParser::new(&buf)
-            .get_dns()
-            .map_err(Error::ParseError)
-        {
+        let pkt = match parse::PktParser::new(buf).get_dns().map_err(Error::Parse) {
             Ok(pkt) => pkt,
             Err(err) => {
                 /* TODO: Drop the TCP connection */
@@ -300,7 +294,7 @@ impl TcpNameserver {
         self.tcp = None;
         log::trace!("Tearing down {} TCP channel: {}", self.addr, err);
         for (_qid, chan) in self.qid2reply.drain() {
-            chan.send(Err(Error::TcpConnectionError(format!(
+            chan.send(Err(Error::TcpConnection(format!(
                 "TCP channel closed before reply: {}",
                 err
             ))))
@@ -343,13 +337,13 @@ impl TcpNameserver {
                      * spare resources on the server side.
                      */
                     () = tokio::time::sleep_until(last_send_activity + std::time::Duration::from_secs(120)).fuse() => {
-                            self.tcp_teardown(Error::TcpConnectionError("TCP Connection idle".into()));
+                            self.tcp_teardown(Error::TcpConnection("TCP Connection idle".into()));
                     },
                     /* If the other end isn't replying to us at all (despite us sending new
                      * requests), then close down the connection.
                      */
                     () = tokio::time::sleep_until(last_recv_activity + std::time::Duration::from_secs(120)).fuse() => {
-                            self.tcp_teardown(Error::TcpConnectionError("Timed out waiting for TCP replies".into()));
+                            self.tcp_teardown(Error::TcpConnection("Timed out waiting for TCP replies".into()));
                     },
                 }
             } else if let Some(msg) = chan.recv().await {
@@ -452,7 +446,7 @@ impl OutQuery {
         let l = outsock.recv(&mut buf).await.map_err(Error::FailedToRecv)?;
         let pkt = parse::PktParser::new(&buf[0..l])
             .get_dns()
-            .map_err(Error::ParseError)?;
+            .map_err(Error::Parse)?;
         let duration = Instant::now() - start;
         Ok((duration, pkt))
     }

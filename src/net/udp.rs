@@ -112,7 +112,7 @@ impl UdpSocket {
         flags: MsgFlags,
         addr: Option<&SocketAddr>,
     ) -> io::Result<()> {
-        let addr = addr.map(|x| crate::net::socket::std_to_nix_sockaddr(x));
+        let addr = addr.map(crate::net::socket::std_to_nix_sockaddr);
         crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr.as_ref()).await
     }
 

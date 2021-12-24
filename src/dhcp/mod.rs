@@ -546,7 +546,7 @@ fn format_client(req: &dhcppkt::Dhcp) -> String {
 fn log_options(req: &dhcppkt::Dhcp) {
     log::info!(
         "{}: Options: {}",
-        format_client(&req),
+        format_client(req),
         req.options
             .other
             .iter()
@@ -715,19 +715,19 @@ pub async fn build_default_config(
 }
 
 pub async fn handle_pkt(
-    mut pools: &mut pool::Pool,
+    pools: &mut pool::Pool,
     request: &DHCPRequest,
     serverids: ServerIds,
     conf: &super::config::Config,
 ) -> Result<dhcppkt::Dhcp, DhcpError> {
     match request.pkt.options.get_messagetype() {
         Some(dhcppkt::DHCPDISCOVER) => {
-            let base = [build_default_config(&conf, &request).await];
-            handle_discover(&mut pools, &request, &serverids, &base, conf)
+            let base = [build_default_config(conf, request).await];
+            handle_discover(pools, request, &serverids, &base, conf)
         }
         Some(dhcppkt::DHCPREQUEST) => {
-            let base = [build_default_config(&conf, &request).await];
-            handle_request(&mut pools, &request, &serverids, &base, conf)
+            let base = [build_default_config(conf, request).await];
+            handle_request(pools, request, &serverids, &base, conf)
         }
         Some(x) => Err(DhcpError::UnknownMessageType(x)),
         None => Err(DhcpError::ParseError(dhcppkt::ParseError::InvalidPacket)),
@@ -1006,13 +1006,12 @@ impl DhcpService {
         listener: &UdpSocket,
     ) -> Result<(), RunError> {
         loop {
-            let rm;
-            match listener.recv_msg(65536, udp::MsgFlags::empty()).await {
-                Ok(m) => rm = m,
+            let rm = match listener.recv_msg(65536, udp::MsgFlags::empty()).await {
+                Ok(m) => m,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(RunError::RecvError(e)),
-            }
+            };
             DHCP_RX_PACKETS.inc();
             let self2 = self.clone();
             tokio::spawn(async move {

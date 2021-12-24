@@ -40,7 +40,7 @@ impl fmt::Display for Class {
 
 impl fmt::Debug for Class {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Class({})", self.to_string())
+        write!(f, "Class({})", self)
     }
 }
 
@@ -82,7 +82,7 @@ impl fmt::Display for Type {
 
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Type({})", self.to_string())
+        write!(f, "Type({})", self)
     }
 }
 
@@ -141,7 +141,7 @@ impl fmt::Display for RCode {
 
 impl fmt::Debug for RCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "RCode({})", self.to_string())
+        write!(f, "RCode({})", self)
     }
 }
 
@@ -221,7 +221,7 @@ impl fmt::Display for Domain {
 
 impl fmt::Debug for Domain {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Domain({:?})", self.to_string())
+        write!(f, "Domain({:?})", self)
     }
 }
 
@@ -285,7 +285,7 @@ impl fmt::Display for Question {
 
 impl fmt::Debug for Question {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Question({})", self.to_string())
+        write!(f, "Question({})", self)
     }
 }
 
@@ -312,7 +312,7 @@ impl fmt::Display for EdnsCode {
 
 impl fmt::Debug for EdnsCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "EdnsCode({})", self.to_string())
+        write!(f, "EdnsCode({})", self)
     }
 }
 
@@ -615,7 +615,7 @@ impl std::fmt::Display for Opcode {
 
 impl fmt::Debug for Opcode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Opcode({})", self.to_string())
+        write!(f, "Opcode({})", self)
     }
 }
 
@@ -859,8 +859,8 @@ impl EdnsData {
     pub fn new() -> Self {
         Self(vec![])
     }
-    fn push_opt(&self, mut v: &mut Vec<u8>) {
-        self.0.iter().for_each(|o| make_edns_opt(&mut v, o));
+    fn push_opt(&self, v: &mut Vec<u8>) {
+        self.0.iter().for_each(|o| make_edns_opt(v, o));
     }
 
     fn get_opt(&self, opt: &EdnsCode) -> Option<&EdnsOption> {
@@ -928,7 +928,7 @@ fn push_rr(v: &mut Vec<u8>, rr: &RR, offsets: &mut DomainOffsets) {
     match &rr.rdata {
         RData::CName(d) | RData::Ptr(d) | RData::Ns(d) => {
             let mut vs = vec![];
-            push_compressed_domain(&mut vs, &d, offsets, v.len() + 2);
+            push_compressed_domain(&mut vs, d, offsets, v.len() + 2);
             push_u16(v, vs.len() as u16);
             v.extend_from_slice(vs.as_slice());
         }
@@ -1063,7 +1063,7 @@ impl DNSPkt {
 
         for rr in &self.answer {
             let offset = ret.len();
-            push_rr(&mut ret, &rr, &mut offsets);
+            push_rr(&mut ret, rr, &mut offsets);
             if ret.len() > size {
                 ret.truncate(offset);
                 trunc = true;
@@ -1076,7 +1076,7 @@ impl DNSPkt {
         if !trunc {
             for rr in &self.nameserver {
                 let offset = ret.len();
-                push_rr(&mut ret, &rr, &mut offsets);
+                push_rr(&mut ret, rr, &mut offsets);
                 if ret.len() > size {
                     ret.truncate(offset);
                     trunc = true;
@@ -1090,7 +1090,7 @@ impl DNSPkt {
         if !trunc {
             for rr in &additional {
                 let offset = ret.len();
-                push_rr(&mut ret, &rr, &mut offsets);
+                push_rr(&mut ret, rr, &mut offsets);
                 if ret.len() > size {
                     ret.truncate(offset);
                     trunc = true;
@@ -1123,6 +1123,7 @@ impl DNSPkt {
             .unwrap_or_else(|| std::time::Duration::from_secs(0))
     }
 
+    #[must_use]
     pub fn clone_with_ttl_decrement(&self, decrement: u32) -> DNSPkt {
         DNSPkt {
             question: self.question.clone(),

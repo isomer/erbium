@@ -681,7 +681,7 @@ impl DnsListenerHandler {
             let roconf = conf.read().await;
             for addr in &roconf
                 .dns_listeners
-                .as_sockaddrs(&roconf.addresses, &netinfo, 53)
+                .as_sockaddrs(&roconf.addresses, netinfo, 53)
                 .await
             {
                 udp_listeners.push(Self::listen_udp(&conf, addr).await?);
@@ -813,15 +813,15 @@ impl DnsListenerHandler {
                 rcode = SERVFAIL;
                 edns.set_extended_dns_error(EDE_NETWORK_ERROR, &msg);
             }
-            OutReply(outquery::Error::TcpConnectionError(msg)) => {
+            OutReply(outquery::Error::TcpConnection(msg)) => {
                 rcode = SERVFAIL;
                 edns.set_extended_dns_error(EDE_NETWORK_ERROR, &msg);
             }
-            OutReply(outquery::Error::ParseError(msg)) => {
+            OutReply(outquery::Error::Parse(msg)) => {
                 rcode = SERVFAIL;
                 edns.set_extended_dns_error(EDE_NETWORK_ERROR, &msg);
             }
-            OutReply(outquery::Error::InternalError(_)) => {
+            OutReply(outquery::Error::Internal(_)) => {
                 rcode = SERVFAIL;
                 edns.set_extended_dns_error(EDE_OTHER, "Internal Error");
             }
@@ -881,15 +881,15 @@ impl DnsListenerHandler {
         );
         let next = &s.read().await.next;
         let in_reply;
-        match next.handle_query(&msg).await {
+        match next.handle_query(msg).await {
             Ok(out_reply) => {
-                in_reply = Self::create_in_reply(&msg, &out_reply).await;
+                in_reply = Self::create_in_reply(msg, &out_reply).await;
                 IN_QUERY_RESULT
                     .with_label_values(&[&msg.protocol.to_string(), &in_reply.status()])
                     .inc();
             }
             Err(err) => {
-                in_reply = Self::create_in_error(&msg, err).await;
+                in_reply = Self::create_in_error(msg, err).await;
                 IN_QUERY_RESULT
                     .with_label_values(&[&msg.protocol.to_string(), &in_reply.status()])
                     .inc();
@@ -1000,7 +1000,7 @@ impl DnsListenerHandler {
                 Err(err) => {
                     log::warn!("Failed to handle request: {}", err);
                     IN_QUERY_RESULT
-                        .with_label_values(&[&"UDP", &"parse fail"])
+                        .with_label_values(&["UDP", "parse fail"])
                         .inc();
                 }
             }
@@ -1069,14 +1069,14 @@ impl DnsListenerHandler {
                     if let Err(io) = sock.write(&in_reply_bytes).await {
                         log::warn!("[{:x}] Failed to send DNS reply: {}", msg.in_query.qid, io);
                         IN_QUERY_RESULT
-                            .with_label_values(&[&"TCP", &"send fail"])
+                            .with_label_values(&["TCP", "send fail"])
                             .inc();
                     }
                     drop(timer);
                 }
                 Err(err) => {
                     IN_QUERY_RESULT
-                        .with_label_values(&[&"TCP", &"parse fail"])
+                        .with_label_values(&["TCP", "parse fail"])
                         .inc();
                     log::warn!("Failed to handle request: {}", err);
                 }

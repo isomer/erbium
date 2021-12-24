@@ -132,6 +132,7 @@ pub fn parse(pkt: &[u8]) -> Result<Icmp6, Error> {
     }
 }
 
+#[derive(Default)]
 struct Serialise {
     v: Vec<u8>,
 }
@@ -139,14 +140,6 @@ struct Serialise {
 impl Serialise {
     fn serialise<T: SerialiseInto>(&mut self, value: T) {
         value.serialise(&mut self.v)
-    }
-}
-
-impl Default for Serialise {
-    fn default() -> Self {
-        Self {
-            v: Default::default(),
-        }
     }
 }
 

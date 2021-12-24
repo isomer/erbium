@@ -374,7 +374,7 @@ impl RaAdvService {
             .iter()
             .find(|intf| intf.name == ifname)
         {
-            Ok(self.build_announcement(ifidx, &intf).await)
+            Ok(self.build_announcement(ifidx, intf).await)
         } else if let Some(prefixes) = self.netinfo.get_prefixes_by_ifidx(ifidx).await {
             let addresses = &self.conf.read().await.addresses;
             let prefixes = prefixes
@@ -512,17 +512,16 @@ impl RaAdvService {
 
     async fn run_solicited(&self) -> Result<Void, Error> {
         loop {
-            let rm;
-            match self
+            let rm = match self
                 .rawsock
                 .recv_msg(65536, crate::net::raw::MsgFlags::empty())
                 .await
             {
-                Ok(m) => rm = m,
+                Ok(m) => m,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => continue,
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(Error::Io(e)),
-            }
+            };
             let ifname = match rm.local_intf() {
                 Some(ifidx) => self.netinfo.get_safe_name_by_ifidx(ifidx as u32).await,
                 None => "<unknown>".into(),
@@ -586,6 +585,8 @@ fn test_build_announcement() {
             reachable: std::time::Duration::from_secs(1800),
             retrans: std::time::Duration::from_secs(10),
             mtu: config::ConfigValue::NotSpecified,
+            min_rtr_adv_interval: ConfigValue::Value(std::time::Duration::from_secs(200)),
+            max_rtr_adv_interval: ConfigValue::Value(std::time::Duration::from_secs(600)),
             prefixes: vec![config::Prefix {
                 addr: "2001:db8::".parse().unwrap(),
                 prefixlen: 64,

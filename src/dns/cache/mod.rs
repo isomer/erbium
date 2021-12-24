@@ -92,14 +92,14 @@ fn clone_out_reply(reply: &Result<dnspkt::DNSPkt, Error>) -> Result<dnspkt::DNSP
         Err(OutReply(OutReplyError::FailedToRecvMsg(msg))) => {
             Err(OutReply(OutReplyError::FailedToRecvMsg(msg.clone())))
         }
-        Err(OutReply(OutReplyError::TcpConnectionError(msg))) => {
-            Err(OutReply(OutReplyError::TcpConnectionError(msg.clone())))
+        Err(OutReply(OutReplyError::TcpConnection(msg))) => {
+            Err(OutReply(OutReplyError::TcpConnection(msg.clone())))
         }
-        Err(OutReply(OutReplyError::ParseError(msg))) => {
-            Err(OutReply(OutReplyError::ParseError(msg.clone())))
+        Err(OutReply(OutReplyError::Parse(msg))) => {
+            Err(OutReply(OutReplyError::Parse(msg.clone())))
         }
-        Err(OutReply(OutReplyError::InternalError(msg))) => {
-            Err(OutReply(OutReplyError::InternalError(msg.clone())))
+        Err(OutReply(OutReplyError::Internal(msg))) => {
+            Err(OutReply(OutReplyError::Internal(msg.clone())))
         }
         Err(Denied(x)) => Err(Denied(x.clone())),
         Err(Blocked) => Err(Blocked),
@@ -193,23 +193,23 @@ impl CacheHandler {
         now: Instant,
     ) -> Option<Result<dnspkt::DNSPkt, Error>> {
         /* Check to see if we have a cache hit that is still valid, if so, return it */
-        if let Some(entry) = cache.get(&ck) {
+        if let Some(entry) = cache.get(ck) {
             if entry.expiry() >= now {
                 let remaining = (entry.birth + entry.lifetime) - now;
                 log::trace!("Cache hit ({:?} remaining)", remaining);
-                DNS_CACHE.with_label_values(&[&"HIT"]).inc();
+                DNS_CACHE.with_label_values(&["HIT"]).inc();
                 Some(clone_with_ttl_decrement_out_reply(
                     &entry.reply,
                     now - entry.birth,
                 ))
             } else {
                 log::trace!("Cache miss: Cache expired");
-                DNS_CACHE.with_label_values(&[&"EXPIRED"]).inc();
+                DNS_CACHE.with_label_values(&["EXPIRED"]).inc();
                 None
             }
         } else {
             log::trace!("Cache miss: Entry not present");
-            DNS_CACHE.with_label_values(&[&"MISS"]).inc();
+            DNS_CACHE.with_label_values(&["MISS"]).inc();
             None
         }
     }
@@ -224,10 +224,8 @@ impl CacheHandler {
             Err(Error::OutReply(outquery::Error::Timeout))
             | Err(Error::OutReply(outquery::Error::FailedToSend(_)))
             | Err(Error::OutReply(outquery::Error::FailedToRecv(_)))
-            | Err(Error::OutReply(outquery::Error::TcpConnectionError(_)))
-            | Err(Error::OutReply(outquery::Error::ParseError(_))) => {
-                std::time::Duration::from_secs(8)
-            }
+            | Err(Error::OutReply(outquery::Error::TcpConnection(_)))
+            | Err(Error::OutReply(outquery::Error::Parse(_))) => std::time::Duration::from_secs(8),
             /* Otherwise do not cache the error */
             _ => std::time::Duration::from_secs(0),
         }
@@ -245,7 +243,7 @@ impl CacheHandler {
         cache.insert(
             ck,
             CacheValue {
-                reply: clone_out_reply(&out_result),
+                reply: clone_out_reply(out_result),
                 birth: Instant::now(),
                 lifetime: expiry,
             },
@@ -263,7 +261,7 @@ impl CacheHandler {
         /* Only do caching for IN queries */
         if q.qclass != dnspkt::CLASS_IN {
             log::trace!("[{:x}] Not caching non-IN query", msg.in_query.qid);
-            DNS_CACHE.with_label_values(&[&"UNCACHABLE_CLASS"]).inc();
+            DNS_CACHE.with_label_values(&["UNCACHABLE_CLASS"]).inc();
             return self.next.handle_query(msg, addr).await;
         }
 

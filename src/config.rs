@@ -53,6 +53,7 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl Error {
+    #[must_use]
     pub fn annotate(self, s: &str) -> Error {
         Error::InvalidConfig(format!("{}: {}", self, s))
     }
@@ -91,7 +92,7 @@ impl<T: Clone> ConfigValue<T> {
         match self {
             ConfigValue::NotSpecified => ConfigValue::NotSpecified,
             ConfigValue::DontSet => ConfigValue::DontSet,
-            ConfigValue::Value(v) => ConfigValue::Value(&v),
+            ConfigValue::Value(v) => ConfigValue::Value(v),
         }
     }
     // Converts a ConfigValue into an Option, leaving NotSpecified as None.
@@ -112,6 +113,7 @@ impl<T: Clone> ConfigValue<T> {
             ConfigValue::Value(v) => v.clone(),
         }
     }
+    #[must_use]
     pub fn apply_default(&self, n: ConfigValue<T>) -> ConfigValue<T> {
         match (self, n) {
             (ConfigValue::NotSpecified, ConfigValue::NotSpecified) => ConfigValue::NotSpecified,
@@ -492,7 +494,7 @@ pub fn parse_string_prefix6(name: &str, fragment: &yaml::Yaml) -> Result<Option<
 pub fn str_sockaddr(ost: Option<String>) -> Result<Option<nix::sys::socket::SockAddr>, Error> {
     use nix::sys::socket::*;
     ost.map(|st| match st.get(0..1) {
-        Some("@") => UnixAddr::new_abstract(&st[1..].as_bytes())
+        Some("@") => UnixAddr::new_abstract(st[1..].as_bytes())
             .map(SockAddr::Unix)
             .map_err(|e| Error::InvalidConfig(format!("{} ({})", e, st))),
         Some(_) if st.contains('/') => UnixAddr::new(st.as_bytes())
@@ -898,8 +900,8 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let addresses = addresses.unwrap_or_else(Vec::new);
         let conf = Config {
             #[cfg(feature = "dhcp")]
-            dhcp: dhcp.unwrap_or_else(crate::dhcp::config::Config::default),
-            ra: ra.unwrap_or_else(crate::radv::config::Config::default),
+            dhcp: dhcp.unwrap_or_default(),
+            ra: ra.unwrap_or_default(),
             dns_servers,
             dns_search,
             dns_listeners: dns_listeners.unwrap_or_else(|| match default_listen_style {

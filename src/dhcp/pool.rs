@@ -496,8 +496,6 @@ fn reacquire_lease() {
     p.reserve_address(b"client", requested);
     let mut addrpool: PoolAddresses = Default::default();
     addrpool.insert("192.168.0.100".parse().unwrap());
-    addrpool.insert("192.168.0.101".parse().unwrap());
-    addrpool.insert("192.168.0.102".parse().unwrap());
     let lease = p
         .allocate_address(
             b"client",

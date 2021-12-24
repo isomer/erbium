@@ -43,6 +43,8 @@ pub struct Interface {
     pub hoplimit: u8,
     pub managed: bool,
     pub other: bool,
+    pub max_rtr_adv_interval: ConfigValue<std::time::Duration>,
+    pub min_rtr_adv_interval: ConfigValue<std::time::Duration>,
     pub lifetime: ConfigValue<std::time::Duration>,
     pub reachable: std::time::Duration,
     pub retrans: std::time::Duration,
@@ -65,6 +67,8 @@ impl Default for Interface {
             hoplimit: 0,
             managed: false,
             other: false,
+            max_rtr_adv_interval: NotSpecified,
+            min_rtr_adv_interval: NotSpecified,
             lifetime: NotSpecified,
             reachable: Duration::from_secs(0), /* Not defined. */
             retrans: Duration::from_secs(0),   /* Not defined. */
@@ -265,6 +269,8 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
         let mut hoplimit: Option<u8> = None;
         let mut managed = None;
         let mut other = None;
+        let mut max_rtr_adv_interval = ConfigValue::NotSpecified;
+        let mut min_rtr_adv_interval = ConfigValue::NotSpecified;
         let mut lifetime = ConfigValue::NotSpecified;
         let mut reachable = None;
         let mut retrans = None;
@@ -280,6 +286,32 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                     return Err(Error::InvalidConfig(
                         "interface name is no longer specified here".into(),
                     ))
+                }
+                (Some("max-router-advertisement-interval"), i) => {
+                    max_rtr_adv_interval = ConfigValue::from_option(parse_duration(
+                        "max-router-advertisement-interval",
+                        i,
+                    )?);
+                    match max_rtr_adv_interval {
+                        ConfigValue::Value(v) if v < std::time::Duration::from_secs(4) =>
+                            return Err(Error::InvalidConfig("max-router-advertisement-interval cannot be less than 4s per RFC4861 section 6.2.1".into())),
+                        ConfigValue::Value(v) if v > std::time::Duration::from_secs(1800) =>
+                            return Err(Error::InvalidConfig("max-router-advertisement-interval cannot be greater than 1800s per RFC4861 section 6.2.1".into())),
+                        _ => (),
+                    }
+                }
+                (Some("min-router-advertisement-interval"), i) => {
+                    min_rtr_adv_interval = ConfigValue::from_option(parse_duration(
+                        "min-router-advertisement-interval",
+                        i,
+                    )?);
+                    match min_rtr_adv_interval {
+                        ConfigValue::Value(v) if v < std::time::Duration::from_secs(3) =>
+                            return Err(Error::InvalidConfig("min-router-advertisement-interval cannot be less than 3s per RFC4861 section 6.2.1".into())),
+                        ConfigValue::Value(v) if v < std::time::Duration::from_secs(1800*3/4) =>
+                            return Err(Error::InvalidConfig("min-router-advertisement-interval cannot be larger than 1350s per RFC4861 section 6.2.1".into())),
+                        _ => (),
+                    }
                 }
                 (Some("hop-limit"), i) => hoplimit = parse_num("hop-limit", i)?,
                 (Some("managed"), b) => managed = parse_boolean("managed", b)?,
@@ -315,11 +347,19 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                 }
             }
         }
+        match (&min_rtr_adv_interval, &max_rtr_adv_interval) {
+            (ConfigValue::Value(min), ConfigValue::Value(max)) if *min > 3 * *max / 4 => {
+                return Err(Error::InvalidConfig(format!("min-router-advertisement-interval({}s) cannot be greater than 75% of max({}s) per RFC4861 section 6.2.1", min.as_secs(), max.as_secs())));
+            }
+            _ => (),
+        }
         Ok(Some(Interface {
             name: name.into(),
             hoplimit: hoplimit.unwrap_or(0),
             managed: managed.unwrap_or(false),
             other: other.unwrap_or(false),
+            max_rtr_adv_interval,
+            min_rtr_adv_interval,
             lifetime,
             reachable: reachable.unwrap_or_else(|| std::time::Duration::from_secs(0)),
             retrans: retrans.unwrap_or_else(|| std::time::Duration::from_secs(0)),

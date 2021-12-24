@@ -153,7 +153,7 @@ impl NetLinkNetInfo {
         let ifprefixlen = addr.header.prefix_len;
         for i in &addr.nlas {
             if let Address(a) = i {
-                ifaddr = Some(convert_address(&a, iffamily.into()));
+                ifaddr = Some(convert_address(a, iffamily.into()));
             }
         }
         (ifaddr.unwrap(), ifprefixlen)
@@ -583,8 +583,7 @@ impl SharedNetInfo {
             .await
             .intf
             .iter()
-            .map(|(_ifidx, x)| x.addresses.clone())
-            .flatten()
+            .flat_map(|(_ifidx, x)| x.addresses.clone())
             .collect()
     }
 
@@ -600,7 +599,7 @@ impl SharedNetInfo {
     pub async fn get_ipv4_by_ifidx(&self, ifidx: u32) -> Option<std::net::Ipv4Addr> {
         self.get_prefixes_by_ifidx(ifidx)
             .await
-            .map(|prefixes| {
+            .and_then(|prefixes| {
                 prefixes
                     .iter()
                     .filter_map(|(prefix, _prefixlen)| {
@@ -613,7 +612,6 @@ impl SharedNetInfo {
                     .copied()
                     .next()
             })
-            .flatten()
     }
     pub async fn get_mtu_by_ifidx(&self, ifidx: u32) -> Option<u32> {
         self.0.read().await.intf.get(&ifidx).map(|x| x.mtu)

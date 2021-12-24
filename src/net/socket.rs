@@ -87,14 +87,17 @@ impl ControlMessage {
             },
         }
     }
+    #[must_use]
     pub fn set_send_from(mut self, send_from: Option<std::net::IpAddr>) -> Self {
         self.send_from = send_from;
         self
     }
+    #[must_use]
     pub fn set_src4_intf(mut self, intf: u32) -> Self {
         self.pktinfo4.ipi_ifindex = intf as i32;
         self
     }
+    #[must_use]
     pub fn set_src6_intf(mut self, intf: u32) -> Self {
         self.pktinfo6.ipi6_ifindex = intf;
         self
