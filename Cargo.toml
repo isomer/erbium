@@ -25,7 +25,7 @@ async-std = { version = "1.6.2", features = ["tokio02"] }
 async-trait = { version = "0.1.42" }
 rust-crypto = { version = "0.2.36" }
 bytes = "1.0"
-env_logger = "0.8.2"
+env_logger = "0.9"
 futures = "0.3.8"
 futures-core = "0.3.5"
 futures-sink = "0.3.5"
@@ -33,13 +33,13 @@ hostname = { version = "0.3" }
 hyper = { version = "0.14.5", features=["server", "http1", "stream", "runtime", "tcp"], optional=true }
 lazy_static = "1.4"
 log = "0.4"
-mio = { version = "0.7" }
-netlink-packet-route = "0.7"
-netlink-sys = { version="0.6", features=["tokio_socket"] }
-nix = { version = "0.20" }
-prometheus = { version="0.12", features=["process"] }
+mio = { version = "0.8", features=["net"] }
+netlink-packet-route = "0.8"
+netlink-sys = { version="0.7", features=["tokio_socket"] }
+nix = { version = "0.21" }
+prometheus = { version="0.13", features=["process"] }
 rand = "0.8"
-rusqlite = { version = "0.25" }
+rusqlite = { version = "0.26" }
 tokio-compat-02 = "0.2"
 tokio-util = { version="0.6", features= ["codec"] }
 tokio = { version = "1.0", features = ["full"] }
