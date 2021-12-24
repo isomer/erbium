@@ -288,6 +288,9 @@ pub(crate) fn parse_acl(name: &str, fragment: &yaml::Yaml) -> Result<Option<Acl>
             let mut allow_http_leases = false;
             for access in accesses {
                 match access.as_str() {
+                    "dhcp-client" => {
+                        allow_dns_recursion = true;
+                    }
                     "dns-recursion" => allow_dns_recursion = true,
                     "http" => allow_http = true,
                     "http-metrics" => allow_http_metrics = true,

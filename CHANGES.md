@@ -1,3 +1,6 @@
+0.2.12-rc5 (UNRELEASED)
+   - DHCP: Bug Fix: If there are multiple active leases for a host, don't flip
+     between them, but instead try and keep one.
 0.2.12-rc4
    - Harden DNS listeners to avoid premature exits.
    - Add `default-listen-style` to allow multiple DNS servers on one host.

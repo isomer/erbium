@@ -276,9 +276,15 @@ impl Pool {
                leases
              WHERE clientid = ?1
              AND expiry > ?2
-             ORDER BY expiry DESC
+             ORDER BY
+              address=?3 DESC,
+              expiry DESC
              LIMIT 1",
-                rusqlite::params![clientid, ts as u32],
+                rusqlite::params![
+                    clientid,
+                    ts as u32,
+                    requested.map(|ip| ip.to_string()).unwrap_or("".into())
+                ],
                 |row| {
                     Ok(Some((
                         row.get::<usize, String>(0)?,
@@ -321,10 +327,15 @@ impl Pool {
                leases
              WHERE clientid = ?1
              GROUP BY 1
-             ORDER BY expire_time DESC
+             ORDER BY
+               address=?2 DESC,
+               expire_time DESC
              LIMIT 1
              ",
-                rusqlite::params![clientid],
+                rusqlite::params![
+                    clientid,
+                    requested.map(|ip| ip.to_string()).unwrap_or("".into())
+                ],
                 |row| {
                     Ok(Some((
                         row.get::<usize, String>(0)?,
