@@ -1031,7 +1031,7 @@ rec {
       };
       "erbium" = rec {
         crateName = "erbium";
-        version = "0.2.12-rc6";
+        version = "0.2.12-rc7";
         edition = "2018";
         crateBin = [
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
@@ -1100,7 +1100,7 @@ rec {
           {
             name = "mio";
             packageId = "mio 0.8.0";
-            features = [ "net" ];
+            features = [ "net" "os-poll" ];
           }
           {
             name = "netlink-packet-route";
@@ -2552,7 +2552,7 @@ rec {
         features = {
           "os-ext" = [ "os-poll" ];
         };
-        resolvedDefaultFeatures = [ "default" "net" ];
+        resolvedDefaultFeatures = [ "default" "net" "os-poll" ];
       };
       "miow" = rec {
         crateName = "miow";
