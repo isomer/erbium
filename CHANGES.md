@@ -1,3 +1,5 @@
+0.2.12-rc7
+   - Fix mio upgrade missing "os-poll" feature.
 0.2.12-rc6
    - Clippy cleanups, bumping dependencies etc.
 0.2.12-rc5
