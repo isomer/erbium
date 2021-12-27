@@ -43,12 +43,7 @@ pub type ControlMessage = crate::net::socket::ControlMessage;
 pub type RecvMsg = crate::net::socket::RecvMsg;
 
 pub fn nix_to_io_error(n: nix::Error) -> io::Error {
-    match n {
-        nix::Error::Sys(_) => io::Error::new(io::ErrorKind::Other, n),
-        nix::Error::InvalidPath => io::Error::new(io::ErrorKind::InvalidData, n),
-        nix::Error::InvalidUtf8 => io::Error::new(io::ErrorKind::InvalidData, n),
-        nix::Error::UnsupportedOperation => io::Error::new(io::ErrorKind::InvalidData, n),
-    }
+    n.into()
 }
 
 pub fn nix_to_std_sockaddr(n: nix::sys::socket::SockAddr) -> SocketAddr {

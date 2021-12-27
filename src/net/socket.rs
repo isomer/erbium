@@ -49,14 +49,7 @@ pub fn std_to_nix_sockaddr(addr: &SocketAddr) -> SockAddr {
 }
 
 pub fn nix_to_io_error(n: nix::Error) -> std::io::Error {
-    use nix::Error::*;
-    use std::io::{Error, ErrorKind};
-    match n {
-        Sys(errno) => errno.into(),
-        InvalidPath => Error::new(ErrorKind::InvalidData, n),
-        InvalidUtf8 => Error::new(ErrorKind::InvalidData, n),
-        UnsupportedOperation => Error::new(ErrorKind::InvalidData, n),
-    }
+    n.into()
 }
 
 pub type MsgFlags = nix::sys::socket::MsgFlags;
@@ -269,7 +262,7 @@ pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
             ev.retain_ready();
             Ok(RecvMsg::new(rm, buf))
         }
-        Err(e) if e == nix::Error::Sys(nix::errno::Errno::EAGAIN) => {
+        Err(e) if e == nix::errno::Errno::EAGAIN => {
             ev.clear_ready();
             Err(nix_to_io_error(e))
         }
@@ -319,24 +312,18 @@ pub async fn send_msg<F: std::os::unix::io::AsRawFd>(
         ));
     }
 
-    use std::io::{Error, ErrorKind};
-
     match nix::sys::socket::sendmsg(sock.get_ref().as_raw_fd(), iov, &cmsgs, flags, from) {
         Ok(_) => {
             ev.retain_ready();
             Ok(())
         }
-        Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => {
-            ev.retain_ready();
-            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EINTR))
-        }
-        Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)) => {
+        Err(nix::errno::Errno::EAGAIN) => {
             ev.clear_ready();
-            Err(Error::new(ErrorKind::Other, nix::errno::Errno::EAGAIN))
+            Err(nix::errno::Errno::EAGAIN.into())
         }
         Err(e) => {
             ev.retain_ready();
-            Err(nix_to_io_error(e))
+            Err(e.into())
         }
     }
 }
