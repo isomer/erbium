@@ -283,7 +283,9 @@ impl Pool {
                 rusqlite::params![
                     clientid,
                     ts as u32,
-                    requested.map(|ip| ip.to_string()).unwrap_or("".into())
+                    requested
+                        .map(|ip| ip.to_string())
+                        .unwrap_or_else(|| "".into())
                 ],
                 |row| {
                     Ok(Some((
@@ -334,7 +336,9 @@ impl Pool {
              ",
                 rusqlite::params![
                     clientid,
-                    requested.map(|ip| ip.to_string()).unwrap_or("".into())
+                    requested
+                        .map(|ip| ip.to_string())
+                        .unwrap_or_else(|| "".into())
                 ],
                 |row| {
                     Ok(Some((
