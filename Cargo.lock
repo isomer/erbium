@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "erbium"
-version = "0.2.12-rc5"
+version = "0.2.12-rc6"
 dependencies = [
  "arbitrary",
  "async-std",
