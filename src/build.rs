@@ -2,19 +2,14 @@ extern crate vergen;
 
 fn main() {
     let mut conf = vergen::Config::default();
-    match vergen::vergen(conf) {
+    *conf.git_mut().semver_dirty_mut() = Some("-dirty");
+    match vergen::vergen(conf.clone()) {
         Ok(()) => {}
-        Err(vergen::Error::Git2(_)) => {
-            /* If this is not from a git repository, ignore trying to get the git info */
-            *conf.git_mut().branch_mut() = false;
-            *conf.git_mut().commit_timestamp_mut() = false;
-            *conf.git_mut().rerun_on_head_change_mut() = false;
-            *conf.git_mut().semver_mut() = false;
-            *conf.git_mut().sha_mut() = false;
+        Err(_) => {
+            /* Try again but this time disabling git, in case this is being built from outside git
+             */
+            *conf.git_mut().enabled_mut() = false;
             vergen::vergen(conf).expect("Unable to get vergen build information");
-        }
-        Err(e) => {
-            panic!("Unable to get vergen build information: {}", e);
         }
     }
 }
