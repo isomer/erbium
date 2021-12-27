@@ -1,4 +1,6 @@
-0.2.12-rc5 (UNRELEASED)
+0.2.12-rc6
+   - Clippy cleanups, bumping dependencies etc.
+0.2.12-rc5
    - DHCP: Bug Fix: If there are multiple active leases for a host, don't flip
      between them, but instead try and keep one.
 0.2.12-rc4
