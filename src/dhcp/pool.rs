@@ -48,6 +48,7 @@ pub struct LeaseInfo {
     pub client_id: Vec<u8>,
     pub start: u32,
     pub expire: u32,
+    pub options: Vec<u8>,
 }
 
 pub struct Pool {
@@ -89,23 +90,48 @@ fn calculate_hash<S: Hash, T: Hash>(s: &S, t: &T) -> u64 {
 }
 
 impl Pool {
-    // Schema upgraders need only advance the schema version by 1,
-    // but may upgrade by multiple steps if desired.
+    // - upgrade_schema_from_no_version should install the latest schema
+    //   directly so that new installations need not go through the
+    //   upgrade chain.
+    // - upgrade_schema_from_version_* should perform upgrades one
+    //   version at a time since that is the only thing that is tested.
 
     fn upgrade_schema_from_no_version(&self) -> Result<usize, Error> {
+        if self.conn.query_row(
+            "SELECT 1 FROM leases LIMIT 1",
+            rusqlite::params![],
+            |_| Ok(()),
+        ).optional().err() == None {
+            // This is not a fresh new database but just one with
+            // the schema_version missing. We know that this is the
+            // same as version 0.
+            return Ok(0);
+        }
+        // Else, probably a brand new database. Create it directly
+        // with the latest version.
         self.conn.execute(
-            "CREATE TABLE IF NOT EXISTS leases (
+            "CREATE TABLE leases (
                 address TEXT NOT NULL,
                 chaddr BLOB,
                 clientid BLOB,
                 start INTEGER NOT NULL,
                 expiry INTEGER NOT NULL,
+                options BLOB,
                 PRIMARY KEY (address)
               )",
             rusqlite::params![],
         )
             .map_err(|e| Error::emit("Creating table leases", &e))?;
-        Ok(0)
+        Ok(1)
+    }
+
+    fn upgrade_schema_from_version_0(&self) -> Result<usize, Error> {
+        self.conn.execute(
+            "ALTER TABLE leases ADD COLUMN options BLOB",
+            rusqlite::params![],
+        )
+            .map_err(|e| Error::emit("Upgrading to schema version 1", &e))?;
+        Ok(1)
     }
 
     fn setup_db(self) -> Result<Self, Error> {
@@ -138,9 +164,10 @@ impl Pool {
                 .map_err(|e| Error::emit("Querying schema version", &e))?
             {
                 None => self.upgrade_schema_from_no_version()?,
-                Some(0) => break,  // up to date
+                Some(0) => self.upgrade_schema_from_version_0()?,
+                Some(1) => break,  // up to date
                 Some(v) => return Err(Error::DbError(format!(
-                    "Lease database has version {} which is newer than 0, the newest supported version",
+                    "Lease database has version {} which is newer than 1, the newest supported version",
                     v
                 ))),
             };
@@ -197,7 +224,8 @@ impl Pool {
                   address,
                   clientid,
                   start,
-                  expiry
+                  expiry,
+                  options
                  FROM
                   leases",
             )
@@ -211,6 +239,7 @@ impl Pool {
                     client_id: row.get(1)?,
                     start: row.get(2)?,
                     expire: row.get(3)?,
+                    options: row.get::<usize, Option<Vec<u8>>>(4)?.unwrap_or_default(),
                 })
             })
             .map_err(|e| Error::DbError(e.to_string()))?
@@ -439,6 +468,7 @@ impl Pool {
         addresses: &PoolAddresses,
         min_expire_time: std::time::Duration,
         max_expire_time: std::time::Duration,
+        raw_options: &[u8],
     ) -> Result<Lease, Error> {
         let lease = self.select_address(clientid, requested, addresses)?;
 
@@ -458,13 +488,14 @@ impl Pool {
         self.conn
             .execute(
                 "INSERT OR REPLACE
-                 INTO leases (address, clientid, start, expiry)
-                 VALUES (?1, ?2, ?3, ?4)",
+                 INTO leases (address, clientid, start, expiry, options)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
                 rusqlite::params![
                     lease.ip.to_string(),
                     clientid,
                     ts as u32,
-                    (ts + lease.expire.as_secs()) as u32
+                    (ts + lease.expire.as_secs()) as u32,
+                    raw_options,
                 ],
             )
             .expect("Updating lease database failed"); /* Better error handling */
@@ -517,6 +548,27 @@ fn map_no_row_to_none<T>(e: rusqlite::Error) -> Result<Option<T>, Error> {
 }
 
 #[test]
+fn schema_upgrade_test() {
+    let conn = rusqlite::Connection::open_in_memory()
+        .expect("Failed to create in-memory sqlite database");
+    // Install a copy of the original unversioned schema and expect all
+    // of the upgrades to happen one step at a time. That way, this
+    // single test should invoke them all.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS leases (
+            address TEXT NOT NULL,
+            chaddr BLOB,
+            clientid BLOB,
+            start INTEGER NOT NULL,
+            expiry INTEGER NOT NULL,
+            PRIMARY KEY (address)
+         )",
+            rusqlite::params![],
+    ).expect("Failed to set up test database with old schema");
+    Pool::new_with_conn(conn).expect("setup_db failed");
+}
+
+#[test]
 fn smoke_test() {
     let mut p = Pool::new_in_memory().expect("Failed to create in memory pools");
     let mut addrpool: PoolAddresses = Default::default();
@@ -529,8 +581,15 @@ fn smoke_test() {
         &addrpool,
         DEFAULT_MIN_LEASE,
         DEFAULT_MAX_LEASE,
+        b"\xff",
     )
     .expect("Didn't get allocated an address?!");
+
+    let mut leases = p.get_leases().expect("error calling get_leases()");
+    assert_eq!(leases.len(), 1);
+    let lease = leases.pop().unwrap();
+    assert_eq!(lease.client_id, b"client");
+    assert_eq!(lease.options, b"\xff");
 }
 
 #[test]
@@ -545,6 +604,7 @@ fn empty_pool() {
             &addrpool,
             DEFAULT_MIN_LEASE,
             DEFAULT_MAX_LEASE,
+            b"",
         )
         .expect_err("Got allocated an address from an empty pool!"),
         Error::NoAssignableAddress
@@ -566,6 +626,7 @@ fn reacquire_lease() {
             &addrpool,
             DEFAULT_MIN_LEASE,
             DEFAULT_MAX_LEASE,
+            b"",
         )
         .expect("Failed to allocate address");
 
@@ -593,6 +654,7 @@ fn reacquire_expired_lease() {
             &addrpool,
             DEFAULT_MIN_LEASE,
             DEFAULT_MAX_LEASE,
+            b"",
         )
         .expect("Failed to allocate address");
 
@@ -620,6 +682,7 @@ fn acquire_requested_address_success() {
             &addrpool,
             DEFAULT_MIN_LEASE,
             DEFAULT_MAX_LEASE,
+            b"",
         )
         .expect("Failed to allocate address");
 
@@ -645,6 +708,7 @@ fn acquire_requested_address_in_use() {
             &addrpool,
             DEFAULT_MIN_LEASE,
             DEFAULT_MAX_LEASE,
+            b"",
         )
         .expect("Failed to allocate address");
 
