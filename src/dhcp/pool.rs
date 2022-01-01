@@ -17,6 +17,7 @@
  *  DHCP Pool Management.
  */
 
+use rusqlite::OptionalExtension;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -88,21 +89,68 @@ fn calculate_hash<S: Hash, T: Hash>(s: &S, t: &T) -> u64 {
 }
 
 impl Pool {
+    // Schema upgraders need only advance the schema version by 1,
+    // but may upgrade by multiple steps if desired.
+
+    fn upgrade_schema_from_no_version(&self) -> Result<usize, Error> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS leases (
+                address TEXT NOT NULL,
+                chaddr BLOB,
+                clientid BLOB,
+                start INTEGER NOT NULL,
+                expiry INTEGER NOT NULL,
+                PRIMARY KEY (address)
+              )",
+            rusqlite::params![],
+        )
+            .map_err(|e| Error::emit("Creating table leases", &e))?;
+        Ok(0)
+    }
+
     fn setup_db(self) -> Result<Self, Error> {
+        // Dummy primary key for the schema_version table.
+        // If the same sqlite database were used by another module,
+        // that module could use a different key within the same schema_version
+        // table to track the schema of its own table(s).
+        const DB_SCHEMA_KEY: &'static str = "pool";
+
         self.conn
             .execute(
-                "CREATE TABLE IF NOT EXISTS leases (
-              address TEXT NOT NULL,
-              chaddr BLOB,
-              clientid BLOB,
-              start INTEGER NOT NULL,
-              expiry INTEGER NOT NULL,
-              PRIMARY KEY (address)
-            )",
+                "CREATE TABLE IF NOT EXISTS schema_version (
+                    key TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    PRIMARY KEY (key)
+                )",
                 rusqlite::params![],
             )
-            .map_err(|e| Error::emit("Creating table leases", &e))?;
+            .map_err(|e| Error::emit("Creating table schema_version", &e))?;
 
+        loop {
+            let upgraded_to_version = match self.conn
+                .query_row(
+                    "SELECT version FROM schema_version
+                        WHERE key = ?1",
+                    rusqlite::params![DB_SCHEMA_KEY],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| Error::emit("Querying schema version", &e))?
+            {
+                None => self.upgrade_schema_from_no_version()?,
+                Some(0) => break,  // up to date
+                Some(v) => return Err(Error::DbError(format!(
+                    "Lease database has version {} which is newer than 0, the newest supported version",
+                    v
+                ))),
+            };
+            self.conn.execute(
+                "INSERT OR REPLACE INTO schema_version (key, version)
+                 VALUES (?1, ?2)",
+                rusqlite::params![DB_SCHEMA_KEY, upgraded_to_version],
+            )
+            .map_err(|e| Error::emit("Creating updating schema version", &e))?;
+        }
         Ok(self)
     }
 
