@@ -32,10 +32,7 @@ use crate::net::udp;
 use nix::libc;
 
 pub mod config;
-#[cfg(fuzzing)]
 pub mod dhcppkt;
-#[cfg(not(fuzzing))]
-mod dhcppkt;
 pub mod pool;
 #[cfg(test)]
 mod test;
