@@ -23,6 +23,7 @@ use std::ops::Sub as _;
 use std::sync::Arc;
 use tokio::sync;
 
+use crate::dhcp::dhcppkt::Serialise;
 use crate::net::packet;
 use crate::net::raw;
 use crate::net::udp;
@@ -31,10 +32,7 @@ use crate::net::udp;
 use nix::libc;
 
 pub mod config;
-#[cfg(fuzzing)]
 pub mod dhcppkt;
-#[cfg(not(fuzzing))]
-mod dhcppkt;
 pub mod pool;
 #[cfg(test)]
 mod test;
@@ -395,12 +393,15 @@ fn handle_discover<'l>(
         Err(DhcpError::NoPolicyConfigured)
     } else if let Some(addresses) = response.address {
         /* At least one policy matched, and provided addresses.  So now go allocate an address */
+        let mut raw_options = Vec::new();
+        req.pkt.options.serialise(&mut raw_options);
         match pools.allocate_address(
             &req.pkt.get_client_id(),
             req.pkt.options.get_address_request(),
             &addresses,
             response.minlease.unwrap_or(pool::DEFAULT_MIN_LEASE),
             response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
+            &raw_options,
         ) {
             /* Now we have an address, build the reply */
             Ok(lease) => {
@@ -470,6 +471,8 @@ fn handle_request(
     if !base_policy && !conf_policy {
         Err(DhcpError::NoPolicyConfigured)
     } else if let Some(addresses) = response.address {
+        let mut raw_options = Vec::new();
+        req.pkt.options.serialise(&mut raw_options);
         match pools.allocate_address(
             &req.pkt.get_client_id(),
             if !req.pkt.ciaddr.is_unspecified() {
@@ -480,6 +483,7 @@ fn handle_request(
             &addresses,
             response.minlease.unwrap_or(pool::DEFAULT_MIN_LEASE),
             response.maxlease.unwrap_or(pool::DEFAULT_MAX_LEASE),
+            &raw_options,
         ) {
             Ok(lease) => {
                 DHCP_ALLOCATIONS

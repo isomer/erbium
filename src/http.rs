@@ -118,7 +118,7 @@ async fn serve_leases(
         leases
             .iter()
             .map(|li| format!(
-                " {{ \"ip\": \"{}\", \"client_id\": \"{}\", \"start\": {}, \"expire\": {} }}",
+                " {{ \"ip\": \"{}\", \"client_id\": \"{}\", \"start\": {}, \"expire\": {}{} }}",
                 li.ip,
                 li.client_id
                     .iter()
@@ -126,7 +126,13 @@ async fn serve_leases(
                     .collect::<Vec<_>>()
                     .join(":"),
                 li.start,
-                li.expire
+                li.expire,
+                crate::dhcp::dhcppkt::parse_options(crate::pktparser::Buffer::new(&li.options))
+                    .ok()
+                    .and_then(|o| o.get_hostname())
+                    .and_then(|h| Some(format!(", \"host-name\": {:?}", h)))
+                    .or(Some("".to_string()))
+                    .unwrap(),
             ))
             .collect::<Vec<_>>()
             .join(",\n")

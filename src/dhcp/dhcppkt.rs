@@ -746,6 +746,13 @@ impl DhcpParse for Vec<String> {
     }
 }
 
+impl DhcpParse for String {
+    type Item = Self;
+    fn parse_into(v: &[u8]) -> Option<Self> {
+        Some(String::from_utf8_lossy(v).to_string())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DhcpOptions {
     pub other: collections::HashMap<DhcpOption, Vec<u8>>,
@@ -774,6 +781,10 @@ impl DhcpOptions {
 
     pub fn get_messagetype(&self) -> Option<MessageType> {
         self.get_option::<MessageType>(&OPTION_MSGTYPE)
+    }
+
+    pub fn get_hostname(&self) -> Option<String> {
+        self.get_option::<String>(&OPTION_HOSTNAME)
     }
 
     pub fn set_raw_option(mut self, option: &DhcpOption, value: &[u8]) -> Self {
@@ -883,6 +894,29 @@ fn null_terminated(mut v: Vec<u8>) -> Vec<u8> {
     v
 }
 
+pub fn parse_options(mut buf: pktparser::Buffer) -> Result<DhcpOptions, ParseError> {
+    let mut raw_options: collections::HashMap<DhcpOption, Vec<u8>> = collections::HashMap::new();
+    loop {
+        match buf.get_u8() {
+            Some(0) => (),      /* Pad byte */
+            Some(255) => break, /* End Field */
+            Some(x) => {
+                let l = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
+                raw_options
+                    .entry(DhcpOption(x))
+                    .or_insert_with(Vec::new)
+                    .extend(
+                        buf.get_bytes(l as usize)
+                            .ok_or(ParseError::UnexpectedEndOfInput)?,
+                    );
+            }
+            None => return Err(ParseError::UnexpectedEndOfInput),
+        }
+    }
+
+    Ok(DhcpOptions { other: raw_options })
+}
+
 pub fn parse(pkt: &[u8]) -> Result<Dhcp, ParseError> {
     let mut buf = pktparser::Buffer::new(pkt);
     let op = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
@@ -902,32 +936,11 @@ pub fn parse(pkt: &[u8]) -> Result<Dhcp, ParseError> {
     }
     let sname = null_terminated(buf.get_vec(64).ok_or(ParseError::UnexpectedEndOfInput)?);
     let file = null_terminated(buf.get_vec(128).ok_or(ParseError::UnexpectedEndOfInput)?);
-    let mut raw_options: collections::HashMap<DhcpOption, Vec<u8>> = collections::HashMap::new();
-    match buf.get_be32() {
-        Some(0x6382_5363) => {
-            loop {
-                match buf.get_u8() {
-                    Some(0) => (),      /* Pad byte */
-                    Some(255) => break, /* End Field */
-                    Some(x) => {
-                        let l = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
-                        raw_options
-                            .entry(DhcpOption(x))
-                            .or_insert_with(Vec::new)
-                            .extend(
-                                buf.get_bytes(l as usize)
-                                    .ok_or(ParseError::UnexpectedEndOfInput)?,
-                            );
-                    }
-                    None => return Err(ParseError::UnexpectedEndOfInput),
-                }
-            }
-        }
-        Some(_) => return Err(ParseError::WrongMagic),
-        None => return Err(ParseError::UnexpectedEndOfInput),
+    let magic = buf.get_be32().ok_or(ParseError::UnexpectedEndOfInput)?;
+    if magic != 0x6382_5363 {
+        return Err(ParseError::WrongMagic);
     }
-
-    let options = DhcpOptions { other: raw_options };
+    let options = parse_options(buf)?;
 
     Ok(Dhcp {
         op: DhcpOp(op),
