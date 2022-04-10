@@ -14,4 +14,4 @@ jobs:
         fetch-depth: 0
 
     - name: Build Debian packages
-      uses: jelmer/action-debianize@v1
+      uses: jelmer/action-debianize@v2
