@@ -1,0 +1,17 @@
+name: "Publish a debian package"
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  debian:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checking out the repository
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Build Debian packages
+      uses: jelmer/action-debianize@v1
