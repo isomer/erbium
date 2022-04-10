@@ -15,3 +15,5 @@ jobs:
 
     - name: Build Debian packages
       uses: jelmer/action-debianize@main
+      with:
+        version-kind: release
