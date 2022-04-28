@@ -90,6 +90,8 @@ rec {
           "Jonas Schievink <jonasschievink@gmail.com>"
         ];
         features = {
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
           "default" = [ "std" ];
           "rustc-dep-of-std" = [ "core" "compiler_builtins" ];
         };
@@ -124,7 +126,9 @@ rec {
         ];
         features = {
           "compile-time-rng" = [ "const-random" ];
+          "const-random" = [ "dep:const-random" ];
           "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
         };
       };
       "aho-corasick" = rec {
@@ -158,6 +162,7 @@ rec {
           "David Tolnay <dtolnay@gmail.com>"
         ];
         features = {
+          "backtrace" = [ "dep:backtrace" ];
           "default" = [ "std" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
@@ -184,6 +189,7 @@ rec {
         ];
         features = {
           "derive" = [ "derive_arbitrary" ];
+          "derive_arbitrary" = [ "dep:derive_arbitrary" ];
         };
         resolvedDefaultFeatures = [ "derive" "derive_arbitrary" ];
       };
@@ -299,10 +305,14 @@ rec {
           }
         ];
         features = {
+          "async-io" = [ "dep:async-io" ];
           "default" = [ "async-io" ];
           "tokio" = [ "tokio-crate" ];
+          "tokio-crate" = [ "dep:tokio-crate" ];
           "tokio02" = [ "tokio02-crate" ];
+          "tokio02-crate" = [ "dep:tokio02-crate" ];
           "tokio03" = [ "tokio03-crate" ];
+          "tokio03-crate" = [ "dep:tokio03-crate" ];
         };
         resolvedDefaultFeatures = [ "async-io" "default" "tokio02" "tokio02-crate" ];
       };
@@ -518,14 +528,36 @@ rec {
         ];
         features = {
           "alloc" = [ "futures-core/alloc" "pin-project-lite" ];
+          "async-attributes" = [ "dep:async-attributes" ];
+          "async-channel" = [ "dep:async-channel" ];
+          "async-global-executor" = [ "dep:async-global-executor" ];
+          "async-io" = [ "dep:async-io" ];
+          "async-lock" = [ "dep:async-lock" ];
+          "async-process" = [ "dep:async-process" ];
           "attributes" = [ "async-attributes" ];
+          "crossbeam-utils" = [ "dep:crossbeam-utils" ];
           "default" = [ "std" "async-global-executor" "async-io" "futures-lite" "kv-log-macro" "log" "num_cpus" "pin-project-lite" "gloo-timers" ];
           "docs" = [ "attributes" "unstable" "default" ];
+          "futures-channel" = [ "dep:futures-channel" ];
+          "futures-core" = [ "dep:futures-core" ];
+          "futures-io" = [ "dep:futures-io" ];
+          "futures-lite" = [ "dep:futures-lite" ];
+          "gloo-timers" = [ "dep:gloo-timers" ];
+          "kv-log-macro" = [ "dep:kv-log-macro" ];
+          "log" = [ "dep:log" ];
+          "memchr" = [ "dep:memchr" ];
+          "num_cpus" = [ "dep:num_cpus" ];
+          "once_cell" = [ "dep:once_cell" ];
+          "pin-project-lite" = [ "dep:pin-project-lite" ];
+          "pin-utils" = [ "dep:pin-utils" ];
+          "slab" = [ "dep:slab" ];
           "std" = [ "alloc" "crossbeam-utils" "futures-core/std" "futures-io" "memchr" "once_cell" "pin-utils" "slab" "wasm-bindgen-futures" "futures-channel" "async-channel" "async-lock" ];
+          "surf" = [ "dep:surf" ];
           "tokio02" = [ "async-global-executor/tokio02" ];
           "tokio03" = [ "async-global-executor/tokio03" ];
           "tokio1" = [ "async-global-executor/tokio" ];
           "unstable" = [ "std" "async-io" "async-process" ];
+          "wasm-bindgen-futures" = [ "dep:wasm-bindgen-futures" ];
         };
         resolvedDefaultFeatures = [ "alloc" "async-channel" "async-global-executor" "async-io" "async-lock" "crossbeam-utils" "default" "futures-channel" "futures-core" "futures-io" "futures-lite" "gloo-timers" "kv-log-macro" "log" "memchr" "num_cpus" "once_cell" "pin-project-lite" "pin-utils" "slab" "std" "tokio02" "wasm-bindgen-futures" ];
       };
@@ -626,6 +658,8 @@ rec {
           "The Rust Project Developers"
         ];
         features = {
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
           "rustc-dep-of-std" = [ "core" "compiler_builtins" ];
         };
         resolvedDefaultFeatures = [ "default" ];
@@ -702,6 +736,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
@@ -716,6 +751,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
@@ -746,6 +782,7 @@ rec {
           }
         ];
         features = {
+          "jobserver" = [ "dep:jobserver" ];
           "parallel" = [ "jobserver" ];
         };
         resolvedDefaultFeatures = [ "jobserver" "parallel" ];
@@ -759,6 +796,8 @@ rec {
           "Alex Crichton <alex@alexcrichton.com>"
         ];
         features = {
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
           "rustc-dep-of-std" = [ "core" "compiler_builtins" ];
         };
       };
@@ -803,9 +842,17 @@ rec {
         features = {
           "clock" = [ "libc" "std" "winapi" ];
           "default" = [ "clock" "std" "oldtime" ];
+          "js-sys" = [ "dep:js-sys" ];
+          "libc" = [ "dep:libc" ];
           "oldtime" = [ "time" ];
+          "pure-rust-locales" = [ "dep:pure-rust-locales" ];
+          "rustc-serialize" = [ "dep:rustc-serialize" ];
+          "serde" = [ "dep:serde" ];
+          "time" = [ "dep:time" ];
           "unstable-locales" = [ "pure-rust-locales" "alloc" ];
+          "wasm-bindgen" = [ "dep:wasm-bindgen" ];
           "wasmbind" = [ "wasm-bindgen" "js-sys" ];
+          "winapi" = [ "dep:winapi" ];
         };
         resolvedDefaultFeatures = [ "clock" "default" "libc" "oldtime" "std" "time" "winapi" ];
       };
@@ -877,6 +924,8 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "lazy_static" = [ "dep:lazy_static" ];
+          "loom" = [ "dep:loom" ];
           "std" = [ "lazy_static" ];
         };
         resolvedDefaultFeatures = [ "default" "lazy_static" "std" ];
@@ -1025,7 +1074,11 @@ rec {
           }
         ];
         features = {
+          "atty" = [ "dep:atty" ];
           "default" = [ "termcolor" "atty" "humantime" "regex" ];
+          "humantime" = [ "dep:humantime" ];
+          "regex" = [ "dep:regex" ];
+          "termcolor" = [ "dep:termcolor" ];
         };
         resolvedDefaultFeatures = [ "atty" "default" "humantime" "regex" "termcolor" ];
       };
@@ -1161,6 +1214,7 @@ rec {
           "default" = [ "dhcp" "radv" "http" "dns" ];
           "full" = [ "dhcp" "radv" "http" "dns" ];
           "http" = [ "hyper" "dhcp" ];
+          "hyper" = [ "dep:hyper" ];
           "static" = [ "rusqlite/bundled" ];
         };
         resolvedDefaultFeatures = [ "default" "dhcp" "dns" "full" "http" "hyper" "radv" "static" ];
@@ -1260,10 +1314,16 @@ rec {
           }
         ];
         features = {
+          "cloudflare-zlib-sys" = [ "dep:cloudflare-zlib-sys" ];
           "cloudflare_zlib" = [ "any_zlib" "cloudflare-zlib-sys" ];
           "default" = [ "rust_backend" ];
+          "futures" = [ "dep:futures" ];
+          "libz-sys" = [ "dep:libz-sys" ];
+          "miniz-sys" = [ "dep:miniz-sys" ];
+          "miniz_oxide" = [ "dep:miniz_oxide" ];
           "rust_backend" = [ "miniz_oxide" ];
           "tokio" = [ "tokio-io" "futures" ];
+          "tokio-io" = [ "dep:tokio-io" ];
           "zlib" = [ "any_zlib" "libz-sys" ];
           "zlib-ng-compat" = [ "zlib" "libz-sys/zlib-ng" ];
         };
@@ -1365,6 +1425,7 @@ rec {
           "compat" = [ "std" "futures-util/compat" ];
           "default" = [ "std" "async-await" "executor" ];
           "executor" = [ "std" "futures-executor/std" ];
+          "futures-executor" = [ "dep:futures-executor" ];
           "io-compat" = [ "compat" "futures-util/io-compat" ];
           "std" = [ "alloc" "futures-core/std" "futures-task/std" "futures-io/std" "futures-sink/std" "futures-util/std" "futures-util/io" "futures-util/channel" ];
           "thread-pool" = [ "executor" "futures-executor/thread-pool" ];
@@ -1394,6 +1455,7 @@ rec {
         features = {
           "alloc" = [ "futures-core/alloc" ];
           "default" = [ "std" ];
+          "futures-sink" = [ "dep:futures-sink" ];
           "sink" = [ "futures-sink" ];
           "std" = [ "alloc" "futures-core/std" ];
         };
@@ -1434,6 +1496,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "num_cpus" = [ "dep:num_cpus" ];
           "std" = [ "futures-core/std" "futures-task/std" "futures-util/std" ];
           "thread-pool" = [ "std" "num_cpus" ];
         };
@@ -1496,7 +1559,12 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "fastrand" = [ "dep:fastrand" ];
+          "futures-io" = [ "dep:futures-io" ];
+          "memchr" = [ "dep:memchr" ];
+          "parking" = [ "dep:parking" ];
           "std" = [ "alloc" "fastrand" "futures-io" "parking" "memchr" "waker-fn" ];
+          "waker-fn" = [ "dep:waker-fn" ];
         };
         resolvedDefaultFeatures = [ "alloc" "default" "fastrand" "futures-io" "memchr" "parking" "std" "waker-fn" ];
       };
@@ -1612,10 +1680,18 @@ rec {
           "channel" = [ "std" "futures-channel" ];
           "compat" = [ "std" "futures_01" ];
           "default" = [ "std" "async-await" "async-await-macro" ];
+          "futures-channel" = [ "dep:futures-channel" ];
+          "futures-io" = [ "dep:futures-io" ];
+          "futures-macro" = [ "dep:futures-macro" ];
+          "futures-sink" = [ "dep:futures-sink" ];
+          "futures_01" = [ "dep:futures_01" ];
           "io" = [ "std" "futures-io" "memchr" ];
           "io-compat" = [ "io" "compat" "tokio-io" ];
+          "memchr" = [ "dep:memchr" ];
           "sink" = [ "futures-sink" ];
+          "slab" = [ "dep:slab" ];
           "std" = [ "alloc" "futures-core/std" "futures-task/std" "slab" ];
+          "tokio-io" = [ "dep:tokio-io" ];
           "unstable" = [ "futures-core/unstable" "futures-task/unstable" ];
           "write-all-vectored" = [ "io" ];
         };
@@ -1632,6 +1708,7 @@ rec {
         ];
         features = {
           "parallel" = [ "rayon" ];
+          "rayon" = [ "dep:rayon" ];
         };
       };
       "getrandom" = rec {
@@ -1660,8 +1737,12 @@ rec {
           }
         ];
         features = {
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
           "js" = [ "wasm-bindgen" "js-sys" ];
+          "js-sys" = [ "dep:js-sys" ];
           "rustc-dep-of-std" = [ "compiler_builtins" "core" "libc/rustc-dep-of-std" "wasi/rustc-dep-of-std" ];
+          "wasm-bindgen" = [ "dep:wasm-bindgen" ];
         };
         resolvedDefaultFeatures = [ "std" ];
       };
@@ -1729,6 +1810,8 @@ rec {
         features = {
           "default" = [ "ssh" "https" "ssh_key_from_memory" ];
           "https" = [ "libgit2-sys/https" "openssl-sys" "openssl-probe" ];
+          "openssl-probe" = [ "dep:openssl-probe" ];
+          "openssl-sys" = [ "dep:openssl-sys" ];
           "ssh" = [ "libgit2-sys/ssh" ];
           "ssh_key_from_memory" = [ "libgit2-sys/ssh_key_from_memory" ];
           "vendored-libgit2" = [ "libgit2-sys/vendored" ];
@@ -1771,6 +1854,8 @@ rec {
         ];
         features = {
           "futures" = [ "futures-core" "futures-channel" ];
+          "futures-channel" = [ "dep:futures-channel" ];
+          "futures-core" = [ "dep:futures-core" ];
         };
         resolvedDefaultFeatures = [ "default" "futures" "futures-channel" "futures-core" ];
       };
@@ -1791,9 +1876,16 @@ rec {
           }
         ];
         features = {
+          "ahash" = [ "dep:ahash" ];
           "ahash-compile-time-rng" = [ "ahash/compile-time-rng" ];
+          "alloc" = [ "dep:alloc" ];
+          "bumpalo" = [ "dep:bumpalo" ];
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
           "default" = [ "ahash" "inline-more" ];
+          "rayon" = [ "dep:rayon" ];
           "rustc-dep-of-std" = [ "nightly" "core" "compiler_builtins" "alloc" "rustc-internal-api" ];
+          "serde" = [ "dep:serde" ];
         };
         resolvedDefaultFeatures = [ "ahash" "default" "inline-more" ];
       };
@@ -1812,6 +1904,7 @@ rec {
           }
         ];
         features = {
+          "serde" = [ "dep:serde" ];
           "serde_impl" = [ "serde" ];
         };
       };
@@ -1831,6 +1924,8 @@ rec {
           }
         ];
         features = {
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
           "rustc-dep-of-std" = [ "core" "compiler_builtins/rustc-dep-of-std" "libc/rustc-dep-of-std" ];
         };
         resolvedDefaultFeatures = [ "default" ];
@@ -1845,6 +1940,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
           "std" = [ "alloc" ];
         };
         resolvedDefaultFeatures = [ "alloc" "default" "std" ];
@@ -2056,8 +2152,11 @@ rec {
         features = {
           "ffi" = [ "libc" ];
           "full" = [ "client" "http1" "http2" "server" "stream" "runtime" ];
+          "h2" = [ "dep:h2" ];
           "http2" = [ "h2" ];
+          "libc" = [ "dep:libc" ];
           "runtime" = [ "tcp" "tokio/rt" "tokio/time" ];
+          "socket2" = [ "dep:socket2" ];
           "tcp" = [ "socket2" "tokio/net" "tokio/rt" "tokio/time" ];
         };
         resolvedDefaultFeatures = [ "default" "http1" "runtime" "server" "socket2" "stream" "tcp" ];
@@ -2101,7 +2200,11 @@ rec {
           }
         ];
         features = {
+          "js-sys" = [ "dep:js-sys" ];
+          "stdweb" = [ "dep:stdweb" ];
           "wasm-bindgen" = [ "js-sys" "wasm-bindgen_rs" "web-sys" ];
+          "wasm-bindgen_rs" = [ "dep:wasm-bindgen_rs" ];
+          "web-sys" = [ "dep:web-sys" ];
         };
       };
       "itoa" = rec {
@@ -2176,6 +2279,7 @@ rec {
           "Marvin Löbel <loebel.marvin@gmail.com>"
         ];
         features = {
+          "spin" = [ "dep:spin" ];
           "spin_no_std" = [ "spin" ];
         };
       };
@@ -2190,6 +2294,7 @@ rec {
         features = {
           "default" = [ "std" ];
           "rustc-dep-of-std" = [ "align" "rustc-std-workspace-core" ];
+          "rustc-std-workspace-core" = [ "dep:rustc-std-workspace-core" ];
           "use_std" = [ "std" ];
         };
         resolvedDefaultFeatures = [ "default" "extra_traits" "std" ];
@@ -2230,6 +2335,8 @@ rec {
         ];
         features = {
           "https" = [ "openssl-sys" ];
+          "libssh2-sys" = [ "dep:libssh2-sys" ];
+          "openssl-sys" = [ "dep:openssl-sys" ];
           "ssh" = [ "libssh2-sys" ];
           "vendored-openssl" = [ "openssl-sys/vendored" ];
           "zlib-ng-compat" = [ "libz-sys/zlib-ng" "libssh2-sys/zlib-ng-compat" ];
@@ -2261,18 +2368,23 @@ rec {
           }
         ];
         features = {
+          "bindgen" = [ "dep:bindgen" ];
           "buildtime_bindgen" = [ "bindgen" "pkg-config" "vcpkg" ];
           "bundled" = [ "cc" "bundled_bindings" ];
           "bundled-sqlcipher" = [ "bundled" ];
           "bundled-sqlcipher-vendored-openssl" = [ "bundled-sqlcipher" "openssl-sys/vendored" ];
           "bundled-windows" = [ "cc" "bundled_bindings" ];
+          "cc" = [ "dep:cc" ];
           "default" = [ "min_sqlite_version_3_6_8" ];
           "min_sqlite_version_3_6_23" = [ "pkg-config" "vcpkg" ];
           "min_sqlite_version_3_6_8" = [ "pkg-config" "vcpkg" ];
           "min_sqlite_version_3_7_16" = [ "pkg-config" "vcpkg" ];
           "min_sqlite_version_3_7_7" = [ "pkg-config" "vcpkg" ];
+          "openssl-sys" = [ "dep:openssl-sys" ];
+          "pkg-config" = [ "dep:pkg-config" ];
           "preupdate_hook" = [ "buildtime_bindgen" ];
           "session" = [ "preupdate_hook" "buildtime_bindgen" ];
+          "vcpkg" = [ "dep:vcpkg" ];
           "winsqlite3" = [ "min_sqlite_version_3_7_16" ];
         };
         resolvedDefaultFeatures = [ "bundled" "bundled_bindings" "cc" "default" "min_sqlite_version_3_6_8" "pkg-config" "vcpkg" ];
@@ -2309,7 +2421,9 @@ rec {
           }
         ];
         features = {
+          "cmake" = [ "dep:cmake" ];
           "default" = [ "libc" "stock-zlib" ];
+          "libc" = [ "dep:libc" ];
           "zlib-ng" = [ "libc" "cmake" ];
         };
         resolvedDefaultFeatures = [ "libc" ];
@@ -2324,8 +2438,12 @@ rec {
           "Andrew Paseltiner <apaseltiner@gmail.com>"
         ];
         features = {
+          "clippy" = [ "dep:clippy" ];
+          "heapsize" = [ "dep:heapsize" ];
           "heapsize_impl" = [ "heapsize" ];
+          "serde" = [ "dep:serde" ];
           "serde_impl" = [ "serde" "serde_test" ];
+          "serde_test" = [ "dep:serde_test" ];
         };
       };
       "lock_api" = rec {
@@ -2344,6 +2462,8 @@ rec {
           }
         ];
         features = {
+          "owning_ref" = [ "dep:owning_ref" ];
+          "serde" = [ "dep:serde" ];
         };
       };
       "log" = rec {
@@ -2378,6 +2498,9 @@ rec {
           "kv_unstable_serde" = [ "kv_unstable_std" "value-bag/serde" "serde" ];
           "kv_unstable_std" = [ "std" "kv_unstable" "value-bag/error" ];
           "kv_unstable_sval" = [ "kv_unstable" "value-bag/sval" "sval" ];
+          "serde" = [ "dep:serde" ];
+          "sval" = [ "dep:sval" ];
+          "value-bag" = [ "dep:value-bag" ];
         };
         resolvedDefaultFeatures = [ "kv_unstable" "std" "value-bag" ];
       };
@@ -2415,7 +2538,10 @@ rec {
           "bluss"
         ];
         features = {
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
           "default" = [ "std" ];
+          "libc" = [ "dep:libc" ];
           "rustc-dep-of-std" = [ "core" "compiler_builtins" ];
           "use_std" = [ "std" ];
         };
@@ -2462,6 +2588,9 @@ rec {
           }
         ];
         features = {
+          "alloc" = [ "dep:alloc" ];
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
           "rustc-dep-of-std" = [ "core" "alloc" "compiler_builtins" "adler/rustc-dep-of-std" ];
         };
       };
@@ -2702,8 +2831,12 @@ rec {
           }
         ];
         features = {
+          "async-io" = [ "dep:async-io" ];
+          "futures" = [ "dep:futures" ];
+          "mio" = [ "dep:mio" ];
           "mio_socket" = [ "mio" ];
           "smol_socket" = [ "async-io" "futures" ];
+          "tokio" = [ "dep:tokio" ];
           "tokio_socket" = [ "tokio" "futures" ];
         };
         resolvedDefaultFeatures = [ "default" "futures" "tokio" "tokio_socket" ];
@@ -2809,6 +2942,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "libm" = [ "dep:libm" ];
         };
       };
       "num_cpus" = rec {
@@ -2843,7 +2977,9 @@ rec {
         ];
         features = {
           "alloc" = [ "race" ];
+          "atomic-polyfill" = [ "dep:atomic-polyfill" ];
           "default" = [ "std" ];
+          "parking_lot" = [ "dep:parking_lot" ];
           "std" = [ "alloc" ];
         };
         resolvedDefaultFeatures = [ "alloc" "default" "race" "std" ];
@@ -2931,7 +3067,10 @@ rec {
           }
         ];
         features = {
+          "backtrace" = [ "dep:backtrace" ];
           "deadlock_detection" = [ "petgraph" "thread-id" "backtrace" ];
+          "petgraph" = [ "dep:petgraph" ];
+          "thread-id" = [ "dep:thread-id" ];
         };
       };
       "paste" = rec {
@@ -3085,6 +3224,7 @@ rec {
         ];
         features = {
           "default" = [ "syn-error" ];
+          "syn" = [ "dep:syn" ];
           "syn-error" = [ "syn" ];
         };
         resolvedDefaultFeatures = [ "default" "syn" "syn-error" ];
@@ -3172,6 +3312,8 @@ rec {
           }
         ];
         features = {
+          "backtrace" = [ "dep:backtrace" ];
+          "chrono" = [ "dep:chrono" ];
           "default" = [ "chrono" ];
         };
       };
@@ -3231,9 +3373,14 @@ rec {
         features = {
           "default" = [ "protobuf" ];
           "gen" = [ "protobuf-codegen-pure" ];
+          "libc" = [ "dep:libc" ];
           "nightly" = [ "libc" ];
           "process" = [ "libc" "procfs" ];
+          "procfs" = [ "dep:procfs" ];
+          "protobuf" = [ "dep:protobuf" ];
+          "protobuf-codegen-pure" = [ "dep:protobuf-codegen-pure" ];
           "push" = [ "reqwest" "libc" "protobuf" ];
+          "reqwest" = [ "dep:reqwest" ];
         };
         resolvedDefaultFeatures = [ "default" "libc" "process" "procfs" "protobuf" ];
       };
@@ -3246,6 +3393,9 @@ rec {
           "Stepan Koltsov <stepan.koltsov@gmail.com>"
         ];
         features = {
+          "bytes" = [ "dep:bytes" ];
+          "serde" = [ "dep:serde" ];
+          "serde_derive" = [ "dep:serde_derive" ];
           "with-bytes" = [ "bytes" ];
           "with-serde" = [ "serde" "serde_derive" ];
         };
@@ -3333,6 +3483,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "libc" = [ "dep:libc" ];
           "nightly" = [ "i128_support" ];
           "std" = [ "libc" ];
         };
@@ -3383,6 +3534,12 @@ rec {
           "alloc" = [ "rand_core/alloc" ];
           "default" = [ "std" "std_rng" ];
           "getrandom" = [ "rand_core/getrandom" ];
+          "libc" = [ "dep:libc" ];
+          "log" = [ "dep:log" ];
+          "packed_simd" = [ "dep:packed_simd" ];
+          "rand_chacha" = [ "dep:rand_chacha" ];
+          "rand_hc" = [ "dep:rand_hc" ];
+          "serde" = [ "dep:serde" ];
           "serde1" = [ "serde" "rand_core/serde1" ];
           "simd_support" = [ "packed_simd" ];
           "std" = [ "rand_core/std" "rand_chacha/std" "alloc" "getrandom" "libc" ];
@@ -3414,6 +3571,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
           "serde1" = [ "serde" ];
           "std" = [ "ppv-lite86/std" ];
         };
@@ -3451,7 +3609,9 @@ rec {
           "The Rust Project Developers"
         ];
         features = {
+          "serde" = [ "dep:serde" ];
           "serde1" = [ "serde" "serde_derive" ];
+          "serde_derive" = [ "dep:serde_derive" ];
           "std" = [ "alloc" ];
         };
       };
@@ -3472,6 +3632,8 @@ rec {
           }
         ];
         features = {
+          "getrandom" = [ "dep:getrandom" ];
+          "serde" = [ "dep:serde" ];
           "serde1" = [ "serde" ];
           "std" = [ "alloc" "getrandom" "getrandom/std" ];
         };
@@ -3556,7 +3718,9 @@ rec {
           }
         ];
         features = {
+          "aho-corasick" = [ "dep:aho-corasick" ];
           "default" = [ "std" "perf" "unicode" "regex-syntax/default" ];
+          "memchr" = [ "dep:memchr" ];
           "perf" = [ "perf-cache" "perf-dfa" "perf-inline" "perf-literal" ];
           "perf-literal" = [ "aho-corasick" "memchr" ];
           "unicode" = [ "unicode-age" "unicode-bool" "unicode-case" "unicode-gencat" "unicode-perl" "unicode-script" "unicode-segment" "regex-syntax/unicode" ];
@@ -3633,17 +3797,25 @@ rec {
           "bundled-sqlcipher" = [ "libsqlite3-sys/bundled-sqlcipher" "bundled" ];
           "bundled-sqlcipher-vendored-openssl" = [ "libsqlite3-sys/bundled-sqlcipher-vendored-openssl" "bundled-sqlcipher" ];
           "bundled-windows" = [ "libsqlite3-sys/bundled-windows" ];
+          "byteorder" = [ "dep:byteorder" ];
+          "chrono" = [ "dep:chrono" ];
+          "csv" = [ "dep:csv" ];
           "csvtab" = [ "csv" "vtab" ];
           "functions" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" ];
           "i128_blob" = [ "byteorder" ];
           "in_gecko" = [ "modern_sqlite" "libsqlite3-sys/in_gecko" ];
+          "lazy_static" = [ "dep:lazy_static" ];
           "modern-full" = [ "array" "backup" "blob" "modern_sqlite" "chrono" "collation" "column_decltype" "csvtab" "extra_check" "functions" "hooks" "i128_blob" "limits" "load_extension" "serde_json" "series" "time" "trace" "unlock_notify" "url" "uuid" "vtab" "window" ];
           "modern_sqlite" = [ "libsqlite3-sys/bundled_bindings" ];
+          "serde_json" = [ "dep:serde_json" ];
           "series" = [ "vtab" ];
           "session" = [ "libsqlite3-sys/session" "hooks" ];
           "sqlcipher" = [ "libsqlite3-sys/sqlcipher" ];
+          "time" = [ "dep:time" ];
           "trace" = [ "libsqlite3-sys/min_sqlite_version_3_6_23" ];
           "unlock_notify" = [ "libsqlite3-sys/unlock_notify" ];
+          "url" = [ "dep:url" ];
+          "uuid" = [ "dep:uuid" ];
           "vtab" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" "lazy_static" ];
           "wasm32-wasi-vfs" = [ "libsqlite3-sys/wasm32-wasi-vfs" ];
           "window" = [ "functions" ];
@@ -3749,6 +3921,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
@@ -3779,6 +3952,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "serde" = [ "dep:serde" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
@@ -3792,6 +3966,7 @@ rec {
         ];
         features = {
           "const_new" = [ "const_generics" ];
+          "serde" = [ "dep:serde" ];
         };
       };
       "socket2" = rec {
@@ -3849,6 +4024,7 @@ rec {
           "default" = [ "derive" "parsing" "printing" "clone-impls" "proc-macro" ];
           "printing" = [ "quote" ];
           "proc-macro" = [ "proc-macro2/proc-macro" "quote/proc-macro" ];
+          "quote" = [ "dep:quote" ];
           "test" = [ "syn-test-suite/all-features" ];
         };
         resolvedDefaultFeatures = [ "clone-impls" "default" "derive" "full" "parsing" "printing" "proc-macro" "quote" "visit" "visit-mut" ];
@@ -3900,6 +4076,7 @@ rec {
           "debug" = [ "libc/extra_traits" ];
           "default" = [ "multithread" ];
           "multithread" = [ "rayon" ];
+          "rayon" = [ "dep:rayon" ];
         };
       };
       "termcolor" = rec {
@@ -3987,7 +4164,9 @@ rec {
             features = [ "std" "processthreadsapi" "winbase" ];
           }
         ];
-        
+        features = {
+          "rustc-serialize" = [ "dep:rustc-serialize" ];
+        };
       };
       "tinyvec" = rec {
         crateName = "tinyvec";
@@ -4006,8 +4185,11 @@ rec {
         ];
         features = {
           "alloc" = [ "tinyvec_macros" ];
+          "arbitrary" = [ "dep:arbitrary" ];
           "real_blackbox" = [ "criterion/real_blackbox" ];
           "rustc_1_55" = [ "rustc_1_40" ];
+          "serde" = [ "dep:serde" ];
+          "tinyvec_macros" = [ "dep:tinyvec_macros" ];
         };
         resolvedDefaultFeatures = [ "alloc" "default" "tinyvec_macros" ];
       };
@@ -4052,23 +4234,39 @@ rec {
         features = {
           "blocking" = [ "rt-core" ];
           "dns" = [ "rt-core" ];
+          "fnv" = [ "dep:fnv" ];
           "fs" = [ "rt-core" "io-util" ];
           "full" = [ "blocking" "dns" "fs" "io-driver" "io-util" "io-std" "macros" "net" "process" "rt-core" "rt-util" "rt-threaded" "signal" "stream" "sync" "time" ];
+          "futures-core" = [ "dep:futures-core" ];
           "io-driver" = [ "mio" "lazy_static" ];
           "io-std" = [ "rt-core" ];
           "io-util" = [ "memchr" ];
+          "iovec" = [ "dep:iovec" ];
+          "lazy_static" = [ "dep:lazy_static" ];
+          "libc" = [ "dep:libc" ];
           "macros" = [ "tokio-macros" ];
+          "memchr" = [ "dep:memchr" ];
+          "mio" = [ "dep:mio" ];
+          "mio-named-pipes" = [ "dep:mio-named-pipes" ];
+          "mio-uds" = [ "dep:mio-uds" ];
           "net" = [ "dns" "tcp" "udp" "uds" ];
+          "num_cpus" = [ "dep:num_cpus" ];
+          "parking_lot" = [ "dep:parking_lot" ];
           "process" = [ "io-driver" "libc" "mio-named-pipes" "signal" "winapi/consoleapi" "winapi/minwindef" "winapi/threadpoollegacyapiset" "winapi/winerror" ];
           "rt-core" = [ "slab" ];
           "rt-threaded" = [ "num_cpus" "rt-core" ];
           "signal" = [ "io-driver" "lazy_static" "libc" "mio-uds" "signal-hook-registry" "winapi/consoleapi" "winapi/minwindef" ];
+          "signal-hook-registry" = [ "dep:signal-hook-registry" ];
+          "slab" = [ "dep:slab" ];
           "stream" = [ "futures-core" ];
           "sync" = [ "fnv" ];
           "tcp" = [ "io-driver" "iovec" ];
           "time" = [ "slab" ];
+          "tokio-macros" = [ "dep:tokio-macros" ];
+          "tracing" = [ "dep:tracing" ];
           "udp" = [ "io-driver" ];
           "uds" = [ "io-driver" "mio-uds" "libc" ];
+          "winapi" = [ "dep:winapi" ];
         };
         resolvedDefaultFeatures = [ "default" "num_cpus" "rt-core" "rt-threaded" "slab" ];
       };
@@ -4148,14 +4346,25 @@ rec {
           }
         ];
         features = {
+          "bytes" = [ "dep:bytes" ];
           "full" = [ "fs" "io-util" "io-std" "macros" "net" "parking_lot" "process" "rt" "rt-multi-thread" "signal" "sync" "time" ];
           "io-util" = [ "memchr" "bytes" ];
+          "libc" = [ "dep:libc" ];
           "macros" = [ "tokio-macros" ];
+          "memchr" = [ "dep:memchr" ];
+          "mio" = [ "dep:mio" ];
           "net" = [ "libc" "mio/os-poll" "mio/os-util" "mio/tcp" "mio/udp" "mio/uds" "winapi/namedpipeapi" ];
+          "num_cpus" = [ "dep:num_cpus" ];
+          "once_cell" = [ "dep:once_cell" ];
+          "parking_lot" = [ "dep:parking_lot" ];
           "process" = [ "bytes" "once_cell" "libc" "mio/os-poll" "mio/os-util" "mio/uds" "signal-hook-registry" "winapi/threadpoollegacyapiset" ];
           "rt-multi-thread" = [ "num_cpus" "rt" ];
           "signal" = [ "once_cell" "libc" "mio/os-poll" "mio/uds" "mio/os-util" "signal-hook-registry" "winapi/consoleapi" ];
+          "signal-hook-registry" = [ "dep:signal-hook-registry" ];
           "test-util" = [ "rt" "sync" "time" ];
+          "tokio-macros" = [ "dep:tokio-macros" ];
+          "tracing" = [ "dep:tracing" ];
+          "winapi" = [ "dep:winapi" ];
         };
         resolvedDefaultFeatures = [ "bytes" "default" "fs" "full" "io-std" "io-util" "libc" "macros" "memchr" "mio" "net" "num_cpus" "once_cell" "parking_lot" "process" "rt" "rt-multi-thread" "signal" "signal-hook-registry" "sync" "time" "tokio-macros" "winapi" ];
       };
@@ -4268,6 +4477,7 @@ rec {
           "signal" = [ "tokio/signal" ];
           "sync" = [ "tokio/sync" "tokio-util" ];
           "time" = [ "tokio/time" ];
+          "tokio-util" = [ "dep:tokio-util" ];
         };
         resolvedDefaultFeatures = [ "default" "time" ];
       };
@@ -4317,9 +4527,12 @@ rec {
           "__docs_rs" = [ "futures-util" ];
           "compat" = [ "futures-io" ];
           "full" = [ "codec" "compat" "io-util" "time" "net" "rt" ];
+          "futures-io" = [ "dep:futures-io" ];
+          "futures-util" = [ "dep:futures-util" ];
           "io-util" = [ "io" "tokio/rt" "tokio/io-util" ];
           "net" = [ "tokio/net" ];
           "rt" = [ "tokio/rt" ];
+          "slab" = [ "dep:slab" ];
           "time" = [ "tokio/time" "slab" ];
         };
         resolvedDefaultFeatures = [ "codec" "default" ];
@@ -4361,8 +4574,10 @@ rec {
         features = {
           "attributes" = [ "tracing-attributes" ];
           "default" = [ "std" "attributes" ];
+          "log" = [ "dep:log" ];
           "log-always" = [ "log" ];
           "std" = [ "tracing-core/std" ];
+          "tracing-attributes" = [ "dep:tracing-attributes" ];
         };
         resolvedDefaultFeatures = [ "std" ];
       };
@@ -4383,6 +4598,7 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "lazy_static" = [ "dep:lazy_static" ];
           "std" = [ "lazy_static" ];
         };
         resolvedDefaultFeatures = [ "lazy_static" "std" ];
@@ -4408,7 +4624,10 @@ rec {
         ];
         features = {
           "default" = [ "std" ];
+          "flame" = [ "dep:flame" ];
           "flame_it" = [ "flame" "flamer" ];
+          "flamer" = [ "dep:flamer" ];
+          "serde" = [ "dep:serde" ];
           "with_serde" = [ "serde" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
@@ -4474,7 +4693,9 @@ rec {
             packageId = "percent-encoding";
           }
         ];
-        
+        features = {
+          "serde" = [ "dep:serde" ];
+        };
       };
       "value-bag" = rec {
         crateName = "value-bag";
@@ -4498,11 +4719,15 @@ rec {
           }
         ];
         features = {
+          "erased-serde1" = [ "dep:erased-serde1" ];
           "error" = [ "std" "sval1_lib/std" ];
           "serde" = [ "serde1" ];
           "serde1" = [ "serde1_lib" "sval1_lib/serde1" "sval1_lib/alloc" "erased-serde1/alloc" "serde1_fmt" ];
+          "serde1_fmt" = [ "dep:serde1_fmt" ];
+          "serde1_lib" = [ "dep:serde1_lib" ];
           "sval" = [ "sval1" ];
           "sval1" = [ "sval1_lib" ];
+          "sval1_lib" = [ "dep:sval1_lib" ];
           "test" = [ "std" ];
         };
       };
@@ -4581,10 +4806,14 @@ rec {
         ];
         features = {
           "build" = [ "chrono" ];
+          "chrono" = [ "dep:chrono" ];
           "default" = [ "build" "cargo" "git" "rustc" "si" ];
           "git" = [ "chrono" "git2" ];
+          "git2" = [ "dep:git2" ];
           "rustc" = [ "rustc_version" ];
+          "rustc_version" = [ "dep:rustc_version" ];
           "si" = [ "sysinfo" ];
+          "sysinfo" = [ "dep:sysinfo" ];
         };
         resolvedDefaultFeatures = [ "build" "cargo" "chrono" "default" "git" "git2" "rustc" "rustc_version" "si" "sysinfo" ];
       };
@@ -4637,8 +4866,11 @@ rec {
           "The Cranelift Project Developers"
         ];
         features = {
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
           "default" = [ "std" ];
           "rustc-dep-of-std" = [ "compiler_builtins" "core" "rustc-std-workspace-alloc" ];
+          "rustc-std-workspace-alloc" = [ "dep:rustc-std-workspace-alloc" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
@@ -4663,7 +4895,9 @@ rec {
         features = {
           "default" = [ "spans" "std" ];
           "enable-interning" = [ "std" ];
+          "serde" = [ "dep:serde" ];
           "serde-serialize" = [ "serde" "serde_json" "std" ];
+          "serde_json" = [ "dep:serde_json" ];
           "spans" = [ "wasm-bindgen-macro/spans" ];
           "strict-macro" = [ "wasm-bindgen-macro/strict-macro" ];
           "xxx_debug_only_print_generated_code" = [ "wasm-bindgen-macro/xxx_debug_only_print_generated_code" ];
@@ -4743,6 +4977,7 @@ rec {
           }
         ];
         features = {
+          "futures-core" = [ "dep:futures-core" ];
           "futures-core-03-stream" = [ "futures-core" ];
         };
       };
