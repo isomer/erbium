@@ -34,9 +34,9 @@ hyper = { version = "0.14.5", features=["server", "http1", "stream", "runtime", 
 lazy_static = "1.4"
 log = "0.4"
 mio = { version = "0.8", features=["net", "os-poll"] }
-netlink-packet-route = "0.8"
-netlink-sys = { version="0.7", features=["tokio_socket"] }
-nix = { version = "0.23" }
+netlink-packet-route = ">=0.8"
+netlink-sys = { version=">=0.7", features=["tokio_socket"] }
+nix = { version = ">=0.23" }
 prometheus = { version="0.13", features=["process"] }
 rand = "0.8"
 rusqlite = { version = "0.26" }
