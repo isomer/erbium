@@ -104,7 +104,7 @@ impl std::fmt::Display for DhcpError {
 }
 
 impl DhcpError {
-    fn get_variant_name(&self) -> &'static str {
+    const fn get_variant_name(&self) -> &'static str {
         use DhcpError::*;
         match self {
             UnknownMessageType(_) => "UNKNOWN_MESSAGE_TYPE",
@@ -242,9 +242,9 @@ fn apply_policy(req: &DHCPRequest, policy: &config::Policy, response: &mut Respo
         .pkt
         .options
         .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
-        .unwrap_or_else(Vec::new)
+        .unwrap_or_default()
         .iter()
-        .cloned()
+        .copied()
         .map(dhcppkt::DhcpOption::from)
         .collect();
 

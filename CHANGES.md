@@ -1,3 +1,6 @@
+1.0.0
+   - Better error handling for DHCP pool failures.
+   - Fix a bunch of cargo warnings.
 0.2.12-rc7
    - Fix mio upgrade missing "os-poll" feature.
 0.2.12-rc6

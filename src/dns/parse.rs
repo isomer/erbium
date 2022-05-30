@@ -23,7 +23,7 @@ pub struct EdnsParser<'l> {
 }
 
 impl<'l> EdnsParser<'l> {
-    fn new(buffer: &'l [u8]) -> EdnsParser {
+    const fn new(buffer: &'l [u8]) -> EdnsParser {
         EdnsParser { buffer }
     }
 
@@ -80,7 +80,7 @@ pub struct PktParser<'l> {
 }
 
 impl<'l> PktParser<'l> {
-    pub fn new(buffer: &'l [u8]) -> PktParser {
+    pub const fn new(buffer: &'l [u8]) -> PktParser {
         PktParser { buffer, offset: 0 }
     }
     fn peek_u8(&mut self) -> Result<u8, String> {

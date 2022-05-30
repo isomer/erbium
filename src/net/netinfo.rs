@@ -53,10 +53,11 @@ impl std::fmt::Debug for LinkLayer {
 pub struct IfFlags(u32);
 
 impl IfFlags {
-    pub fn has_multicast(&self) -> bool {
+    pub const fn has_multicast(&self) -> bool {
         self.0 & IFF_MULTICAST != 0
     }
 }
+
 #[derive(Debug)]
 struct IfInfo {
     name: String,
@@ -234,7 +235,7 @@ impl NetLinkNetInfo {
         let ifinfo = IfInfo {
             name: ifname.or(old_name).expect("Interface with unknown name"),
             mtu: ifmtu.or(old_mtu).expect("Interface missing MTU"),
-            addresses: old_addresses.unwrap_or_else(Vec::new),
+            addresses: old_addresses.unwrap_or_default(),
             lladdr: ifaddr,
             llbroadcast: ifbrd,
             flags: IfFlags(ifflags),

@@ -280,7 +280,7 @@ impl std::fmt::Display for HexError {
     }
 }
 
-fn hexdigit(c: u8) -> Result<u8, HexError> {
+const fn hexdigit(c: u8) -> Result<u8, HexError> {
     match c {
         b'A'..=b'F' => Ok(c - b'A' + 10),
         b'a'..=b'f' => Ok(c - b'a' + 10),
@@ -897,7 +897,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 }
             }
         }
-        let addresses = addresses.unwrap_or_else(Vec::new);
+        let addresses = addresses.unwrap_or_default();
         let conf = Config {
             #[cfg(feature = "dhcp")]
             dhcp: dhcp.unwrap_or_default(),
@@ -915,7 +915,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 }
                 DefaultAddressType::Interface => AddressType::BindInterface,
             }),
-            dns_routes: dns_routes.unwrap_or_else(Vec::new),
+            dns_routes: dns_routes.unwrap_or_default(),
             captive_portal,
             listeners: listeners.unwrap_or_else(|| {
                 vec![nix::sys::socket::SockAddr::Unix(

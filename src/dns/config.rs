@@ -74,12 +74,12 @@ pub fn parse_dns_route(name: &str, fragment: &yaml::Yaml) -> Result<Option<Route
             }
         }
         let suffix_domains: Vec<super::dnspkt::Domain> = suffixes
-            .unwrap_or_else(Vec::new)
+            .unwrap_or_default()
             .iter()
             .map(|d| d.parse())
             .collect::<Result<_, &'static str>>()
             .map_err(|m| Error::InvalidConfig(m.into()))?;
-        let servers = servers.unwrap_or_else(Vec::new);
+        let servers = servers.unwrap_or_default();
         if servers.len() > 1 {
             return Err(Error::InvalidConfig(
                 "Multiple DNS servers for a prefix not yet implemented.".into(), // TODO

@@ -145,7 +145,7 @@ impl Pool {
         // If the same sqlite database were used by another module,
         // that module could use a different key within the same schema_version
         // table to track the schema of its own table(s).
-        const DB_SCHEMA_KEY: &'static str = "pool";
+        const DB_SCHEMA_KEY: &str = "pool";
 
         self.conn
             .execute(

@@ -44,23 +44,23 @@ pub struct Buffer<'l> {
 }
 
 impl<'l> Buffer<'l> {
-    pub fn new(buffer: &'l [u8]) -> Buffer {
+    pub const fn new(buffer: &'l [u8]) -> Buffer {
         Buffer { buffer, offset: 0 }
     }
 
-    pub fn remaining(&self) -> usize {
+    pub const fn remaining(&self) -> usize {
         self.buffer.len() - self.offset
     }
 
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         self.buffer.len()
     }
 
-    pub fn empty(&self) -> bool {
+    pub const fn empty(&self) -> bool {
         self.remaining() == 0
     }
 
-    pub fn set_offset(mut self, o: usize) -> Option<Self> {
+    pub const fn set_offset(mut self, o: usize) -> Option<Self> {
         if o <= self.size() {
             self.offset = o;
             Some(self)
@@ -69,7 +69,7 @@ impl<'l> Buffer<'l> {
         }
     }
 
-    pub fn skip(self, s: usize) -> Option<Self> {
+    pub const fn skip(self, s: usize) -> Option<Self> {
         let new_offset = self.offset + s;
         self.set_offset(new_offset)
     }

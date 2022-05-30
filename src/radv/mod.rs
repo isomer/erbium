@@ -108,7 +108,7 @@ enum Scope {
     Multicast,
 }
 
-fn v6_scope(ip6: std::net::Ipv6Addr) -> Scope {
+const fn v6_scope(ip6: std::net::Ipv6Addr) -> Scope {
     use std::net::*;
     if (ip6.segments()[0] & 0xfe00) == 0xfc00 {
         Scope::UniqueLocalAddress

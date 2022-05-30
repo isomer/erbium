@@ -221,7 +221,7 @@ impl fmt::Display for Domain {
 
 impl fmt::Debug for Domain {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Domain({:?})", self)
+        write!(f, "Domain({:?})", self.0)
     }
 }
 
@@ -856,7 +856,7 @@ fn make_edns_opt(v: &mut Vec<u8>, t: &EdnsOption) {
 }
 
 impl EdnsData {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(vec![])
     }
     fn push_opt(&self, v: &mut Vec<u8>) {

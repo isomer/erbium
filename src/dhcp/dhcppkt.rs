@@ -46,7 +46,7 @@ impl std::fmt::Display for ParseError {
 }
 
 impl ParseError {
-    pub fn get_variant_name(&self) -> &'static str {
+    pub const fn get_variant_name(&self) -> &'static str {
         use ParseError::*;
         match self {
             UnexpectedEndOfInput => "TRUNCATED_PACKET",
@@ -567,7 +567,7 @@ impl std::fmt::Display for DhcpOptionTypeValue {
 }
 
 impl DhcpOption {
-    pub fn new(opt: u8) -> Self {
+    pub const fn new(opt: u8) -> Self {
         DhcpOption(opt)
     }
     pub fn get_type(&self) -> Option<DhcpOptionType> {
@@ -787,11 +787,13 @@ impl DhcpOptions {
         self.get_option::<String>(&OPTION_HOSTNAME)
     }
 
+    #[must_use]
     pub fn set_raw_option(mut self, option: &DhcpOption, value: &[u8]) -> Self {
         self.other.insert(*option, value.to_vec());
         self
     }
 
+    #[must_use]
     pub fn set_option<T: Serialise>(self, option: &DhcpOption, value: &T) -> Self {
         let mut v = Vec::new();
         value.serialise(&mut v);
@@ -808,6 +810,7 @@ impl DhcpOptions {
         self.other.insert(*option, value.as_bytes());
     }
 
+    #[must_use]
     pub fn maybe_set_option<T: Serialise>(self, option: &DhcpOption, value: Option<&T>) -> Self {
         if let Some(v) = value {
             self.set_option(option, v)
@@ -816,6 +819,7 @@ impl DhcpOptions {
         }
     }
 
+    #[must_use]
     pub fn remove_option(mut self, option: &DhcpOption) -> Self {
         self.other.remove(option);
         self

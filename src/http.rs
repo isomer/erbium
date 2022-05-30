@@ -130,8 +130,8 @@ async fn serve_leases(
                 crate::dhcp::dhcppkt::parse_options(crate::pktparser::Buffer::new(&li.options))
                     .ok()
                     .and_then(|o| o.get_hostname())
-                    .and_then(|h| Some(format!(", \"host-name\": {:?}", h)))
-                    .or(Some("".to_string()))
+                    .map(|h| format!(", \"host-name\": {:?}", h))
+                    .or_else(|| Some("".to_string()))
                     .unwrap(),
             ))
             .collect::<Vec<_>>()

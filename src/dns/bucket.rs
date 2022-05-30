@@ -45,7 +45,7 @@ impl GenericTokenBucket {
     const MAX_TOKENS: u32 = 100;
     const TOKENS_PER_SECOND: u32 = 2;
 
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(0)
     }
 

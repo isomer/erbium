@@ -1,6 +1,6 @@
 [package]
 name = "erbium"
-version = "0.2.12-rc7"
+version = "1.0.0"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2018"
 default-run = "erbium"
@@ -35,8 +35,8 @@ lazy_static = "1.4"
 log = "0.4"
 mio = { version = "0.8", features=["net", "os-poll"] }
 netlink-packet-route = ">=0.8"
-netlink-sys = { version=">=0.7", features=["tokio_socket"] }
-nix = { version = ">=0.23" }
+netlink-sys = { version=">=0.7, <0.8", features=["tokio_socket"] }
+nix = { version = ">=0.23, <0.24" }
 prometheus = { version="0.13", features=["process"] }
 rand = "0.8"
 rusqlite = { version = "0.26" }

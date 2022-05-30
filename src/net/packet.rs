@@ -18,7 +18,7 @@
  */
 use std::net;
 
-fn partial_netsum(current: u32, buffer: &[u8]) -> u32 {
+const fn partial_netsum(current: u32, buffer: &[u8]) -> u32 {
     let mut i = 0;
     let mut sum = current;
     let mut count = buffer.len();
@@ -35,7 +35,7 @@ fn partial_netsum(current: u32, buffer: &[u8]) -> u32 {
     sum
 }
 
-fn finish_netsum(sum: u32) -> u16 {
+const fn finish_netsum(sum: u32) -> u16 {
     let mut sum = sum;
     while sum > 0xffff {
         sum = (sum >> 16) + (sum & 0xFFFF);
@@ -105,7 +105,7 @@ impl<'a> Fragment<'a> {
         ret
     }
 
-    fn from_tail(tail: Tail) -> Fragment {
+    const fn from_tail(tail: Tail) -> Fragment {
         Fragment {
             buffer: vec![],
             tail,
