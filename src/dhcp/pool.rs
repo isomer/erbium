@@ -97,11 +97,15 @@ impl Pool {
     //   version at a time since that is the only thing that is tested.
 
     fn upgrade_schema_from_no_version(&self) -> Result<usize, Error> {
-        if self.conn.query_row(
-            "SELECT 1 FROM leases LIMIT 1",
-            rusqlite::params![],
-            |_| Ok(()),
-        ).optional().err() == None {
+        if self
+            .conn
+            .query_row("SELECT 1 FROM leases LIMIT 1", rusqlite::params![], |_| {
+                Ok(())
+            })
+            .optional()
+            .err()
+            == None
+        {
             // This is not a fresh new database but just one with
             // the schema_version missing. We know that this is the
             // same as version 0.
@@ -109,8 +113,9 @@ impl Pool {
         }
         // Else, probably a brand new database. Create it directly
         // with the latest version.
-        self.conn.execute(
-            "CREATE TABLE leases (
+        self.conn
+            .execute(
+                "CREATE TABLE leases (
                 address TEXT NOT NULL,
                 chaddr BLOB,
                 clientid BLOB,
@@ -119,17 +124,18 @@ impl Pool {
                 options BLOB,
                 PRIMARY KEY (address)
               )",
-            rusqlite::params![],
-        )
+                rusqlite::params![],
+            )
             .map_err(|e| Error::emit("Creating table leases", &e))?;
         Ok(1)
     }
 
     fn upgrade_schema_from_version_0(&self) -> Result<usize, Error> {
-        self.conn.execute(
-            "ALTER TABLE leases ADD COLUMN options BLOB",
-            rusqlite::params![],
-        )
+        self.conn
+            .execute(
+                "ALTER TABLE leases ADD COLUMN options BLOB",
+                rusqlite::params![],
+            )
             .map_err(|e| Error::emit("Upgrading to schema version 1", &e))?;
         Ok(1)
     }
@@ -171,12 +177,13 @@ impl Pool {
                     v
                 ))),
             };
-            self.conn.execute(
-                "INSERT OR REPLACE INTO schema_version (key, version)
+            self.conn
+                .execute(
+                    "INSERT OR REPLACE INTO schema_version (key, version)
                  VALUES (?1, ?2)",
-                rusqlite::params![DB_SCHEMA_KEY, upgraded_to_version],
-            )
-            .map_err(|e| Error::emit("Creating updating schema version", &e))?;
+                    rusqlite::params![DB_SCHEMA_KEY, upgraded_to_version],
+                )
+                .map_err(|e| Error::emit("Creating updating schema version", &e))?;
         }
         Ok(self)
     }
@@ -498,7 +505,7 @@ impl Pool {
                     raw_options,
                 ],
             )
-            .expect("Updating lease database failed"); /* Better error handling */
+            .map_err(|e| Error::DbError(format!("Failed to update lease: {}", e)))?;
 
         Ok(lease)
     }
@@ -549,8 +556,8 @@ fn map_no_row_to_none<T>(e: rusqlite::Error) -> Result<Option<T>, Error> {
 
 #[test]
 fn schema_upgrade_test() {
-    let conn = rusqlite::Connection::open_in_memory()
-        .expect("Failed to create in-memory sqlite database");
+    let conn =
+        rusqlite::Connection::open_in_memory().expect("Failed to create in-memory sqlite database");
     // Install a copy of the original unversioned schema and expect all
     // of the upgrades to happen one step at a time. That way, this
     // single test should invoke them all.
@@ -563,8 +570,9 @@ fn schema_upgrade_test() {
             expiry INTEGER NOT NULL,
             PRIMARY KEY (address)
          )",
-            rusqlite::params![],
-    ).expect("Failed to set up test database with old schema");
+        rusqlite::params![],
+    )
+    .expect("Failed to set up test database with old schema");
     Pool::new_with_conn(conn).expect("setup_db failed");
 }
 
