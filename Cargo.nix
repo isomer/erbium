@@ -541,9 +541,9 @@ rec {
       };
       "async-trait" = rec {
         crateName = "async-trait";
-        version = "0.1.53";
+        version = "0.1.56";
         edition = "2018";
-        sha256 = "003nzwgwb2apz6nww5wmh66k8f47npifll8c33zgkz1d999a6spd";
+        sha256 = "05lpn4164icjwarh2ax8whj0fzkkxz8cahps5l5snbkxyqlqikwn";
         procMacro = true;
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
@@ -667,9 +667,9 @@ rec {
       };
       "bumpalo" = rec {
         crateName = "bumpalo";
-        version = "3.9.1";
+        version = "3.10.0";
         edition = "2018";
-        sha256 = "1688dv6s0cbj72p9lmll8a02a85dzxvdw2is7pji490zmd35m954";
+        sha256 = "1qrx6sg13yxljk1yr705j5wg34iiy3531by1hqrpiihl8qhvvk1p";
         authors = [
           "Nick Fitzgerald <fitzgen@gmail.com>"
         ];
@@ -1015,7 +1015,7 @@ rec {
       };
       "erbium" = rec {
         crateName = "erbium";
-        version = "1.0.0";
+        version = "1.0.1";
         edition = "2018";
         crateBin = [
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
@@ -1118,7 +1118,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             features = [ "full" ];
           }
           {
@@ -1993,7 +1993,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             features = [ "sync" ];
           }
           {
@@ -2020,7 +2020,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             features = [ "fs" "macros" "io-std" "io-util" "rt" "rt-multi-thread" "sync" "time" "test-util" ];
           }
         ];
@@ -2602,7 +2602,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             optional = true;
             usesDefaultFeatures = false;
             features = [ "net" ];
@@ -2611,7 +2611,7 @@ rec {
         devDependencies = [
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             usesDefaultFeatures = false;
             features = [ "net" "macros" "rt-multi-thread" ];
           }
@@ -2785,9 +2785,9 @@ rec {
       };
       "parking_lot" = rec {
         crateName = "parking_lot";
-        version = "0.12.0";
+        version = "0.12.1";
         edition = "2018";
-        sha256 = "0n7gp0cnfghglc370cxhawwfijvhj3wrjh8gdi8c06m6jcjfrxc7";
+        sha256 = "13r2xk7mnxfc5g0g6dkdxqdqad99j7s7z8zhzz4npw5r0g0v4hip";
         authors = [
           "Amanieu d'Antras <amanieu@gmail.com>"
         ];
@@ -3740,9 +3740,9 @@ rec {
       };
       "syn" = rec {
         crateName = "syn";
-        version = "1.0.95";
+        version = "1.0.96";
         edition = "2018";
-        sha256 = "0hprqgqywlv4z9piq6ygjh0shq7xfkxkc8braafz6949mcb63bzv";
+        sha256 = "1gqymymz4202nfj76dkhr177wmcidch580vzf6w3qi943qjxsj07";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -4012,11 +4012,11 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "num_cpus" "rt-core" "rt-threaded" "slab" ];
       };
-      "tokio 1.18.2" = rec {
+      "tokio 1.19.2" = rec {
         crateName = "tokio";
-        version = "1.18.2";
+        version = "1.19.2";
         edition = "2018";
-        sha256 = "158klcakw40y37kgbafg9z1y12vgflh35ad6bbfxss6g4w2by0s9";
+        sha256 = "0f8lrcbd28czq4sycj3s1irnzd6zx6cr5f7r431n5pc6cvnm46n5";
         authors = [
           "Tokio Contributors <team@tokio.rs>"
         ];
@@ -4153,7 +4153,7 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
           }
           {
             name = "tokio-stream";
@@ -4163,7 +4163,7 @@ rec {
         devDependencies = [
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             features = [ "full" ];
           }
         ];
@@ -4171,9 +4171,9 @@ rec {
       };
       "tokio-macros" = rec {
         crateName = "tokio-macros";
-        version = "1.7.0";
+        version = "1.8.0";
         edition = "2018";
-        sha256 = "1ds34qsfvgf63cjgdx3gr4pl7i76fifyar15ksbillcc8hpzfmxm";
+        sha256 = "11140lnx88qycdx8ynxgk0317gnw1qsy16ydlgvpx67vfnlzj94p";
         procMacro = true;
         authors = [
           "Tokio Contributors <team@tokio.rs>"
@@ -4197,9 +4197,9 @@ rec {
       };
       "tokio-stream" = rec {
         crateName = "tokio-stream";
-        version = "0.1.8";
+        version = "0.1.9";
         edition = "2018";
-        sha256 = "1qwq0y21xprsql4v9y1cm1ymhgw66rznjmnjrjsii27zxy25852h";
+        sha256 = "1n804q6lpcsrgs1acj7101bm1cv6wpjf23x4zvjc9zfn2x0xam6z";
         authors = [
           "Tokio Contributors <team@tokio.rs>"
         ];
@@ -4214,14 +4214,14 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             features = [ "sync" ];
           }
         ];
         devDependencies = [
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             features = [ "full" "test-util" ];
           }
         ];
@@ -4268,14 +4268,14 @@ rec {
           }
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             features = [ "sync" ];
           }
         ];
         devDependencies = [
           {
             name = "tokio";
-            packageId = "tokio 1.18.2";
+            packageId = "tokio 1.19.2";
             features = [ "full" ];
           }
         ];
