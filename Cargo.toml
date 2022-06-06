@@ -1,6 +1,6 @@
 [package]
 name = "erbium"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2018"
 default-run = "erbium"
@@ -42,7 +42,7 @@ rand = "0.8"
 rusqlite = { version = "0.26" }
 tokio-compat-02 = "0.2"
 tokio-util = { version="0.6", features= ["codec"] }
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.8.4", features = ["full"] }
 yaml-rust = { version = "0.4" }
 
 [[bin]]
