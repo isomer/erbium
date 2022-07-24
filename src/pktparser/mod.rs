@@ -147,6 +147,16 @@ impl<'l> Buffer<'l> {
     }
 }
 
+impl<'l> std::fmt::Display for Buffer<'l> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "[")?;
+        for byte in &self.buffer[self.offset..] {
+            write!(f, "{:x} ", byte)?;
+        }
+        write!(f, "]")
+    }
+}
+
 #[test]
 fn test_get_u8() {
     let data = [1, 2, 3];

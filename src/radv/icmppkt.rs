@@ -1,4 +1,5 @@
 use crate::pktparser::Buffer;
+use std::time::Duration;
 
 #[derive(Debug)]
 pub enum Error {
@@ -90,8 +91,7 @@ pub struct AdvPrefix {
     pub prefix: std::net::Ipv6Addr,
 }
 
-fn parse_nd_rtr_solicit(buf: &mut Buffer) -> Result<Icmp6, Error> {
-    let _reserved = buf.get_be32().ok_or(Error::Truncated)?;
+fn parse_nd_rtr_options(buf: &mut Buffer) -> Result<NDOptions, Error> {
     let mut options: NDOptions = Default::default();
     while buf.remaining() > 0 {
         let ty = buf.get_u8().map(NDOption).ok_or(Error::Truncated)?;
@@ -107,7 +107,33 @@ fn parse_nd_rtr_solicit(buf: &mut Buffer) -> Result<Icmp6, Error> {
             o => log::warn!("Unexpected ND RTR Solicit option {:?}", o),
         }
     }
-    Ok(Icmp6::RtrSolicit(options))
+    Ok(options)
+}
+
+fn parse_nd_rtr_solicit(buf: &mut Buffer) -> Result<Icmp6, Error> {
+    let _reserved = buf.get_be32().ok_or(Error::Truncated)?;
+    Ok(Icmp6::RtrSolicit(parse_nd_rtr_options(buf)?))
+}
+
+fn parse_nd_rtr_advert(buf: &mut Buffer) -> Result<Icmp6, Error> {
+    let hop_limit = buf.get_u8().ok_or(Error::Truncated)?;
+    let mo_byte = buf.get_u8().ok_or(Error::Truncated)?;
+    let lifetime = Duration::from_secs(buf.get_be16().ok_or(Error::Truncated)?.into());
+    let reachable = Duration::from_secs(buf.get_be32().ok_or(Error::Truncated)?.into());
+    let retrans = Duration::from_secs(buf.get_be32().ok_or(Error::Truncated)?.into());
+    let options = parse_nd_rtr_options(buf)?;
+    let flag_managed = (0b1000_0000 & mo_byte) != 0;
+    let flag_other = (0b0100_0000 & mo_byte) != 0;
+
+    Ok(Icmp6::RtrAdvert(RtrAdvertisement {
+        hop_limit,
+        flag_managed,
+        flag_other,
+        lifetime,
+        reachable,
+        retrans,
+        options,
+    }))
 }
 
 pub fn parse(pkt: &[u8]) -> Result<Icmp6, Error> {
@@ -122,7 +148,7 @@ pub fn parse(pkt: &[u8]) -> Result<Icmp6, Error> {
 
     match (ty, code) {
         (ND_ROUTER_SOLICIT, 0) => parse_nd_rtr_solicit(&mut buf),
-        (ND_ROUTER_ADVERT, 0) => Ok(Icmp6::Unknown),
+        (ND_ROUTER_ADVERT, 0) => parse_nd_rtr_advert(&mut buf),
         (ND_NEIGHBOR_SOLICIT, 0) => Ok(Icmp6::Unknown),
         (ND_NEIGHBOR_ADVERT, 0) => Ok(Icmp6::Unknown),
         (t, c) => {
@@ -263,7 +289,7 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
             NDOptionValue::CaptivePortal(url) => {
                 let mut b = url.clone().into_bytes();
                 // Pad with 0x00
-                while (b.len() + 2) & 8 != 0 {
+                while (b.len() + 2) % 8 != 0 {
                     b.push(0x00_u8);
                 }
                 v.serialise(CAPTIVE_PORTAL.0);
@@ -287,6 +313,22 @@ pub fn serialise(msg: &Icmp6) -> Vec<u8> {
 fn test_parse_nd_rtr_solicit() {
     let data = [133, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 3, 4, 5, 6];
     parse(&data).expect("Failed to parse");
+}
+
+#[test]
+fn test_decode_ra() {
+    let data = vec![
+        0x86, 0x00, 0xc4, 0xfe, 0x40, 0x00, 0x07, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x01, 0x01, 0xc2, 0x00, 0x54, 0xf5, 0x00, 0x00, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00,
+        0x05, 0xdc, 0x03, 0x04, 0x40, 0xc0, 0x00, 0x27, 0x8d, 0x00, 0x00, 0x09, 0x3a, 0x80, 0x00,
+        0x00, 0x00, 0x00, 0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ];
+
+    let result = parse(&data);
+    assert!(result.is_ok());
+    let result_value = result.unwrap();
+    println!("{:?}", result_value);
 }
 
 #[test]
@@ -321,5 +363,5 @@ fn test_reflexitivity() {
             NDOptionValue::CaptivePortal("http://example.com/".into()),
         ]),
     }));
-    parse(&data).expect("Failed to parse");
+    parse(&data).unwrap();
 }
