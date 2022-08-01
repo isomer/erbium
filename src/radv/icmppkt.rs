@@ -119,8 +119,8 @@ fn parse_nd_rtr_advert(buf: &mut Buffer) -> Result<Icmp6, Error> {
     let hop_limit = buf.get_u8().ok_or(Error::Truncated)?;
     let mo_byte = buf.get_u8().ok_or(Error::Truncated)?;
     let lifetime = Duration::from_secs(buf.get_be16().ok_or(Error::Truncated)?.into());
-    let reachable = Duration::from_secs(buf.get_be32().ok_or(Error::Truncated)?.into());
-    let retrans = Duration::from_secs(buf.get_be32().ok_or(Error::Truncated)?.into());
+    let reachable = Duration::from_millis(buf.get_be32().ok_or(Error::Truncated)?.into());
+    let retrans = Duration::from_millis(buf.get_be32().ok_or(Error::Truncated)?.into());
     let options = parse_nd_rtr_options(buf)?;
     let flag_managed = (0b1000_0000 & mo_byte) != 0;
     let flag_other = (0b0100_0000 & mo_byte) != 0;
