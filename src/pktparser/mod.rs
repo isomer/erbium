@@ -86,6 +86,14 @@ impl<'l> Buffer<'l> {
         }
     }
 
+    pub fn peek_u8(&self) -> Option<u8> {
+        if self.offset < self.buffer.len() {
+            Some(self.buffer[self.offset])
+        } else {
+            None
+        }
+    }
+
     pub fn get_bytes(&mut self, b: usize) -> Option<&'l [u8]> {
         if self.offset + b <= self.buffer.len() {
             let ret = &self.buffer[self.offset..self.offset + b];
