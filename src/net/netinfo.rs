@@ -63,7 +63,6 @@ struct IfInfo {
     name: String,
     addresses: Vec<(std::net::IpAddr, u8)>,
     lladdr: LinkLayer,
-    llbroadcast: LinkLayer,
     mtu: u32,
     //operstate: netlink_packet_route::rtnl::link::nlas::link_state::State, // Is private
     flags: IfFlags,
@@ -204,7 +203,6 @@ impl NetLinkNetInfo {
         let mut ifname: Option<String> = None;
         let mut ifmtu: Option<u32> = None;
         let mut ifaddr = None;
-        let mut ifbrd = None;
         let ifflags = link.header.flags;
         let ifidx = link.header.index;
         for i in &link.nlas {
@@ -212,14 +210,10 @@ impl NetLinkNetInfo {
                 IfName(name) => ifname = Some(name.clone()),
                 Mtu(mtu) => ifmtu = Some(*mtu),
                 Address(addr) => ifaddr = Some(addr.clone()),
-                Broadcast(addr) => ifbrd = Some(addr.clone()),
                 _ => (),
             }
         }
         let ifaddr = ifaddr.map_or(LinkLayer::None, |x| {
-            NetLinkNetInfo::decode_linklayer(link.header.link_layer_type, &x)
-        });
-        let ifbrd = ifbrd.map_or(LinkLayer::None, |x| {
             NetLinkNetInfo::decode_linklayer(link.header.link_layer_type, &x)
         });
 
@@ -237,7 +231,6 @@ impl NetLinkNetInfo {
             mtu: ifmtu.or(old_mtu).expect("Interface missing MTU"),
             addresses: old_addresses.unwrap_or_default(),
             lladdr: ifaddr,
-            llbroadcast: ifbrd,
             flags: IfFlags(ifflags),
         };
 
@@ -535,7 +528,6 @@ impl SharedNetInfo {
                 name: "lo".into(),
                 addresses: vec![("127.0.0.1".parse().unwrap(), 8)],
                 lladdr: LinkLayer::None,
-                llbroadcast: LinkLayer::None,
                 mtu: 65536,
                 flags: IfFlags(IFF_MULTICAST),
             },
@@ -546,7 +538,6 @@ impl SharedNetInfo {
                 name: "eth0".into(),
                 addresses: vec![("192.0.2.254".parse().unwrap(), 24)],
                 lladdr: LinkLayer::Ethernet([0x00, 0x00, 0x5E, 0x00, 0x53, 0xFF]),
-                llbroadcast: LinkLayer::Ethernet([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
                 mtu: 1500,
                 flags: IfFlags(IFF_MULTICAST),
             },
