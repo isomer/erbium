@@ -1,6 +1,6 @@
 [package]
 name = "erbium"
-version = "1.0.1"
+version = "1.0.2-rc1"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2018"
 default-run = "erbium"
