@@ -176,7 +176,7 @@ impl fmt::Display for Label {
 }
 
 #[cfg(fuzzing)]
-impl<'a> Arbitrary<'a> for Label {
+impl Arbitrary for Label {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
         /* Labels cannot be empty. */
         loop {
@@ -457,7 +457,7 @@ pub struct NAPTRData {
 }
 
 #[cfg(fuzzing)]
-impl<'a> Arbitrary<'a> for NAPTRData {
+impl Arbitrary for NAPTRData {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
         let order = <_>::arbitrary(u)?;
         let preference = <_>::arbitrary(u)?;
@@ -545,7 +545,7 @@ impl fmt::Debug for RR {
 }
 
 #[cfg(fuzzing)]
-impl<'a> Arbitrary<'a> for RR {
+impl Arbitrary for RR {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
         let domain = <_>::arbitrary(u)?;
         let class = <_>::arbitrary(u)?;
@@ -646,7 +646,7 @@ pub struct DNSPkt {
 }
 
 #[cfg(fuzzing)]
-impl<'a> Arbitrary<'a> for DNSPkt {
+impl Arbitrary for DNSPkt {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
         let qid = <_>::arbitrary(u)?;
         let rd = <_>::arbitrary(u)?;

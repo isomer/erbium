@@ -11,9 +11,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.3"
-
-[dependencies.erbium]
-path = ".."
+erbium = { path="..", features=["fuzzing"] }
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -21,10 +19,11 @@ members = ["."]
 
 [features]
 full=[]
+fuzzing=[]
 
 [[bin]]
-name = "fuzz_dns"
-path = "fuzz_targets/fuzz_dns.rs"
+name = "fuzz_dhcp"
+path = "fuzz_targets/fuzz_dhcp.rs"
 test = false
 doc = false
 
@@ -37,5 +36,17 @@ doc = false
 [[bin]]
 name = "dnspkt2"
 path = "fuzz_targets/dnspkt2.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_radv"
+path = "fuzz_targets/fuzz_radv.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_radv2"
+path = "fuzz_targets/fuzz_radv2.rs"
 test = false
 doc = false

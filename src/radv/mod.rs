@@ -21,7 +21,7 @@ use rand::Rng;
 use std::convert::TryInto as _;
 
 pub(crate) mod config;
-mod icmppkt;
+pub mod icmppkt;
 
 #[cfg(test)]
 mod test {

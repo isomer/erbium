@@ -1,19 +1,25 @@
 use crate::pktparser::Buffer;
+#[cfg(fuzzing)]
+use arbitrary::Arbitrary;
 use std::time::Duration;
 
 #[derive(Debug)]
 pub enum Error {
     Truncated,
+    InvalidEncoding,
+    InvalidPacket,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(fuzzing, derive(Arbitrary))]
 struct Type(u8);
 const ND_ROUTER_SOLICIT: Type = Type(133);
 const ND_ROUTER_ADVERT: Type = Type(134);
 const ND_NEIGHBOR_SOLICIT: Type = Type(135);
 const ND_NEIGHBOR_ADVERT: Type = Type(136);
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(fuzzing, derive(Arbitrary))]
 pub struct NDOption(u8);
 pub const SOURCE_LL_ADDR: NDOption = NDOption(1);
 pub const _TARGET_LL_ADDR: NDOption = NDOption(2);
@@ -26,7 +32,7 @@ pub const DNSSL: NDOption = NDOption(31);
 pub const CAPTIVE_PORTAL: NDOption = NDOption(37);
 pub const PREF64: NDOption = NDOption(38);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NDOptionValue {
     SourceLLAddr(Vec<u8>),
     Mtu(u32),
@@ -37,7 +43,53 @@ pub enum NDOptionValue {
     Pref64((std::time::Duration, u8, std::net::Ipv6Addr)),
 }
 
-#[derive(Default, Debug)]
+#[cfg(fuzzing)]
+impl Arbitrary for NDOptionValue {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
+        use std::convert::TryFrom as _;
+        match u.int_in_range(0..=5)? {
+            0 => Ok(NDOptionValue::SourceLLAddr(<[u8; 6]>::arbitrary(u)?.into())),
+            1 => Ok(NDOptionValue::Mtu(<_>::arbitrary(u)?)),
+            2 => Ok(NDOptionValue::Prefix(<_>::arbitrary(u)?)),
+            3 => {
+                let duration = Duration::from_secs(u.int_in_range(0..=2_u64.pow(32) - 1)?);
+                let num_ips = u.arbitrary_len::<[u8; 16]>()?;
+                let mut ips = Vec::new();
+                for _ in 0..std::cmp::min(num_ips, 127) {
+                    ips.push(<[u8; 16]>::arbitrary(u)?.into());
+                }
+
+                Ok(NDOptionValue::RecursiveDnsServers((duration, ips)))
+            }
+            4 => loop {
+                let mut url: String = <_>::arbitrary(u)?;
+                while url.ends_with('\0') {
+                    url.pop();
+                }
+                return Ok(NDOptionValue::CaptivePortal(url));
+            },
+            5 => Ok(NDOptionValue::Pref64((
+                Duration::from_secs(u.int_in_range(0..=2_u64.pow(13) - 1)? & !7),
+                u.int_in_range(0..=5)? * 8 + 32,
+                <[u8; 128 / 8]>::try_from(
+                    [&<[u8; 96 / 8]>::arbitrary(u)?, &[0_u8; (128 - 96) / 8][..]].concat(),
+                )
+                .unwrap()
+                .into(),
+            ))),
+            /* - no decoder (yet).  the domain type should be changed to support embedded '.' etc.
+            6 => Ok(NDOptionValue::DnsSearchList((
+                <_>::arbitrary(u)?,
+                <_>::arbitrary(u)?,
+            ))),
+            */
+            _ => unimplemented!(),
+        }
+    }
+}
+
+#[derive(Default, Debug, Eq, PartialEq)]
+#[cfg_attr(fuzzing, derive(Arbitrary))]
 pub struct NDOptions(Vec<NDOptionValue>);
 
 impl NDOptions {
@@ -63,14 +115,15 @@ impl NDOptions {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
+#[cfg_attr(fuzzing, derive(Arbitrary))]
 pub enum Icmp6 {
     Unknown,
     RtrSolicit(NDOptions),
     RtrAdvert(RtrAdvertisement),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct RtrAdvertisement {
     pub hop_limit: u8,
     pub flag_managed: bool,
@@ -81,7 +134,22 @@ pub struct RtrAdvertisement {
     pub options: NDOptions,
 }
 
-#[derive(Clone, Debug)]
+#[cfg(fuzzing)]
+impl Arbitrary for RtrAdvertisement {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
+        Ok(Self {
+            hop_limit: <_>::arbitrary(u)?,
+            flag_managed: <_>::arbitrary(u)?,
+            flag_other: <_>::arbitrary(u)?,
+            lifetime: Duration::from_secs(<u16>::arbitrary(u)?.into()),
+            reachable: Duration::from_millis(<u32>::arbitrary(u)?.into()),
+            retrans: Duration::from_millis(<u32>::arbitrary(u)?.into()),
+            options: <_>::arbitrary(u)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AdvPrefix {
     pub prefixlen: u8,
     pub onlink: bool,
@@ -91,18 +159,104 @@ pub struct AdvPrefix {
     pub prefix: std::net::Ipv6Addr,
 }
 
+#[cfg(fuzzing)]
+impl Arbitrary for AdvPrefix {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
+        Ok(AdvPrefix {
+            prefixlen: u.int_in_range(0..=128)?,
+            onlink: <_>::arbitrary(u)?,
+            autonomous: <_>::arbitrary(u)?,
+            valid: Duration::from_secs(<u32>::arbitrary(u)?.into()),
+            preferred: Duration::from_secs(<u32>::arbitrary(u)?.into()),
+            prefix: <[u8; 16]>::arbitrary(u)?.into(),
+        })
+    }
+}
+
 fn parse_nd_rtr_options(buf: &mut Buffer) -> Result<NDOptions, Error> {
     let mut options: NDOptions = Default::default();
     while buf.remaining() > 0 {
         let ty = buf.get_u8().map(NDOption).ok_or(Error::Truncated)?;
         let l = buf.get_u8().ok_or(Error::Truncated)? as usize;
         if l == 0 {
+            // Nodes MUST silently discard an ND packet that contains an option with length zero.
             return Err(Error::Truncated);
         }
         let data = buf.get_bytes(l * 8 - 2).ok_or(Error::Truncated)?;
         match (ty, data) {
             (SOURCE_LL_ADDR, value) => {
                 options.add_option(NDOptionValue::SourceLLAddr(value.to_vec()));
+            }
+            (CAPTIVE_PORTAL, value) => {
+                options.add_option(NDOptionValue::CaptivePortal(
+                    String::from_utf8(
+                        value[..value
+                            .iter()
+                            .rposition(|b| *b != 0)
+                            .map(|p| p + 1)
+                            .unwrap_or(0)]
+                            .into(),
+                    )
+                    .map_err(|_| Error::InvalidEncoding)?,
+                ));
+            }
+            (PREF64, value) => {
+                if value.len() != 2 * 8 - 2 {
+                    // The receiver MUST ignore the PREF64 option if the Length field value is not 2.
+                    // we ignore the entire packet instead...
+                    return Err(Error::InvalidPacket);
+                }
+                use std::convert::{TryFrom as _, TryInto as _};
+                let scaled_lifetime_plc = u16::from_be_bytes(value[0..=1].try_into().unwrap());
+                let lifetime = Duration::from_secs((scaled_lifetime_plc & !7).into());
+                let prefixlen = (scaled_lifetime_plc & 0x07) * 8 + 32;
+                let ip_octets =
+                    <[u8; 16]>::try_from([&value[2..], &[0, 0, 0, 0]].concat()).unwrap();
+                let prefix = std::net::Ipv6Addr::from(ip_octets);
+                options.add_option(NDOptionValue::Pref64((lifetime, prefixlen as u8, prefix)));
+            }
+            (MTU, value) => {
+                if value.len() != 1 * 8 - 2 {
+                    return Err(Error::InvalidPacket);
+                }
+                use std::convert::TryInto as _;
+                options.add_option(NDOptionValue::Mtu(u32::from_be_bytes(
+                    value[2..=5].try_into().unwrap(),
+                )));
+            }
+            (RDNSS, value) => {
+                use std::convert::{TryFrom as _, TryInto as _};
+                let lifetime =
+                    Duration::from_secs(u32::from_be_bytes(value[2..=5].try_into().unwrap()) as _);
+                let servers = value[6..]
+                    .chunks_exact(16)
+                    .map(|x| std::net::Ipv6Addr::from(<[u8; 16]>::try_from(x).unwrap()))
+                    .collect();
+                options.add_option(NDOptionValue::RecursiveDnsServers((lifetime, servers)));
+            }
+            (PREFIX_INFO, value) => {
+                use std::convert::{TryFrom as _, TryInto as _};
+                if value.len() != 4 * 8 - 2 {
+                    return Err(Error::InvalidPacket);
+                }
+                let prefixlen = value[0];
+                let onlink = value[1] & 0x80 != 0;
+                let autonomous = value[1] & 0x40 != 0;
+                let valid =
+                    Duration::from_secs(u32::from_be_bytes(value[2..6].try_into().unwrap()) as _);
+                let preferred =
+                    Duration::from_secs(u32::from_be_bytes(value[6..10].try_into().unwrap()) as _);
+                /* reserved (4 bytes) */
+                let prefix =
+                    std::net::Ipv6Addr::from(<[u8; 16]>::try_from(&value[14..30]).unwrap());
+                options.add_option(NDOptionValue::Prefix(AdvPrefix {
+                    prefixlen,
+                    onlink,
+                    autonomous,
+                    valid,
+                    preferred,
+                    prefix,
+                }));
             }
             o => log::warn!("Unexpected ND RTR Solicit option {:?}", o),
         }
@@ -167,6 +321,10 @@ impl Serialise {
     fn serialise<T: SerialiseInto>(&mut self, value: T) {
         value.serialise(&mut self.v)
     }
+
+    fn len(&self) -> usize {
+        self.v.len()
+    }
 }
 
 trait SerialiseInto {
@@ -225,8 +383,9 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
     for opt in &a.options.0 {
         match opt {
             NDOptionValue::SourceLLAddr(src) => {
+                use std::convert::TryFrom as _;
                 v.serialise(SOURCE_LL_ADDR.0);
-                v.serialise(1_u8);
+                v.serialise(u8::try_from((src.len() + 2 + 7) / 8).unwrap());
                 v.serialise(src);
             }
             NDOptionValue::Mtu(mtu) => {
@@ -249,8 +408,9 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
                 v.serialise(&prefix.prefix);
             }
             NDOptionValue::RecursiveDnsServers((lifetime, servers)) => {
+                use std::convert::TryFrom as _;
                 v.serialise(RDNSS.0);
-                v.serialise((1 + servers.len() * 2) as u8);
+                v.serialise(u8::try_from(1 + servers.len() * 2).unwrap());
                 v.serialise(0_u16); // Reserved / Padding.
                 v.serialise(lifetime.as_secs() as u32);
                 for server in servers {
@@ -298,6 +458,7 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
             }
         }
     }
+    assert_eq!(v.len() % 8, 0);
     v.v
 }
 
