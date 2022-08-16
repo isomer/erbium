@@ -48,7 +48,7 @@ impl LldpPacket {
         let first: &LldpTlv = self.tlvs.get(0).unwrap();
         let second: &LldpTlv = self.tlvs.get(1).unwrap();
         let third: &LldpTlv = self.tlvs.get(2).unwrap();
-        let last: &LldpTlv = self.tlvs.get(self.tlvs.len() - 1).unwrap();
+        let last: &LldpTlv = self.tlvs.last().unwrap();
 
         if !matches!(first, LldpTlv::ChassisID(_)) {
             return Err(std::io::Error::new(
@@ -111,9 +111,9 @@ impl Deserialise for LldpPacket {
 
 impl std::fmt::Display for LldpPacket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "LLDP [\n")?;
+        writeln!(f, "LLDP [")?;
         for tlv in &self.tlvs {
-            write!(f, "\t{}\n", tlv)?;
+            writeln!(f, "\t{}", tlv)?;
         }
         write!(f, "]")
     }
@@ -754,7 +754,7 @@ impl Deserialise for ManagementAddress {
         let if_number = ReadBytesExt::read_u32::<BigEndian>(&mut if_number_bytes).map_err(|e| {
             pktparser::ParseError::InvalidArgument(format!(
                 "Failed to read if_number from ManagementAddr: {}",
-                e.to_string()
+                e
             ))
         })?;
 
