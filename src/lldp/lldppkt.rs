@@ -20,31 +20,22 @@
 /// lldppkt is an implementation of the wire format of IEEE 802.1AB-2016
 use crate::pktparser;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use std::fmt::Formatter;
+use pktparser::{Deserialise, Serialise};
 
 use std::convert::TryInto;
+use std::fmt::Formatter;
 use std::io::ErrorKind;
 
-pub trait ToWire {
-    fn to_wire(&self) -> Result<Vec<u8>, std::io::Error>;
-}
-
-pub trait FromWire {
-    fn from_wire(buf: &mut pktparser::Buffer<'_>) -> Result<Self, pktparser::ParseError>
-    where
-        Self: Sized;
-}
-
-/// LLDPPacket represents a LLDP PDU that can be read from / written to the wire.
+/// LldpPacket represents a LLDP PDU that can be read from / written to the wire.
 /// LLDP PDUs are simply a concatenation of TLVs in an Ethernet frame with type 0x88cc.
 /// At the end of the PDU there is an empty TLV header.
 /// The first three TLVs must be: ChassisID, PortID and TTL.
 #[derive(Debug)]
-pub struct LLDPPacket {
-    pub tlvs: Vec<LLDPTLV>,
+pub struct LldpPacket {
+    pub tlvs: Vec<LldpTlv>,
 }
 
-impl LLDPPacket {
+impl LldpPacket {
     fn validate_format(&self) -> Result<(), std::io::Error> {
         if self.tlvs.len() < 4 {
             return Err(std::io::Error::new(
@@ -54,30 +45,30 @@ impl LLDPPacket {
         }
 
         // Safe to unwrap four elements since we checked above.
-        let first: &LLDPTLV = self.tlvs.get(0).unwrap();
-        let second: &LLDPTLV = self.tlvs.get(1).unwrap();
-        let third: &LLDPTLV = self.tlvs.get(2).unwrap();
-        let last: &LLDPTLV = self.tlvs.get(self.tlvs.len() - 1).unwrap();
+        let first: &LldpTlv = self.tlvs.get(0).unwrap();
+        let second: &LldpTlv = self.tlvs.get(1).unwrap();
+        let third: &LldpTlv = self.tlvs.get(2).unwrap();
+        let last: &LldpTlv = self.tlvs.get(self.tlvs.len() - 1).unwrap();
 
-        if !matches!(first, LLDPTLV::ChassisID(_)) {
+        if !matches!(first, LldpTlv::ChassisID(_)) {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
                 format!("Expected first TLV to be ChassisID but got {}", first),
             ));
         }
-        if !matches!(second, LLDPTLV::PortID(_)) {
+        if !matches!(second, LldpTlv::PortID(_)) {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
                 format!("Expected second TLV to be PortID but got {}", second),
             ));
         }
-        if !matches!(third, LLDPTLV::TTL(_)) {
+        if !matches!(third, LldpTlv::TTL(_)) {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
                 format!("Expected third TLV to be TTL but got {}", third),
             ));
         }
-        if !matches!(last, LLDPTLV::EndOfLLDPPDU()) {
+        if !matches!(last, LldpTlv::EndOfLLDPPDU()) {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidData,
                 format!("Expected last TLV to be EndOfLLDPPDU but got {}", last),
@@ -88,7 +79,7 @@ impl LLDPPacket {
     }
 }
 
-impl ToWire for LLDPPacket {
+impl Serialise for LldpPacket {
     fn to_wire(&self) -> Result<Vec<u8>, std::io::Error> {
         self.validate_format()?;
         let mut pdu = Vec::new();
@@ -101,15 +92,15 @@ impl ToWire for LLDPPacket {
     }
 }
 
-impl FromWire for LLDPPacket {
+impl Deserialise for LldpPacket {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
         let mut tlvs = Vec::new();
         while buf.remaining() > 0 {
-            tlvs.push(LLDPTLV::from_wire(buf)?);
-            if matches!(tlvs[tlvs.len() - 1], LLDPTLV::EndOfLLDPPDU()) {
-                return Ok(LLDPPacket { tlvs });
+            tlvs.push(LldpTlv::from_wire(buf)?);
+            if matches!(tlvs[tlvs.len() - 1], LldpTlv::EndOfLLDPPDU()) {
+                return Ok(LldpPacket { tlvs });
             }
         }
         Err(pktparser::ParseError::InvalidArgument(
@@ -118,7 +109,7 @@ impl FromWire for LLDPPacket {
     }
 }
 
-impl std::fmt::Display for LLDPPacket {
+impl std::fmt::Display for LldpPacket {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "LLDP [\n")?;
         for tlv in &self.tlvs {
@@ -129,21 +120,21 @@ impl std::fmt::Display for LLDPPacket {
 }
 
 #[derive(Debug)]
-pub struct LLDPTLVHeader {
-    pub r#type: u8,  // 7 bits on the wire.
+pub struct LldpTlvHeader {
+    pub ty: u8,      // 7 bits on the wire.
     pub length: u16, // 9 bits on the wire
 }
 
-impl ToWire for LLDPTLVHeader {
+impl Serialise for LldpTlvHeader {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
-        let out: u16 = ((self.r#type as u16) << 9) as u16 | (0b0000_0001_1111_1111 & self.length);
+        let out: u16 = ((self.ty as u16) << 9) as u16 | (0b0000_0001_1111_1111 & self.length);
         let mut vec = vec![];
         WriteBytesExt::write_u16::<BigEndian>(&mut vec, out)?;
         Ok(vec)
     }
 }
 
-impl FromWire for LLDPTLVHeader {
+impl Deserialise for LldpTlvHeader {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
@@ -153,18 +144,18 @@ impl FromWire for LLDPTLVHeader {
         let r#type = ((input & 0b1111_1110_0000_0000) >> 9) as u8;
         let length = input & 0b0000_0001_1111_1111;
 
-        Ok(LLDPTLVHeader { r#type, length })
+        Ok(LldpTlvHeader { ty: r#type, length })
     }
 }
 
 #[derive(Debug)]
-pub enum LLDPTLV {
+pub enum LldpTlv {
     /// 8.5.2
-    ChassisID(ChassisID),
+    ChassisID(ChassisId),
     /// 8.5.3
-    PortID(PortID),
+    PortID(PortId),
     /// 8.5.4
-    TTL(TTL),
+    TTL(Ttl),
     /// 8.5.5
     PortDescription(PortDescription),
     /// 8.5.6
@@ -175,68 +166,124 @@ pub enum LLDPTLV {
     SystemCapabilities(SystemCapabilities),
     /// 8.5.9
     ManagementAddress(ManagementAddress),
-
+    /// 8.6
     OrganizationSpecific(OrganizationSpecific),
+
+    // A type to hold stuff we don't know, properly.
+    UnknownTLV(UnknownTlv),
 
     EndOfLLDPPDU(),
 }
 
-impl ToWire for LLDPTLV {
+impl Serialise for LldpTlv {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
+        let mut tlv_hdr = LldpTlvHeader { ty: 0, length: 0 };
+        let mut payload: Vec<u8>;
         match self {
-            Self::ChassisID(tlv) => tlv.to_wire(),
-            Self::PortID(tlv) => tlv.to_wire(),
-            Self::TTL(tlv) => tlv.to_wire(),
-            Self::PortDescription(tlv) => tlv.to_wire(),
-            Self::SystemName(tlv) => tlv.to_wire(),
-            Self::SystemDescription(tlv) => tlv.to_wire(),
-            Self::SystemCapabilities(tlv) => tlv.to_wire(),
-            Self::ManagementAddress(tlv) => tlv.to_wire(),
-            Self::OrganizationSpecific(tlv) => tlv.to_wire(),
-            Self::EndOfLLDPPDU() => Ok(vec![0u8, 0u8]),
-        }
+            Self::ChassisID(tlv) => {
+                tlv_hdr.ty = 1;
+                payload = tlv.to_wire()?;
+            }
+            Self::PortID(tlv) => {
+                tlv_hdr.ty = 2;
+                payload = tlv.to_wire()?;
+            }
+            Self::TTL(tlv) => {
+                tlv_hdr.ty = 3;
+                payload = tlv.to_wire()?;
+            }
+            Self::PortDescription(tlv) => {
+                tlv_hdr.ty = 4;
+                payload = tlv.to_wire()?;
+            }
+            Self::SystemName(tlv) => {
+                tlv_hdr.ty = 5;
+                payload = tlv.to_wire()?;
+            }
+            Self::SystemDescription(tlv) => {
+                tlv_hdr.ty = 6;
+                payload = tlv.to_wire()?;
+            }
+            Self::SystemCapabilities(tlv) => {
+                tlv_hdr.ty = 7;
+                payload = tlv.to_wire()?;
+            }
+            Self::ManagementAddress(tlv) => {
+                tlv_hdr.ty = 8;
+                payload = tlv.to_wire()?;
+            }
+            Self::OrganizationSpecific(tlv) => {
+                tlv_hdr.ty = 127;
+                payload = tlv.to_wire()?;
+            }
+            Self::UnknownTLV(tlv) => {
+                tlv_hdr.ty = tlv.ty;
+                payload = tlv.payload.clone();
+            }
+            Self::EndOfLLDPPDU() => {
+                tlv_hdr.ty = 0;
+                payload = vec![];
+            }
+        };
+        tlv_hdr.length = payload.len() as u16;
+        let mut result = tlv_hdr.to_wire()?;
+        result.append(&mut payload);
+        Ok(result)
     }
 }
 
-impl FromWire for LLDPTLV {
+impl Deserialise for LldpTlv {
     fn from_wire(buf: &mut pktparser::Buffer<'_>) -> Result<Self, pktparser::ParseError>
     where
         Self: Sized,
     {
-        let t = ((buf
-            .peek_u8()
+        let ty = ((buf
+            .get_u8()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?)
             & 0b1111_1110)
             >> 1;
+        let len = buf
+            .get_u8()
+            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
+        let mut payload = buf
+            .get_buffer(len.into())
+            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
 
-        match t {
+        match ty {
             0 => Ok(Self::EndOfLLDPPDU()),
-            1 => Ok(LLDPTLV::ChassisID(ChassisID::from_wire(buf)?)),
-            2 => Ok(LLDPTLV::PortID(PortID::from_wire(buf)?)),
-            3 => Ok(LLDPTLV::TTL(TTL::from_wire(buf)?)),
-            4 => Ok(LLDPTLV::PortDescription(PortDescription::from_wire(buf)?)),
-            5 => Ok(LLDPTLV::SystemName(SystemName::from_wire(buf)?)),
-            6 => Ok(LLDPTLV::SystemDescription(SystemDescription::from_wire(
-                buf,
+            1 => Ok(LldpTlv::ChassisID(ChassisId::from_wire(&mut payload)?)),
+            2 => Ok(LldpTlv::PortID(PortId::from_wire(&mut payload)?)),
+            3 => Ok(LldpTlv::TTL(Ttl::from_wire(&mut payload)?)),
+            4 => Ok(LldpTlv::PortDescription(PortDescription::from_wire(
+                &mut payload,
             )?)),
-            7 => Ok(LLDPTLV::SystemCapabilities(SystemCapabilities::from_wire(
-                buf,
+            5 => Ok(LldpTlv::SystemName(SystemName::from_wire(&mut payload)?)),
+            6 => Ok(LldpTlv::SystemDescription(SystemDescription::from_wire(
+                &mut payload,
             )?)),
-            8 => Ok(LLDPTLV::ManagementAddress(ManagementAddress::from_wire(
-                buf,
+            7 => Ok(LldpTlv::SystemCapabilities(SystemCapabilities::from_wire(
+                &mut payload,
             )?)),
-            127 => Ok(LLDPTLV::OrganizationSpecific(
-                OrganizationSpecific::from_wire(buf)?,
+            8 => Ok(LldpTlv::ManagementAddress(ManagementAddress::from_wire(
+                &mut payload,
+            )?)),
+            127 => Ok(LldpTlv::OrganizationSpecific(
+                OrganizationSpecific::from_wire(&mut payload)?,
             )),
-            o => Err(pktparser::ParseError::InvalidArgument(format!(
-                "Unknown LLDP TLV type: {}",
-                o
-            ))),
+            _ => {
+                let payload_vec = payload
+                    .get_vec(payload.remaining())
+                    .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
+                Ok(LldpTlv::UnknownTLV(UnknownTlv {
+                    ty,
+                    payload: payload_vec,
+                }))
+            }
         }
     }
 }
 
-impl std::fmt::Display for LLDPTLV {
+impl std::fmt::Display for LldpTlv {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ChassisID(tlv) => tlv.fmt(f),
@@ -248,62 +295,74 @@ impl std::fmt::Display for LLDPTLV {
             Self::SystemCapabilities(tlv) => tlv.fmt(f),
             Self::ManagementAddress(tlv) => tlv.fmt(f),
             Self::OrganizationSpecific(tlv) => tlv.fmt(f),
+            Self::UnknownTLV(tlv) => tlv.fmt(f),
             Self::EndOfLLDPPDU() => write!(f, "End of LLDPPDU"),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct ChassisID {
-    r#type: ChassisIDType,
-    identifier: Vec<u8>,
+pub struct UnknownTlv {
+    ty: u8,
+    payload: Vec<u8>,
 }
 
-impl ToWire for ChassisID {
-    fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
-        let mut value: Vec<u8> = Vec::new();
-        value.append(&mut self.r#type.to_wire()?);
-        value.append(&mut self.identifier.clone());
-        let header = LLDPTLVHeader {
-            r#type: 1,
-            length: 1 + self.identifier.len() as u16,
+impl Serialise for UnknownTlv {
+    fn to_wire(&self) -> Result<Vec<u8>, std::io::Error> {
+        let header = LldpTlvHeader {
+            ty: self.ty,
+            length: self.payload.len() as u16,
         };
-        let mut output = header.to_wire()?;
-        output.append(&mut value);
-        Ok(output)
+
+        let mut res = header.to_wire()?;
+        res.append(&mut self.payload.clone());
+        Ok(res)
     }
 }
 
-impl FromWire for ChassisID {
+impl std::fmt::Display for UnknownTlv {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Unknown TLV type: {}, payload: {:02x?}",
+            self.ty, self.payload
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct ChassisId {
+    r#type: ChassisIdType,
+    identifier: Vec<u8>,
+}
+
+impl Serialise for ChassisId {
+    fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
+        let mut result: Vec<u8> = Vec::new();
+        result.append(&mut self.r#type.to_wire()?);
+        result.append(&mut self.identifier.clone());
+        Ok(result)
+    }
+}
+
+impl Deserialise for ChassisId {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let header = LLDPTLVHeader::from_wire(buf)?;
-        if header.r#type != 1 {
-            return Err(pktparser::ParseError::InvalidArgument(format!(
-                "Want type 1 for ChassisID TLV but got {}",
-                header.r#type,
-            )));
-        }
+        let subtype = ChassisIdType::from_wire(buf)?;
 
-        let mut payload = buf
-            .get_buffer(header.length.into())
+        let identifier: Vec<u8> = buf
+            .get_vec(buf.remaining())
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
 
-        let subtype = ChassisIDType::from_wire(&mut payload)?;
-
-        let identifier: Vec<u8> = payload
-            .get_vec(payload.remaining())
-            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-
-        Ok(ChassisID {
+        Ok(ChassisId {
             r#type: subtype,
             identifier,
         })
     }
 }
 
-impl std::fmt::Display for ChassisID {
+impl std::fmt::Display for ChassisId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -314,7 +373,7 @@ impl std::fmt::Display for ChassisID {
 }
 
 #[derive(Debug)]
-pub enum ChassisIDType {
+pub enum ChassisIdType {
     ChassisComponent,
     InterfaceAlias,
     PortComponent,
@@ -324,10 +383,10 @@ pub enum ChassisIDType {
     Local,
 }
 
-impl FromWire for ChassisIDType {
+impl Deserialise for ChassisIdType {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
-    ) -> std::result::Result<ChassisIDType, pktparser::ParseError> {
+    ) -> std::result::Result<ChassisIdType, pktparser::ParseError> {
         Ok(
             match buf
                 .get_u8()
@@ -351,7 +410,7 @@ impl FromWire for ChassisIDType {
     }
 }
 
-impl ToWire for ChassisIDType {
+impl Serialise for ChassisIdType {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
         Ok(match self {
             Self::ChassisComponent => vec![1],
@@ -365,7 +424,7 @@ impl ToWire for ChassisIDType {
     }
 }
 
-impl std::fmt::Display for ChassisIDType {
+impl std::fmt::Display for ChassisIdType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         match self {
             Self::ChassisComponent => write!(f, "ChassisComponent"),
@@ -380,57 +439,38 @@ impl std::fmt::Display for ChassisIDType {
 }
 
 #[derive(Debug)]
-pub struct PortID {
-    pub r#type: PortIDType,
+pub struct PortId {
+    pub r#type: PortIdType,
     pub identifier: Vec<u8>,
 }
 
-impl FromWire for PortID {
+impl Deserialise for PortId {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let header = LLDPTLVHeader::from_wire(buf)?;
-        if header.r#type != 2 {
-            return Err(pktparser::ParseError::InvalidArgument(format!(
-                "Want type 2 for PortID TLV but got {}",
-                header.r#type,
-            )));
-        }
+        let subtype = PortIdType::from_wire(buf)?;
 
-        let mut payload = buf
-            .get_buffer(header.length.into())
+        let identifier: Vec<u8> = buf
+            .get_vec(buf.remaining())
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
 
-        let subtype = PortIDType::from_wire(&mut payload)?;
-
-        let identifier: Vec<u8> = payload
-            .get_vec(payload.remaining())
-            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-
-        Ok(PortID {
+        Ok(PortId {
             r#type: subtype,
             identifier,
         })
     }
 }
 
-impl ToWire for PortID {
+impl Serialise for PortId {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
-        let mut value = Vec::new();
-        value.append(&mut self.r#type.to_wire()?);
-        value.append(&mut self.identifier.clone());
-
-        let header = LLDPTLVHeader {
-            r#type: 2,
-            length: value.len() as u16,
-        };
-        let mut output = header.to_wire()?;
-        output.append(&mut value);
-        Ok(output)
+        let mut result = Vec::new();
+        result.append(&mut self.r#type.to_wire()?);
+        result.append(&mut self.identifier.clone());
+        Ok(result)
     }
 }
 
-impl std::fmt::Display for PortID {
+impl std::fmt::Display for PortId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // TODO: Actually treat the types correctly according to their value.
         write!(
@@ -442,7 +482,7 @@ impl std::fmt::Display for PortID {
 }
 
 #[derive(Debug)]
-pub enum PortIDType {
+pub enum PortIdType {
     InterfaceAlias,
     PortComponent,
     MacAddress,
@@ -452,7 +492,7 @@ pub enum PortIDType {
     Local,
 }
 
-impl FromWire for PortIDType {
+impl Deserialise for PortIdType {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
@@ -479,7 +519,7 @@ impl FromWire for PortIDType {
     }
 }
 
-impl ToWire for PortIDType {
+impl Serialise for PortIdType {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
         Ok(match self {
             Self::InterfaceAlias => vec![1],
@@ -493,7 +533,7 @@ impl ToWire for PortIDType {
     }
 }
 
-impl std::fmt::Display for PortIDType {
+impl std::fmt::Display for PortIdType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InterfaceAlias => write!(f, "InterfaceAlias"),
@@ -508,50 +548,37 @@ impl std::fmt::Display for PortIDType {
 }
 
 #[derive(Debug)]
-pub struct TTL {
-    pub ttl: u16,
-}
+pub struct Ttl(u16);
 
-impl FromWire for TTL {
+impl Deserialise for Ttl {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let header = LLDPTLVHeader::from_wire(buf)?;
-        if header.r#type != 3 {
-            return Err(pktparser::ParseError::InvalidArgument(format!(
-                "Want type 3 for TTL TLV but got {}",
-                header.r#type,
-            )));
-        }
-        if header.length != 2 {
+        if buf.remaining() != 2 {
             return Err(pktparser::ParseError::InvalidArgument(format!(
                 "TTL TLV length must be 2 but got {}",
-                header.length,
+                buf.remaining(),
             )));
         }
 
         let ttl = buf
             .get_be16()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-        Ok(TTL { ttl })
+        Ok(Ttl(ttl))
     }
 }
 
-impl ToWire for TTL {
+impl Serialise for Ttl {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
-        let header = LLDPTLVHeader {
-            r#type: 3,
-            length: 2,
-        };
-        let mut output = header.to_wire()?;
-        WriteBytesExt::write_u16::<BigEndian>(&mut output, self.ttl)?;
-        Ok(output)
+        let mut result = Vec::new();
+        WriteBytesExt::write_u16::<BigEndian>(&mut result, self.0)?;
+        Ok(result)
     }
 }
 
-impl std::fmt::Display for TTL {
+impl std::fmt::Display for Ttl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "TTL: {} seconds", self.ttl)
+        write!(f, "TTL: {} seconds", self.0)
     }
 }
 
@@ -560,20 +587,12 @@ pub struct PortDescription {
     pub description: String,
 }
 
-impl FromWire for PortDescription {
+impl Deserialise for PortDescription {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let header = LLDPTLVHeader::from_wire(buf)?;
-        if header.r#type != 4 {
-            return Err(pktparser::ParseError::InvalidArgument(format!(
-                "Want type 4 for PortDescription TLV but got {}",
-                header.r#type,
-            )));
-        }
-
         let description: String = String::from_utf8(
-            buf.get_vec(header.length.into())
+            buf.get_vec(buf.remaining())
                 .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?,
         )
         .map_err(|e| pktparser::ParseError::InvalidArgument(e.to_string()))?;
@@ -582,17 +601,9 @@ impl FromWire for PortDescription {
     }
 }
 
-impl ToWire for PortDescription {
+impl Serialise for PortDescription {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
-        let mut description_bytes = self.description.as_bytes().to_vec();
-        let header = LLDPTLVHeader {
-            r#type: 4,
-            length: description_bytes.len() as u16,
-        };
-
-        let mut output = header.to_wire()?;
-        output.append(&mut description_bytes);
-        Ok(output)
+        Ok(self.description.as_bytes().to_vec())
     }
 }
 
@@ -603,96 +614,60 @@ impl std::fmt::Display for PortDescription {
 }
 
 #[derive(Debug)]
-pub struct SystemName {
-    pub system_name: String,
-}
+pub struct SystemName(String);
 
-impl FromWire for SystemName {
+impl Deserialise for SystemName {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let header = LLDPTLVHeader::from_wire(buf)?;
-        if header.r#type != 5 {
-            return Err(pktparser::ParseError::InvalidArgument(format!(
-                "Want type 5 for SystemName TLV but got {}",
-                header.r#type,
-            )));
-        }
-
         let system_name: String = String::from_utf8(
-            buf.get_vec(header.length.into())
+            buf.get_vec(buf.remaining())
                 .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?,
         )
         .map_err(|e| pktparser::ParseError::InvalidArgument(e.to_string()))?;
 
-        Ok(SystemName { system_name })
+        Ok(SystemName(system_name))
     }
 }
 
-impl ToWire for SystemName {
+impl Serialise for SystemName {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
-        let mut system_name_bytes = self.system_name.as_bytes().to_vec();
-        let header = LLDPTLVHeader {
-            r#type: 5,
-            length: system_name_bytes.len() as u16,
-        };
-
-        let mut output = header.to_wire()?;
-        output.append(&mut system_name_bytes);
-        Ok(output)
+        Ok(self.0.as_bytes().to_vec())
     }
 }
 
 impl std::fmt::Display for SystemName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "SystemName: {}", self.system_name)
+        write!(f, "SystemName: {}", self.0)
     }
 }
 
 #[derive(Debug)]
-pub struct SystemDescription {
-    pub system_description: String,
-}
+pub struct SystemDescription(String);
 
-impl FromWire for SystemDescription {
+impl Deserialise for SystemDescription {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let header = LLDPTLVHeader::from_wire(buf)?;
-        if header.r#type != 6 {
-            return Err(pktparser::ParseError::InvalidArgument(format!(
-                "Want type 6 for SystemDescription TLV but got {}",
-                header.r#type,
-            )));
-        }
-
         let system_description: String = String::from_utf8(
-            buf.get_vec(header.length.into())
+            buf.get_vec(buf.remaining())
                 .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?,
         )
         .map_err(|e| pktparser::ParseError::InvalidArgument(e.to_string()))?;
 
-        Ok(SystemDescription { system_description })
+        Ok(SystemDescription(system_description))
     }
 }
 
-impl ToWire for SystemDescription {
+impl Serialise for SystemDescription {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
-        let mut system_description_bytes = self.system_description.as_bytes().to_vec();
-        let header = LLDPTLVHeader {
-            r#type: 6,
-            length: system_description_bytes.len() as u16,
-        };
-
-        let mut output = header.to_wire()?;
-        output.append(&mut system_description_bytes);
-        Ok(output)
+        Ok(self.0.as_bytes().to_vec())
     }
 }
 
 impl std::fmt::Display for SystemDescription {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "SystemDescription: {}", self.system_description)
+        write!(f, "SystemDescription: {}", self.0)
     }
 }
 
@@ -702,21 +677,14 @@ pub struct SystemCapabilities {
     pub enabled_cap: u16,
 }
 
-impl FromWire for SystemCapabilities {
+impl Deserialise for SystemCapabilities {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let header = LLDPTLVHeader::from_wire(buf)?;
-        if header.r#type != 7 {
-            return Err(pktparser::ParseError::InvalidArgument(format!(
-                "Want type 3 for SystemCapabilities TLV but got {}",
-                header.r#type,
-            )));
-        }
-        if header.length != 4 {
+        if buf.remaining() != 4 {
             return Err(pktparser::ParseError::InvalidArgument(format!(
                 "SystemCapabilities TLV length must be 4 but got {}",
-                header.length,
+                buf.remaining(),
             )));
         }
 
@@ -734,16 +702,12 @@ impl FromWire for SystemCapabilities {
     }
 }
 
-impl ToWire for SystemCapabilities {
+impl Serialise for SystemCapabilities {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
-        let header = LLDPTLVHeader {
-            r#type: 7,
-            length: 4,
-        };
-        let mut output = header.to_wire()?;
-        WriteBytesExt::write_u16::<BigEndian>(&mut output, self.sys_cap)?;
-        WriteBytesExt::write_u16::<BigEndian>(&mut output, self.enabled_cap)?;
-        Ok(output)
+        let mut result = Vec::new();
+        WriteBytesExt::write_u16::<BigEndian>(&mut result, self.sys_cap)?;
+        WriteBytesExt::write_u16::<BigEndian>(&mut result, self.enabled_cap)?;
+        Ok(result)
     }
 }
 
@@ -767,35 +731,24 @@ pub struct ManagementAddress {
     pub oid: Vec<u8>,
 }
 
-impl FromWire for ManagementAddress {
+impl Deserialise for ManagementAddress {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let header = LLDPTLVHeader::from_wire(buf)?;
-        if header.r#type != 8 {
-            return Err(pktparser::ParseError::InvalidArgument(format!(
-                "Want type 8 for ManagementAddress TLV but got {}",
-                header.r#type,
-            )));
-        }
-        let mut payload = buf
-            .get_buffer(header.length.into())
-            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-
-        let mgmt_addr_len = payload
+        let mgmt_addr_len = buf
             .get_u8()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)? as u8;
-        let mgmt_addr_af = payload
+        let mgmt_addr_af = buf
             .get_u8()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)? as u8;
-        let mgmt_addr = payload
+        let mgmt_addr = buf
             .get_bytes(mgmt_addr_len.into())
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
 
-        let numbering_subtype: u8 = payload
+        let numbering_subtype: u8 = buf
             .get_u8()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-        let mut if_number_bytes = payload
+        let mut if_number_bytes = buf
             .get_bytes(4)
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
         let if_number = ReadBytesExt::read_u32::<BigEndian>(&mut if_number_bytes).map_err(|e| {
@@ -805,10 +758,10 @@ impl FromWire for ManagementAddress {
             ))
         })?;
 
-        let oid_len = payload
+        let oid_len = buf
             .get_u8()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-        let oid = payload
+        let oid = buf
             .get_bytes(oid_len.into())
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?
             .to_vec();
@@ -823,7 +776,7 @@ impl FromWire for ManagementAddress {
     }
 }
 
-impl ToWire for ManagementAddress {
+impl Serialise for ManagementAddress {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
         let mut payload: Vec<u8> = Vec::new();
         if self.address.len() > u8::MAX.into() {
@@ -849,13 +802,6 @@ impl ToWire for ManagementAddress {
         payload.push(self.oid.len() as u8);
         payload.append(&mut self.oid.clone());
 
-        let header = LLDPTLVHeader {
-            r#type: 8,
-            length: payload.len() as u16,
-        };
-        let header_bytes = header.to_wire()?;
-        payload.splice(0..0, header_bytes.iter().cloned());
-
         Ok(payload)
     }
 }
@@ -877,29 +823,19 @@ pub struct OrganizationSpecific {
     pub value: Vec<u8>,
 }
 
-impl FromWire for OrganizationSpecific {
+impl Deserialise for OrganizationSpecific {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let header = LLDPTLVHeader::from_wire(buf)?;
-        if header.r#type != 127 {
-            return Err(pktparser::ParseError::InvalidArgument(format!(
-                "Want type 127 for OrganizationSpecific TLV but got {}",
-                header.r#type,
-            )));
-        }
-        let mut payload = buf
-            .get_buffer(header.length.into())
-            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-        let oui = payload
+        let oui = buf
             .get_bytes(3)
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?
             .to_vec();
-        let subtype = payload
+        let subtype = buf
             .get_u8()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-        let value = payload
-            .get_bytes((header.length - 4).into())
+        let value = buf
+            .get_bytes(buf.remaining())
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
 
         Ok(OrganizationSpecific {
@@ -912,20 +848,12 @@ impl FromWire for OrganizationSpecific {
     }
 }
 
-impl ToWire for OrganizationSpecific {
+impl Serialise for OrganizationSpecific {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
         let mut payload = Vec::new();
         payload.append(&mut self.oui.to_vec());
         payload.push(self.subtype);
         payload.append(&mut self.value.clone());
-
-        let header = LLDPTLVHeader {
-            r#type: 127,
-            length: payload.len() as u16,
-        };
-        let header_bytes = header.to_wire()?;
-        payload.splice(0..0, header_bytes.iter().cloned());
-
         Ok(payload)
     }
 }
@@ -947,7 +875,7 @@ mod tests {
     #[test]
     fn parse_chassis_tlv() {
         let bytes = vec![0x02, 0x07, 0x04, 0x8c, 0x1f, 0x64, 0xac, 0xe0, 0x00];
-        let parsed = ChassisID::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
         assert_eq!(
             "ChassisID type: MacAddress value: [8c, 1f, 64, ac, e0, 00]",
             parsed.to_string()
@@ -962,7 +890,7 @@ mod tests {
             0x04, 0x0d, 0x01, 0x55, 0x70, 0x6c, 0x69, 0x6e, 0x6b, 0x20, 0x74, 0x6f, 0x20, 0x53,
             0x31,
         ];
-        let parsed = PortID::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
         assert_eq!(
             "PortID type: InterfaceAlias value: [55, 70, 6c, 69, 6e, 6b, 20, 74, 6f, 20, 53, 31]",
             parsed.to_string()
@@ -974,7 +902,7 @@ mod tests {
     #[test]
     fn parse_ttl_tlv() {
         let bytes = vec![0x06, 0x02, 0x00, 0x78];
-        let parsed = TTL::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
         assert_eq!("TTL: 120 seconds", parsed.to_string());
         let reserialized = parsed.to_wire().unwrap();
         assert_eq!(reserialized, bytes);
@@ -985,7 +913,7 @@ mod tests {
         let bytes = vec![
             0x0a, 0x0c, 0x53, 0x32, 0x2e, 0x63, 0x69, 0x73, 0x63, 0x6f, 0x2e, 0x63, 0x6f, 0x6d,
         ];
-        let parsed = SystemName::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
         assert_eq!("SystemName: S2.cisco.com", parsed.to_string());
         let reserialized = parsed.to_wire().unwrap();
         assert_eq!(reserialized, bytes);
@@ -1009,7 +937,7 @@ mod tests {
             0x35, 0x2d, 0x4a, 0x61, 0x6e, 0x2d, 0x30, 0x38, 0x20, 0x30, 0x30, 0x3a, 0x31, 0x35,
             0x20, 0x62, 0x79, 0x20, 0x77, 0x65, 0x69, 0x6c, 0x69, 0x75,
         ];
-        let parsed = SystemDescription::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
         assert_eq!("SystemDescription: Cisco IOS Software, C3560 Software (C3560-ADVIPSERVICESK9-M), Version 12.2(44)SE, RELEASE SOFTWARE (fc1)\nCopyright (c) 1986-2008 by Cisco Systems, Inc.\nCompiled Sat 05-Jan-08 00:15 by weiliu", parsed.to_string());
         let reserialized = parsed.to_wire().unwrap();
         assert_eq!(reserialized, bytes);
@@ -1021,7 +949,7 @@ mod tests {
             0x08, 0x13, 0x47, 0x69, 0x67, 0x61, 0x62, 0x69, 0x74, 0x45, 0x74, 0x68, 0x65, 0x72,
             0x6e, 0x65, 0x74, 0x30, 0x2f, 0x31, 0x33,
         ];
-        let parsed = PortDescription::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
         assert_eq!("PortDescription: GigabitEthernet0/13", parsed.to_string());
         let reserialized = parsed.to_wire().unwrap();
         assert_eq!(reserialized, bytes);
@@ -1030,7 +958,7 @@ mod tests {
     #[test]
     fn parse_capabilities_tlv() {
         let bytes = vec![0x0e, 0x04, 0x00, 0x14, 0x00, 0x04];
-        let parsed = SystemCapabilities::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
         assert_eq!(
             "SystemCapabilities system: 20, enabled: 4",
             parsed.to_string()
@@ -1044,11 +972,20 @@ mod tests {
         let bytes = vec![
             0xfe, 0x09, 0x00, 0x12, 0x0f, 0x01, 0x03, 0xc0, 0x36, 0x00, 0x10,
         ];
-        let parsed = OrganizationSpecific::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
         assert_eq!(
             "OrganizationSpecific oui: [00, 12, 0f] subtype: 1, value: [03, c0, 36, 00, 10]",
             parsed.to_string()
         );
+        let reserialized = parsed.to_wire().unwrap();
+        assert_eq!(reserialized, bytes);
+    }
+
+    #[test]
+    fn parse_unknown_tlv() {
+        let bytes = vec![0xaa, 0x01, 0x42];
+        let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        assert_eq!("Unknown TLV type: 85, payload: [42]", parsed.to_string());
         let reserialized = parsed.to_wire().unwrap();
         assert_eq!(reserialized, bytes);
     }
@@ -1078,7 +1015,7 @@ mod tests {
             0x01, 0x00, 0x01, 0xfe, 0x09, 0x00, 0x12, 0x0f, 0x01, 0x03, 0xc0, 0x36, 0x00, 0x10,
             0x00, 0x00,
         ];
-        let parsed = LLDPPacket::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
+        let parsed = LldpPacket::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
         assert_eq!("LLDP [\n\tChassisID type: MacAddress value: [00, 19, 2f, a7, b2, 8d]\n\tPortID type: InterfaceAlias value: [55, 70, 6c, 69, 6e, 6b, 20, 74, 6f, 20, 53, 31]\n\tTTL: 120 seconds\n\tSystemName: S2.cisco.com\n\tSystemDescription: Cisco IOS Software, C3560 Software (C3560-ADVIPSERVICESK9-M), Version 12.2(44)SE, RELEASE SOFTWARE (fc1)\nCopyright (c) 1986-2008 by Cisco Systems, Inc.\nCompiled Sat 05-Jan-08 00:15 by weiliu\n\tPortDescription: GigabitEthernet0/13\n\tSystemCapabilities system: 20, enabled: 4\n\tOrganizationSpecific oui: [00, 80, c2] subtype: 1, value: [00, 01]\n\tOrganizationSpecific oui: [00, 12, 0f] subtype: 1, value: [03, c0, 36, 00, 10]\n\tEnd of LLDPPDU\n]", parsed.to_string());
         let reserialized = parsed.to_wire().unwrap();
         assert_eq!(reserialized, bytes);

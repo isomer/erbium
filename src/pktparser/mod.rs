@@ -180,6 +180,16 @@ impl<'l> std::fmt::Display for Buffer<'l> {
     }
 }
 
+pub trait Serialise {
+    fn to_wire(&self) -> Result<Vec<u8>, std::io::Error>;
+}
+
+pub trait Deserialise {
+    fn from_wire(buf: &mut Buffer<'_>) -> Result<Self, ParseError>
+    where
+        Self: Sized;
+}
+
 #[test]
 fn test_get_u8() {
     let data = [1, 2, 3];
