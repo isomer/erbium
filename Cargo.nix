@@ -1026,6 +1026,10 @@ rec {
             packageId = "async-trait";
           }
           {
+            name = "byteorder";
+            packageId = "byteorder";
+          }
+          {
             name = "bytes";
             packageId = "bytes";
           }
