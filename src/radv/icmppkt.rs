@@ -31,6 +31,7 @@ pub const RDNSS: NDOption = NDOption(25);
 pub const DNSSL: NDOption = NDOption(31);
 pub const CAPTIVE_PORTAL: NDOption = NDOption(37);
 pub const PREF64: NDOption = NDOption(38);
+pub const IPV6_ONLY_PREFERRED: NDOption = NDOption(108);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NDOptionValue {

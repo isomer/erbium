@@ -22,6 +22,7 @@ use std::convert::TryInto as _;
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseError {
     UnexpectedEndOfInput,
+    InvalidArgument(String),
 }
 
 impl std::error::Error for ParseError {
@@ -34,6 +35,7 @@ impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ParseError::UnexpectedEndOfInput => write!(f, "Unexpected End Of Input"),
+            ParseError::InvalidArgument(string) => write!(f, "InvalidArgument: {}", string),
         }
     }
 }
@@ -84,9 +86,30 @@ impl<'l> Buffer<'l> {
         }
     }
 
+    pub fn peek_u8(&self) -> Option<u8> {
+        if self.offset < self.buffer.len() {
+            Some(self.buffer[self.offset])
+        } else {
+            None
+        }
+    }
+
     pub fn get_bytes(&mut self, b: usize) -> Option<&'l [u8]> {
         if self.offset + b <= self.buffer.len() {
             let ret = &self.buffer[self.offset..self.offset + b];
+            self.offset += b;
+            Some(ret)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_buffer(&mut self, b: usize) -> Option<Buffer<'l>> {
+        if self.offset + b <= self.buffer.len() {
+            let ret = Buffer {
+                buffer: &self.buffer[self.offset..self.offset + b],
+                offset: 0,
+            };
             self.offset += b;
             Some(ret)
         } else {
@@ -155,6 +178,16 @@ impl<'l> std::fmt::Display for Buffer<'l> {
         }
         write!(f, "]")
     }
+}
+
+pub trait Serialise {
+    fn to_wire(&self) -> Result<Vec<u8>, std::io::Error>;
+}
+
+pub trait Deserialise {
+    fn from_wire(buf: &mut Buffer<'_>) -> Result<Self, ParseError>
+    where
+        Self: Sized;
 }
 
 #[test]
