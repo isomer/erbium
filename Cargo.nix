@@ -138,11 +138,27 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
+      "android_system_properties" = rec {
+        crateName = "android_system_properties";
+        version = "0.1.4";
+        edition = "2018";
+        sha256 = "17mahdmxq7gq6qyibpjhprcdl8mgh815884lwyiiq4jycghp5vfp";
+        authors = [
+          "Nicolas Silva <nical@fastmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "libc";
+            packageId = "libc";
+          }
+        ];
+        
+      };
       "anyhow" = rec {
         crateName = "anyhow";
-        version = "1.0.59";
+        version = "1.0.62";
         edition = "2018";
-        sha256 = "1ydd2c8s471fk2sn474l9p823d4skwssifd2yf3bwdqicm31y7y9";
+        sha256 = "01fk28gm3yyhzmp7rn69hx1r19gsjrf02rrpxq0v5rs5rk9d918l";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -179,9 +195,9 @@ rec {
       };
       "async-channel" = rec {
         crateName = "async-channel";
-        version = "1.6.1";
+        version = "1.7.1";
         edition = "2018";
-        sha256 = "06b3sq2hd8qwl2xxlc4qalg6xw3l9b41w4sym9g0q70mf93dc511";
+        sha256 = "0a1g5kqkcbvibkbs0pzh4x8hcrnzwkfkad6c34xjv48l88v8ai71";
         authors = [
           "Stjepan Glavina <stjepang@gmail.com>"
         ];
@@ -302,9 +318,9 @@ rec {
       };
       "async-io" = rec {
         crateName = "async-io";
-        version = "1.7.0";
+        version = "1.8.0";
         edition = "2018";
-        sha256 = "01qfiddn5l6g41ca75ynah65i6fjiyp17rr31bg1rs2a8rhqzqg5";
+        sha256 = "1c6ikzqshivprq9xf2cpszc84fbw2x3k1cg2ccpkbn93fy4hdc0a";
         authors = [
           "Stjepan Glavina <stjepang@gmail.com>"
         ];
@@ -356,6 +372,12 @@ rec {
             packageId = "winapi";
             target = { target, features }: target."windows";
             features = [ "winsock2" ];
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "autocfg";
+            packageId = "autocfg";
           }
         ];
         
@@ -664,9 +686,9 @@ rec {
       };
       "bumpalo" = rec {
         crateName = "bumpalo";
-        version = "3.10.0";
-        edition = "2018";
-        sha256 = "1qrx6sg13yxljk1yr705j5wg34iiy3531by1hqrpiihl8qhvvk1p";
+        version = "3.11.0";
+        edition = "2021";
+        sha256 = "0pcfy89hpmixns4qqd4swbhsnvn3mkah0w229wijq3fj30hq5bf1";
         authors = [
           "Nick Fitzgerald <fitzgen@gmail.com>"
         ];
@@ -750,13 +772,20 @@ rec {
       };
       "chrono" = rec {
         crateName = "chrono";
-        version = "0.4.20";
+        version = "0.4.22";
         edition = "2018";
-        sha256 = "1w3sy61i0vn0k2rsgy0m48djr3x7yq796v1g6sda1axr0j1289v1";
+        sha256 = "1w8ykn9gay819zdwrsz353px580x279xxnrlg6fsi8xa3yrx3m5z";
         dependencies = [
+          {
+            name = "iana-time-zone";
+            packageId = "iana-time-zone";
+            optional = true;
+            features = [ "fallback" ];
+          }
           {
             name = "js-sys";
             packageId = "js-sys";
+            optional = true;
             target = { target, features }: ((target."arch" == "wasm32") && (!((target."os" == "emscripten") || (target."os" == "wasi"))));
           }
           {
@@ -777,6 +806,7 @@ rec {
           {
             name = "wasm-bindgen";
             packageId = "wasm-bindgen";
+            optional = true;
             target = { target, features }: ((target."arch" == "wasm32") && (!((target."os" == "emscripten") || (target."os" == "wasi"))));
           }
           {
@@ -789,9 +819,11 @@ rec {
         ];
         features = {
           "__internal_bench" = [ "criterion" ];
-          "clock" = [ "std" "winapi" ];
+          "clock" = [ "std" "winapi" "iana-time-zone" ];
           "criterion" = [ "dep:criterion" ];
-          "default" = [ "clock" "std" "oldtime" ];
+          "default" = [ "clock" "std" "oldtime" "wasmbind" ];
+          "iana-time-zone" = [ "dep:iana-time-zone" ];
+          "js-sys" = [ "dep:js-sys" ];
           "oldtime" = [ "time" ];
           "pure-rust-locales" = [ "dep:pure-rust-locales" ];
           "rkyv" = [ "dep:rkyv" ];
@@ -799,9 +831,11 @@ rec {
           "serde" = [ "dep:serde" ];
           "time" = [ "dep:time" ];
           "unstable-locales" = [ "pure-rust-locales" "alloc" ];
+          "wasm-bindgen" = [ "dep:wasm-bindgen" ];
+          "wasmbind" = [ "wasm-bindgen" "js-sys" ];
           "winapi" = [ "dep:winapi" ];
         };
-        resolvedDefaultFeatures = [ "clock" "default" "oldtime" "std" "time" "winapi" ];
+        resolvedDefaultFeatures = [ "clock" "default" "iana-time-zone" "js-sys" "oldtime" "std" "time" "wasm-bindgen" "wasmbind" "winapi" ];
       };
       "concurrent-queue" = rec {
         crateName = "concurrent-queue";
@@ -1084,6 +1118,7 @@ rec {
           {
             name = "nix";
             packageId = "nix";
+            features = [ "net" ];
           }
           {
             name = "prometheus";
@@ -1239,9 +1274,9 @@ rec {
       };
       "futures" = rec {
         crateName = "futures";
-        version = "0.3.21";
+        version = "0.3.23";
         edition = "2018";
-        sha256 = "17id2zvn2acny759indn6yj2acfa6lhkwzaidxr2pqfiaigycgzp";
+        sha256 = "1yl1yjjy4ad7ckhb27j2yy2vdj06pg1253ymz8sydkxanrxfjc5b";
         dependencies = [
           {
             name = "futures-channel";
@@ -1300,9 +1335,9 @@ rec {
       };
       "futures-channel" = rec {
         crateName = "futures-channel";
-        version = "0.3.21";
+        version = "0.3.23";
         edition = "2018";
-        sha256 = "0420lz2fmxa356ax1rp2sqi7b27ykfhvq4w9f1sla4hlp7j3q263";
+        sha256 = "18fakviglagvqn8myi3vqrv3vn0bpf988cs02yzlbmygvp5m5z1b";
         dependencies = [
           {
             name = "futures-core";
@@ -1327,9 +1362,9 @@ rec {
       };
       "futures-core" = rec {
         crateName = "futures-core";
-        version = "0.3.21";
+        version = "0.3.23";
         edition = "2018";
-        sha256 = "1lqhc6mqklh5bmkpr77p42lqwjj8gaskk5ba2p3kl1z4nw2gs28c";
+        sha256 = "058ii8sbxmf20cy5wvqkd0mppvgw21mlf8irdj9kb0nki2pfvb6j";
         features = {
           "default" = [ "std" ];
           "std" = [ "alloc" ];
@@ -1338,9 +1373,9 @@ rec {
       };
       "futures-executor" = rec {
         crateName = "futures-executor";
-        version = "0.3.21";
+        version = "0.3.23";
         edition = "2018";
-        sha256 = "19mq96kwgf06axgdc2fbrjhqzdnxww9vw6cz8b82gqr9z86bj84l";
+        sha256 = "0a05jcvpzg9sri01m5i4adn0gw2dvlmlq2f0h93ad1xmnlhsl48x";
         dependencies = [
           {
             name = "futures-core";
@@ -1368,9 +1403,9 @@ rec {
       };
       "futures-io" = rec {
         crateName = "futures-io";
-        version = "0.3.21";
+        version = "0.3.23";
         edition = "2018";
-        sha256 = "0swn29fysas36ikk5aw55104fi98117amvgxw9g96pjs5ab4ah7w";
+        sha256 = "1r9829x3y4a98ksvw4jm9jp67njylfyd59jmw8x6m8ims336z9lk";
         features = {
           "default" = [ "std" ];
         };
@@ -1434,9 +1469,9 @@ rec {
       };
       "futures-macro" = rec {
         crateName = "futures-macro";
-        version = "0.3.21";
+        version = "0.3.23";
         edition = "2018";
-        sha256 = "04pmj5xfk5rdhlj69wc7w3zvdg3xardg8srig96lszrk00wf3h9k";
+        sha256 = "0p84r80c3ys94l6f0iflysf6pd8ly53b4sknyb6f5smh6bjwrf8d";
         procMacro = true;
         dependencies = [
           {
@@ -1457,9 +1492,9 @@ rec {
       };
       "futures-sink" = rec {
         crateName = "futures-sink";
-        version = "0.3.21";
+        version = "0.3.23";
         edition = "2018";
-        sha256 = "0s58gx5yw1a21xviw2qgc0wzk225vgn4kbzddrp141m3kw9kw5i1";
+        sha256 = "0rb79vnbgbz0pmf78kbiphvppyb3mrsccr00kgyzfb3mx4gsw2ya";
         features = {
           "default" = [ "std" ];
           "std" = [ "alloc" ];
@@ -1468,9 +1503,9 @@ rec {
       };
       "futures-task" = rec {
         crateName = "futures-task";
-        version = "0.3.21";
+        version = "0.3.23";
         edition = "2018";
-        sha256 = "0skpiz2ljisywajv79p70yapfwhkqhb39wxy3f09v47mdfbnmijp";
+        sha256 = "01jkvifc3l2accz0cvl1c7i4q4vj2bxi7pjr9ni5ch0zjcxwcbw4";
         features = {
           "default" = [ "std" ];
           "std" = [ "alloc" ];
@@ -1479,9 +1514,9 @@ rec {
       };
       "futures-util" = rec {
         crateName = "futures-util";
-        version = "0.3.21";
+        version = "0.3.23";
         edition = "2018";
-        sha256 = "0sh3wqi8p36csjffy0irq8nlx9shqxp7z4dsih6bknarsvaspdyq";
+        sha256 = "0xwmb945qb8wbxza325pik2y6z4k2w0ahz6726f24h73f5a8m0ph";
         dependencies = [
           {
             name = "futures-channel";
@@ -2020,6 +2055,46 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "http1" "runtime" "server" "socket2" "stream" "tcp" ];
       };
+      "iana-time-zone" = rec {
+        crateName = "iana-time-zone";
+        version = "0.1.46";
+        edition = "2018";
+        sha256 = "0085cn8kqndxlds6lzx8lqfa9dp0fb6y0gzfsca2cs4rh0rzsaxd";
+        authors = [
+          "Andrew Straw <strawman@astraw.com>"
+        ];
+        dependencies = [
+          {
+            name = "android_system_properties";
+            packageId = "android_system_properties";
+            target = { target, features }: (target."os" == "android");
+          }
+          {
+            name = "core-foundation-sys";
+            packageId = "core-foundation-sys";
+            target = { target, features }: ((target."os" == "macos") || (target."os" == "ios"));
+          }
+          {
+            name = "js-sys";
+            packageId = "js-sys";
+            target = { target, features }: (target."arch" == "wasm32");
+          }
+          {
+            name = "wasm-bindgen";
+            packageId = "wasm-bindgen";
+            target = { target, features }: (target."arch" == "wasm32");
+          }
+          {
+            name = "winapi";
+            packageId = "winapi";
+            target = { target, features }: (target."os" == "windows");
+            features = [ "activation" "combaseapi" "objbase" "roapi" "winerror" "winstring" ];
+          }
+        ];
+        features = {
+        };
+        resolvedDefaultFeatures = [ "fallback" ];
+      };
       "idna" = rec {
         crateName = "idna";
         version = "0.2.3";
@@ -2141,9 +2216,9 @@ rec {
       };
       "libc" = rec {
         crateName = "libc";
-        version = "0.2.127";
+        version = "0.2.132";
         edition = "2015";
-        sha256 = "16q0bfrr5xkm0hck20g43s1d0ds0bnwm2pxmn7lr393gf2j72pjh";
+        sha256 = "199vm5mz5gmd73lx07g06g2d9kl1qrd4dcky2bdrcfhw6kjy8wc3";
         authors = [
           "The Rust Project Developers"
         ];
@@ -2611,9 +2686,9 @@ rec {
       };
       "nix" = rec {
         crateName = "nix";
-        version = "0.23.1";
+        version = "0.25.0";
         edition = "2018";
-        sha256 = "1iimixk7y2qk0jswqich4mkd8kqyzdghcgy6203j8fmxmhbn71lz";
+        sha256 = "1frasbh0fps2fawrss5dl8ps74387skcidm7zhkw6h1lkr5c08p3";
         authors = [
           "The nix-rust Project Developers"
         ];
@@ -2634,17 +2709,39 @@ rec {
           {
             name = "memoffset";
             packageId = "memoffset";
+            optional = true;
             target = { target, features }: (!(target."os" == "redox"));
+          }
+          {
+            name = "pin-utils";
+            packageId = "pin-utils";
+            optional = true;
           }
         ];
         buildDependencies = [
           {
-            name = "cc";
-            packageId = "cc";
-            target = {target, features}: (target."os" == "dragonfly");
+            name = "autocfg";
+            packageId = "autocfg";
           }
         ];
-        
+        features = {
+          "aio" = [ "pin-utils" ];
+          "default" = [ "acct" "aio" "dir" "env" "event" "feature" "fs" "hostname" "inotify" "ioctl" "kmod" "mman" "mount" "mqueue" "net" "personality" "poll" "process" "pthread" "ptrace" "quota" "reboot" "resource" "sched" "signal" "socket" "term" "time" "ucontext" "uio" "user" "zerocopy" ];
+          "dir" = [ "fs" ];
+          "memoffset" = [ "dep:memoffset" ];
+          "mount" = [ "uio" ];
+          "mqueue" = [ "fs" ];
+          "net" = [ "socket" ];
+          "pin-utils" = [ "dep:pin-utils" ];
+          "ptrace" = [ "process" ];
+          "sched" = [ "process" ];
+          "signal" = [ "process" ];
+          "socket" = [ "memoffset" ];
+          "ucontext" = [ "signal" ];
+          "user" = [ "feature" ];
+          "zerocopy" = [ "fs" "uio" ];
+        };
+        resolvedDefaultFeatures = [ "acct" "aio" "default" "dir" "env" "event" "feature" "fs" "hostname" "inotify" "ioctl" "kmod" "memoffset" "mman" "mount" "mqueue" "net" "personality" "pin-utils" "poll" "process" "pthread" "ptrace" "quota" "reboot" "resource" "sched" "signal" "socket" "term" "time" "ucontext" "uio" "user" "zerocopy" ];
       };
       "ntapi" = rec {
         crateName = "ntapi";
@@ -2738,9 +2835,9 @@ rec {
       };
       "once_cell" = rec {
         crateName = "once_cell";
-        version = "1.13.0";
+        version = "1.13.1";
         edition = "2018";
-        sha256 = "1qfqvgnwfzzwxd13ybvplzshaqwnjnna9ghcn0zgijaq0zixp9hq";
+        sha256 = "0kjyjf8yhm1rv5af0f0g7y66mzdy1l1865mr9sw76jbb43d68j07";
         authors = [
           "Aleksey Kladov <aleksey.kladov@gmail.com>"
         ];
@@ -5153,7 +5250,7 @@ rec {
         features = {
           "debug" = [ "impl-debug" ];
         };
-        resolvedDefaultFeatures = [ "cfg" "combaseapi" "consoleapi" "errhandlingapi" "evntrace" "fileapi" "handleapi" "ifdef" "in6addr" "inaddr" "ioapiset" "lmaccess" "lmapibuf" "lmcons" "memoryapi" "minwinbase" "minwindef" "namedpipeapi" "netioapi" "ntdef" "ntsecapi" "objidl" "oleauto" "pdh" "powerbase" "processenv" "processthreadsapi" "profileapi" "psapi" "rpcdce" "shellapi" "std" "synchapi" "sysinfoapi" "threadpoollegacyapiset" "timezoneapi" "wbemcli" "winbase" "wincon" "windef" "winerror" "winioctl" "winnt" "winsock2" "ws2ipdef" "ws2tcpip" ];
+        resolvedDefaultFeatures = [ "activation" "cfg" "combaseapi" "consoleapi" "errhandlingapi" "evntrace" "fileapi" "handleapi" "ifdef" "in6addr" "inaddr" "ioapiset" "lmaccess" "lmapibuf" "lmcons" "memoryapi" "minwinbase" "minwindef" "namedpipeapi" "netioapi" "ntdef" "ntsecapi" "objbase" "objidl" "oleauto" "pdh" "powerbase" "processenv" "processthreadsapi" "profileapi" "psapi" "roapi" "rpcdce" "shellapi" "std" "synchapi" "sysinfoapi" "threadpoollegacyapiset" "timezoneapi" "wbemcli" "winbase" "wincon" "windef" "winerror" "winioctl" "winnt" "winsock2" "winstring" "ws2ipdef" "ws2tcpip" ];
       };
       "winapi-i686-pc-windows-gnu" = rec {
         crateName = "winapi-i686-pc-windows-gnu";
