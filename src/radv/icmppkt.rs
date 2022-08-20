@@ -217,7 +217,7 @@ fn parse_nd_rtr_options(buf: &mut Buffer) -> Result<NDOptions, Error> {
                 options.add_option(NDOptionValue::Pref64((lifetime, prefixlen as u8, prefix)));
             }
             (MTU, value) => {
-                if value.len() != 1 * 8 - 2 {
+                if value.len() != 8 - 2 {
                     return Err(Error::InvalidPacket);
                 }
                 use std::convert::TryInto as _;

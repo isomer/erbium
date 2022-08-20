@@ -17,6 +17,7 @@
  *  IPv6 Router Advertisement Code
  */
 
+use crate::net::addr::{ALL_NODES, ALL_ROUTERS};
 use rand::Rng;
 use std::convert::TryInto as _;
 
@@ -34,17 +35,6 @@ const DEFAULT_MIN_RTR_ADV_INTERVAL: std::time::Duration =
     std::time::Duration::from_micros((DEFAULT_MAX_RTR_ADV_INTERVAL.as_micros() / 3) as u64);
 const ADV_DEFAULT_LIFETIME: std::time::Duration =
     std::time::Duration::from_secs(3 * DEFAULT_MAX_RTR_ADV_INTERVAL.as_secs());
-
-const ALL_NODES: std::net::Ipv6Addr = std::net::Ipv6Addr::new(
-    0xff02, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0001,
-);
-// Ipv6Addr::new() isn't const (at 0.18)
-const ALL_ROUTERS: nix::sys::socket::Ipv6Addr = nix::sys::socket::Ipv6Addr(nix::libc::in6_addr {
-    s6_addr: [
-        0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x02,
-    ],
-});
 
 lazy_static::lazy_static! {
     static ref RADV_RX_PACKETS: prometheus::IntCounterVec =
@@ -183,14 +173,12 @@ impl RaAdvService {
         //    .map_err(Error::Io)?;
         use std::os::unix::io::AsRawFd as _;
         crate::net::socket::set_ipv6_unicast_hoplimit(rawsock.as_raw_fd(), 255)
-            .map_err(crate::net::socket::nix_to_io_error)
-            .map_err(Error::Io)?;
+            .map_err(|e| Error::Io(e.into()))?;
         //rawsock
         //    .set_socket_option(crate::net::Ipv6MulticastHops, &255)
         //    .map_err(Error::Io)?;
         crate::net::socket::set_ipv6_multicast_hoplimit(rawsock.as_raw_fd(), 255)
-            .map_err(crate::net::socket::nix_to_io_error)
-            .map_err(Error::Io)?;
+            .map_err(|e| Error::Io(e.into()))?;
         //rawsock
         //    .set_socket_option(crate::net::Ipv6RecvHopLimit, &true)
         //    .map_err(Error::Io)?;
@@ -416,7 +404,7 @@ impl RaAdvService {
     async fn send_announcement(
         &self,
         msg: icmppkt::RtrAdvertisement,
-        dst: nix::sys::socket::SockAddr,
+        dst: crate::net::addr::NetAddr,
         intf: u32,
     ) -> Result<(), Error> {
         let smsg = icmppkt::Icmp6::RtrAdvert(msg);
@@ -453,14 +441,10 @@ impl RaAdvService {
         _in_opt: &icmppkt::NDOptions,
     ) -> Result<(), Error> {
         if let Some(ifidx) = rm.local_intf() {
-            if let Some(dst) = rm
-                .address
-                .as_ref()
-                .map(crate::net::socket::std_to_nix_sockaddr)
-            {
+            if let Some(dst) = rm.address.as_ref() {
                 let ifidx = ifidx.try_into().expect("Interface with ifidx");
                 let reply = self.build_announcement_by_ifidx(ifidx).await?;
-                self.send_announcement(reply, dst, ifidx).await
+                self.send_announcement(reply, *dst, ifidx).await
             } else {
                 Err(Error::Io(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -477,14 +461,13 @@ impl RaAdvService {
 
     async fn send_unsolicited(&self, ifidx: u32) -> Result<(), Error> {
         let msg = self.build_announcement_by_ifidx(ifidx).await?;
-        let dst = nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::from_std(
-            &std::net::SocketAddr::V6(std::net::SocketAddrV6::new(
-                ALL_NODES,
-                crate::net::raw::IpProto::ICMP6.into(), /* port */
-                0,                                      /* flowid */
-                ifidx,                                  /* scope_id */
-            )),
-        ));
+        let dst = std::net::SocketAddr::V6(std::net::SocketAddrV6::new(
+            ALL_NODES,
+            crate::net::raw::IpProto::ICMP6.into(), /* port */
+            0,                                      /* flowid */
+            ifidx,                                  /* scope_id */
+        ))
+        .into();
 
         self.send_announcement(msg, dst, ifidx).await
     }

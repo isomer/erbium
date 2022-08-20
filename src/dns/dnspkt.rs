@@ -167,10 +167,7 @@ impl fmt::Display for Label {
         write!(
             f,
             "{}",
-            (&self.0)
-                .iter()
-                .map(|&b| display_byte(b))
-                .collect::<String>()
+            self.0.iter().map(|&b| display_byte(b)).collect::<String>()
         )
     }
 }
@@ -210,7 +207,7 @@ impl fmt::Display for Domain {
         write!(
             f,
             "{}",
-            (&self.0)
+            self.0
                 .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>()

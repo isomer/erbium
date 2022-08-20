@@ -16,6 +16,7 @@
  *
  *  Functions to create raw packets as a [u8]
  */
+use crate::net::addr::Inet4Addr;
 use std::net;
 
 const fn partial_netsum(current: u32, buffer: &[u8]) -> u32 {
@@ -159,10 +160,10 @@ impl<'a> Fragment<'a> {
         Self::new_ethernet(dstmac, srcmac, 0x0800_u16, Tail::Fragment(Box::new(f)))
     }
 
-    pub fn new_udp<'l>(
-        src: net::SocketAddrV4,
+    pub fn new_udp4<'l>(
+        src: Inet4Addr,
         srcmac: &[u8; 6],
-        dst: net::SocketAddrV4,
+        dst: Inet4Addr,
         dstmac: &[u8; 6],
         payload: Tail<'l>,
     ) -> Fragment<'l> {
@@ -174,8 +175,8 @@ impl<'a> Fragment<'a> {
         let l = f.len();
         let mut pseudohdr = Self::from_tail(Tail::Fragment(Box::new(f.clone())));
         let udp_protocol: u8 = 17;
-        pseudohdr.push_bytes(&src.ip().octets());
-        pseudohdr.push_bytes(&dst.ip().octets());
+        pseudohdr.push_bytes(&u32::to_be_bytes(src.ip()));
+        pseudohdr.push_bytes(&u32::to_be_bytes(dst.ip()));
         pseudohdr.push_u8(0x00_u8);
         pseudohdr.push_u8(udp_protocol);
         pseudohdr.push_be16(l as u16);
@@ -183,13 +184,20 @@ impl<'a> Fragment<'a> {
         f.buffer[6] = (netsum >> 8) as u8;
         f.buffer[7] = (netsum & 0xFF) as u8;
         let t = Tail::Fragment(Box::new(f.clone()));
-        Self::new_ipv4(src.ip(), srcmac, dst.ip(), dstmac, udp_protocol, t)
+        Self::new_ipv4(
+            &src.ip().into(),
+            srcmac,
+            &dst.ip().into(),
+            dstmac,
+            udp_protocol,
+            t,
+        )
     }
 }
 
 #[test]
 fn test_udp_packet() {
-    let u = Fragment::new_udp(
+    let u = Fragment::new_udp4(
         "192.0.2.1:1".parse().unwrap(),
         &[2, 0, 0, 0, 0, 0],
         "192.0.2.2:2".parse().unwrap(),

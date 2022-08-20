@@ -38,7 +38,7 @@ log = "0.4"
 mio = { version = "0.8", features=["net", "os-poll"] }
 netlink-packet-route = ">=0.8"
 netlink-sys = { version=">=0.7, <0.8", features=["tokio_socket"] }
-nix = { version = ">=0.23, <0.24" }
+nix = { version = "0.25", features=["net"] }
 prometheus = { version="0.13", features=["process"] }
 rand = "0.8"
 rusqlite = { version = "0.26" }

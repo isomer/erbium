@@ -16,6 +16,7 @@
  *
  *  Erbium Configuration parsing.
  */
+use crate::net::addr::*;
 use std::convert::TryFrom;
 use std::os::unix::fs::PermissionsExt as _;
 use tokio::io::AsyncReadExt as _;
@@ -491,18 +492,24 @@ pub fn parse_string_prefix6(name: &str, fragment: &yaml::Yaml) -> Result<Option<
         .and_then(|s| str_prefix6(s).map_err(|e| Error::InvalidConfig(format!("{}: {}", name, e))))
 }
 
-pub fn str_sockaddr(ost: Option<String>) -> Result<Option<nix::sys::socket::SockAddr>, Error> {
-    use nix::sys::socket::*;
+pub fn str_sockaddr(ost: Option<String>) -> Result<Option<NetAddr>, Error> {
+    fn std_to_netaddr(src: std::net::SocketAddr) -> NetAddr {
+        use std::net::SocketAddr::*;
+        match src {
+            V4(v4) => v4.into(),
+            V6(v6) => v6.into(),
+        }
+    }
     ost.map(|st| match st.get(0..1) {
         Some("@") => UnixAddr::new_abstract(st[1..].as_bytes())
-            .map(SockAddr::Unix)
+            .map(to_net_addr)
             .map_err(|e| Error::InvalidConfig(format!("{} ({})", e, st))),
         Some(_) if st.contains('/') => UnixAddr::new(st.as_bytes())
-            .map(SockAddr::Unix)
+            .map(to_net_addr)
             .map_err(|e| Error::InvalidConfig(format!("{} ({})", e, st))),
         Some(_) => st
             .parse::<std::net::SocketAddr>()
-            .map(|e| crate::net::socket::std_to_nix_sockaddr(&e))
+            .map(std_to_netaddr)
             .map_err(|e| Error::InvalidConfig(format!("{} ({})", e, st))),
         None => Err(Error::InvalidConfig(
             "Invalid socket address, expected unix socket or ip socket".into(),
@@ -511,10 +518,7 @@ pub fn str_sockaddr(ost: Option<String>) -> Result<Option<nix::sys::socket::Sock
     .transpose()
 }
 
-pub fn parse_string_sockaddr(
-    name: &str,
-    fragment: &yaml::Yaml,
-) -> Result<Option<nix::sys::socket::SockAddr>, Error> {
+pub fn parse_string_sockaddr(name: &str, fragment: &yaml::Yaml) -> Result<Option<NetAddr>, Error> {
     parse_string(name, fragment)
         .and_then(|s| str_sockaddr(s).map_err(|e| Error::InvalidConfig(format!("{}: {}", name, e))))
 }
@@ -739,7 +743,7 @@ impl Match<std::net::Ipv6Addr> for Prefix {
 //
 // If this heuristic is incorrect, then people can override this with "dns-listeners".
 pub enum AddressType {
-    Addresses(Vec<nix::sys::socket::SockAddr>),
+    Addresses(Vec<NetAddr>),
     BindInterface,
 }
 
@@ -754,15 +758,13 @@ impl AddressType {
         addresses: &[Prefix],
         netinfo: &crate::net::netinfo::SharedNetInfo,
         port: u16,
-    ) -> Vec<nix::sys::socket::SockAddr> {
+    ) -> Vec<NetAddr> {
         match self {
             AddressType::Addresses(addrs) => addrs.clone(),
             AddressType::BindInterface => find_listener_addresses(addresses, netinfo)
                 .await
                 .iter()
-                .map(|addr| {
-                    nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::new(*addr, port))
-                })
+                .map(|ip| ip.with_port(port))
                 .collect(),
         }
     }
@@ -770,11 +772,9 @@ impl AddressType {
 
 impl Default for AddressType {
     fn default() -> Self {
-        use nix::sys::socket::{InetAddr, IpAddr, SockAddr};
-        AddressType::Addresses(vec![SockAddr::Inet(InetAddr::new(
-            IpAddr::from_std(&std::net::Ipv6Addr::UNSPECIFIED.into()),
-            0,
-        ))])
+        AddressType::Addresses(vec![
+            std::net::SocketAddrV6::new(UNSPECIFIED6, 0, 0, 0).into()
+        ])
     }
 }
 
@@ -787,7 +787,7 @@ pub struct Config {
     pub dns_search: Vec<String>,
     pub captive_portal: Option<String>,
     pub addresses: Vec<Prefix>,
-    pub listeners: Vec<nix::sys::socket::SockAddr>,
+    pub listeners: Vec<NetAddr>,
     pub dns_listeners: AddressType,
     pub dns_routes: Vec<crate::dns::config::Route>,
     pub acls: Vec<crate::acl::Acl>,
@@ -798,13 +798,13 @@ pub type SharedConfig = std::sync::Arc<tokio::sync::RwLock<Config>>;
 async fn find_listener_addresses(
     addresses: &[Prefix],
     netinfo: &crate::net::netinfo::SharedNetInfo,
-) -> Vec<nix::sys::socket::IpAddr> {
+) -> Vec<std::net::IpAddr> {
     let mut ret = vec![];
     for (ifaddr, _len) in netinfo.get_if_prefixes().await {
         for addr in addresses {
             use crate::config::Match as _;
             if addr.contains(ifaddr) {
-                ret.push(nix::sys::socket::IpAddr::from_std(&ifaddr))
+                ret.push(ifaddr)
             }
         }
     }
@@ -906,21 +906,22 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             dns_search,
             dns_listeners: dns_listeners.unwrap_or_else(|| match default_listen_style {
                 DefaultAddressType::Unspecified => {
-                    AddressType::Addresses(vec![nix::sys::socket::SockAddr::new_inet(
-                        nix::sys::socket::InetAddr::new(
-                            nix::sys::socket::IpAddr::new_v6(0, 0, 0, 0, 0, 0, 0, 0),
-                            53,
-                        ),
-                    )])
+                    AddressType::Addresses(vec![std::net::SocketAddrV6::new(
+                        UNSPECIFIED6,
+                        53,
+                        0,
+                        0,
+                    )
+                    .into()])
                 }
                 DefaultAddressType::Interface => AddressType::BindInterface,
             }),
             dns_routes: dns_routes.unwrap_or_default(),
             captive_portal,
             listeners: listeners.unwrap_or_else(|| {
-                vec![nix::sys::socket::SockAddr::Unix(
-                    nix::sys::socket::UnixAddr::new("/var/lib/erbium/control").unwrap(),
-                )]
+                vec![UnixAddr::new("/var/lib/erbium/control")
+                    .unwrap()
+                    .to_net_addr()]
             }),
             acls: acls.unwrap_or_else(|| crate::acl::default_acls(&addresses)),
             addresses,

@@ -23,10 +23,10 @@
 // This should not export libc::, nix:: or tokio:: types, only std:: and it's own types to insulate
 // the rest of the program of the horrors of portability.
 
+use crate::net::addr::NetAddr;
 use std::convert::TryFrom;
 use std::io;
 use std::net;
-use std::net::SocketAddr;
 use std::os::unix::io::AsRawFd as _;
 use tokio::io::unix::AsyncFd;
 
@@ -36,22 +36,9 @@ pub struct UdpSocket {
     fd: AsyncFd<mio::net::UdpSocket>,
 }
 
-pub type SockAddr = crate::net::socket::SockAddr;
 pub type MsgFlags = crate::net::socket::MsgFlags;
-pub type IoVec<A> = crate::net::socket::IoVec<A>;
 pub type ControlMessage = crate::net::socket::ControlMessage;
 pub type RecvMsg = crate::net::socket::RecvMsg;
-
-pub fn nix_to_io_error(n: nix::Error) -> io::Error {
-    n.into()
-}
-
-pub fn nix_to_std_sockaddr(n: nix::sys::socket::SockAddr) -> SocketAddr {
-    match n {
-        nix::sys::socket::SockAddr::Inet(ia) => ia.to_std(),
-        _ => unimplemented!(),
-    }
-}
 
 pub fn std_to_libc_in_addr(addr: net::Ipv4Addr) -> libc::in_addr {
     libc::in_addr {
@@ -78,11 +65,12 @@ impl TryFrom<mio::net::UdpSocket> for UdpSocket {
 }
 
 impl UdpSocket {
-    pub async fn bind(addrs: &[SocketAddr]) -> Result<Self, io::Error> {
+    pub async fn bind(addrs: &[NetAddr]) -> Result<Self, io::Error> {
+        use crate::net::addr::NetAddrExt as _;
         let mut last_err = None;
 
         for addr in addrs {
-            match mio::net::UdpSocket::bind(*addr) {
+            match mio::net::UdpSocket::bind(addr.to_std_socket_addr().unwrap()) {
                 Ok(socket) => return Self::try_from(socket),
                 Err(e) => last_err = Some(e),
             }
@@ -105,14 +93,13 @@ impl UdpSocket {
         buffer: &[u8],
         cmsg: &ControlMessage,
         flags: MsgFlags,
-        addr: Option<&SocketAddr>,
+        addr: Option<&NetAddr>,
     ) -> io::Result<()> {
-        let addr = addr.map(crate::net::socket::std_to_nix_sockaddr);
-        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr.as_ref()).await
+        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
 
-    pub fn local_addr(&self) -> Result<SocketAddr, io::Error> {
-        self.fd.get_ref().local_addr()
+    pub fn local_addr(&self) -> Result<NetAddr, io::Error> {
+        self.fd.get_ref().local_addr().map(|x| x.into())
     }
 
     pub fn set_opt_ipv4_packet_info(&self, b: bool) -> Result<(), io::Error> {
@@ -121,7 +108,7 @@ impl UdpSocket {
             nix::sys::socket::sockopt::Ipv4PacketInfo,
             &b,
         )
-        .map_err(nix_to_io_error)
+        .map_err(|e| e.into())
     }
 
     pub fn set_opt_ipv6_packet_info(&self, b: bool) -> Result<(), io::Error> {
@@ -130,7 +117,7 @@ impl UdpSocket {
             nix::sys::socket::sockopt::Ipv6RecvPacketInfo,
             &b,
         )
-        .map_err(nix_to_io_error)
+        .map_err(|e| e.into())
     }
 
     pub fn set_opt_reuse_port(&self, b: bool) -> Result<(), io::Error> {
@@ -139,6 +126,6 @@ impl UdpSocket {
             nix::sys::socket::sockopt::ReusePort,
             &b,
         )
-        .map_err(nix_to_io_error)
+        .map_err(|e| e.into())
     }
 }

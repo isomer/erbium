@@ -18,6 +18,7 @@
  */
 
 use crate::acl;
+use crate::net::addr::{tokio_to_unixaddr, NetAddr, ToNetAddr as _};
 use ::prometheus;
 use hyper::{Body, Request, Response};
 use std::convert::Infallible;
@@ -62,27 +63,23 @@ use async_trait::async_trait;
 #[async_trait]
 trait Accepter {
     type AcceptedSocket;
-    async fn accept_connection(
-        &self,
-    ) -> Result<(Self::AcceptedSocket, acl::NetworkAddr), std::io::Error>;
+    async fn accept_connection(&self) -> Result<(Self::AcceptedSocket, NetAddr), std::io::Error>;
 }
 
 #[async_trait]
 impl Accepter for tokio::net::UnixListener {
     type AcceptedSocket = tokio::net::UnixStream;
-    async fn accept_connection(
-        &self,
-    ) -> Result<(Self::AcceptedSocket, acl::NetworkAddr), std::io::Error> {
-        self.accept().await.map(|(sock, addr)| (sock, addr.into()))
+    async fn accept_connection(&self) -> Result<(Self::AcceptedSocket, NetAddr), std::io::Error> {
+        self.accept()
+            .await
+            .map(|(sock, addr)| (sock, tokio_to_unixaddr(&addr).to_net_addr()))
     }
 }
 
 #[async_trait]
 impl Accepter for tokio::net::TcpListener {
     type AcceptedSocket = tokio::net::TcpStream;
-    async fn accept_connection(
-        &self,
-    ) -> Result<(Self::AcceptedSocket, acl::NetworkAddr), std::io::Error> {
+    async fn accept_connection(&self) -> Result<(Self::AcceptedSocket, NetAddr), std::io::Error> {
         self.accept().await.map(|(sock, addr)| (sock, addr.into()))
     }
 }
@@ -181,14 +178,12 @@ fn require_http_permission(
 async fn serve_request(
     conf: crate::config::SharedConfig,
     req: Request<Body>,
-    addr: std::sync::Arc<acl::NetworkAddr>,
+    addr: std::sync::Arc<NetAddr>,
     dhcp: std::sync::Arc<crate::dhcp::DhcpService>,
 ) -> Result<Response<Body>, Infallible> {
     use hyper::{Method, StatusCode};
 
-    let client = acl::Attributes {
-        addr: (*addr).clone(),
-    };
+    let client = acl::Attributes { addr: *addr };
 
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => {
@@ -274,16 +269,28 @@ pub async fn run(
 ) -> Result<(), Error> {
     // Set up all the listeners and listen on them.
     for addr in &conf.read().await.listeners {
-        use nix::sys::socket::SockAddr::*;
+        use crate::net::addr::NetAddrExt as _;
+        use nix::sys::socket::{AddressFamily::*, SockaddrLike as _};
         use tokio::net::{TcpListener, UnixListener};
-        match addr {
-            Inet(s) => {
-                let listener = TcpListener::bind((s.ip().to_std(), s.port()))
+        match addr.family() {
+            Some(Inet) => {
+                let s = addr.as_sockaddr_in().unwrap();
+
+                let listener = TcpListener::bind((std::net::Ipv4Addr::from(s.ip()), s.port()))
                     .await
                     .map_err(|e| Error::ListenError(s.to_string(), e))?;
                 tokio::task::spawn(run_listener(conf.clone(), dhcp.clone(), listener));
             }
-            Unix(s) => {
+            Some(Inet6) => {
+                let s = addr.as_sockaddr_in6().unwrap();
+
+                let listener = TcpListener::bind((s.ip(), s.port()))
+                    .await
+                    .map_err(|e| Error::ListenError(s.to_string(), e))?;
+                tokio::task::spawn(run_listener(conf.clone(), dhcp.clone(), listener));
+            }
+            Some(Unix) => {
+                let s = addr.to_unix_addr().unwrap();
                 let listener;
                 if let Some(path) = s.path() {
                     loop {

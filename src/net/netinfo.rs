@@ -27,7 +27,7 @@ use netlink_packet_route::{
 use netlink_sys::TokioSocket as Socket;
 use netlink_sys::{protocols, SocketAddr};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum LinkLayer {
     Ethernet([u8; 6]),
     None,

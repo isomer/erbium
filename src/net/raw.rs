@@ -23,14 +23,13 @@ use std::os::unix::io::AsRawFd;
 use std::os::unix::io::RawFd;
 use tokio::io::unix::AsyncFd;
 
-use crate::net::udp;
+use crate::net::{addr::NetAddr, udp};
 use nix::libc;
 
-pub type SockAddr = crate::net::socket::SockAddr;
 pub type Error = std::io::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type MsgFlags = socket::MsgFlags;
-pub type IoVec<A> = nix::sys::uio::IoVec<A>;
+pub use std::io::{IoSlice, IoSliceMut};
 
 /* These should be refactored out somewhere */
 pub type ControlMessage = udp::ControlMessage;
@@ -87,7 +86,7 @@ impl RawSocket {
 
     #[allow(dead_code)]
     pub fn send(&self, buf: &[u8], flags: MsgFlags) -> Result<usize> {
-        socket::send(self.as_raw_fd(), buf, flags).map_err(udp::nix_to_io_error)
+        socket::send(self.as_raw_fd(), buf, flags).map_err(|e| e.into())
     }
 
     pub async fn recv_msg(
@@ -103,7 +102,7 @@ impl RawSocket {
         buffer: &[u8],
         cmsg: &ControlMessage,
         flags: MsgFlags,
-        addr: Option<&SockAddr>,
+        addr: Option<&NetAddr>,
     ) -> io::Result<()> {
         crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
@@ -113,7 +112,7 @@ impl RawSocket {
         opt: O,
         val: &O::Val,
     ) -> Result<()> {
-        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(udp::nix_to_io_error)
+        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(|e| e.into())
     }
 }
 
@@ -141,7 +140,7 @@ impl CookedRawSocket {
 
     #[allow(dead_code)]
     pub fn send(&self, buf: &[u8], flags: MsgFlags) -> Result<usize> {
-        socket::send(self.as_raw_fd(), buf, flags).map_err(udp::nix_to_io_error)
+        socket::send(self.as_raw_fd(), buf, flags).map_err(|e| e.into())
     }
 
     pub async fn recv_msg(
@@ -157,7 +156,7 @@ impl CookedRawSocket {
         buffer: &[u8],
         cmsg: &ControlMessage,
         flags: MsgFlags,
-        addr: Option<&SockAddr>,
+        addr: Option<&NetAddr>,
     ) -> io::Result<()> {
         crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
@@ -167,7 +166,7 @@ impl CookedRawSocket {
         opt: O,
         val: &O::Val,
     ) -> Result<()> {
-        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(udp::nix_to_io_error)
+        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(|e| e.into())
     }
 }
 
@@ -195,7 +194,7 @@ impl Raw6Socket {
 
     #[allow(dead_code)]
     pub fn send(&self, buf: &[u8], flags: MsgFlags) -> Result<usize> {
-        socket::send(self.as_raw_fd(), buf, flags).map_err(udp::nix_to_io_error)
+        socket::send(self.as_raw_fd(), buf, flags).map_err(|e| e.into())
     }
 
     pub async fn recv_msg(
@@ -211,7 +210,7 @@ impl Raw6Socket {
         buffer: &[u8],
         cmsg: &ControlMessage,
         flags: MsgFlags,
-        addr: Option<&SockAddr>,
+        addr: Option<&NetAddr>,
     ) -> io::Result<()> {
         crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
@@ -221,7 +220,7 @@ impl Raw6Socket {
         opt: O,
         val: &O::Val,
     ) -> Result<()> {
-        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(udp::nix_to_io_error)
+        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(|e| e.into())
     }
 }
 
@@ -249,7 +248,7 @@ impl Raw4Socket {
 
     #[allow(dead_code)]
     pub fn send(&self, buf: &[u8], flags: MsgFlags) -> Result<usize> {
-        socket::send(self.as_raw_fd(), buf, flags).map_err(udp::nix_to_io_error)
+        socket::send(self.as_raw_fd(), buf, flags).map_err(|e| e.into())
     }
 
     pub async fn recv_msg(
@@ -265,7 +264,7 @@ impl Raw4Socket {
         buffer: &[u8],
         cmsg: &ControlMessage,
         flags: MsgFlags,
-        addr: Option<&SockAddr>,
+        addr: Option<&NetAddr>,
     ) -> io::Result<()> {
         crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
@@ -275,6 +274,6 @@ impl Raw4Socket {
         opt: O,
         val: &O::Val,
     ) -> Result<()> {
-        nix::sys::socket::setsockopt(fd, opt, val).map_err(udp::nix_to_io_error)
+        nix::sys::socket::setsockopt(fd, opt, val).map_err(|e| e.into())
     }
 }

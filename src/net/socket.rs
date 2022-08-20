@@ -17,10 +17,8 @@
  *  Common Socket Traits
  */
 
+use crate::net::addr::NetAddr;
 use std::os::unix::io::RawFd;
-
-pub type SockAddr = nix::sys::socket::SockAddr;
-pub type SocketAddr = std::net::SocketAddr;
 
 pub fn std_to_libc_in_addr(addr: std::net::Ipv4Addr) -> libc::in_addr {
     libc::in_addr {
@@ -37,23 +35,8 @@ pub const fn std_to_libc_in6_addr(addr: std::net::Ipv6Addr) -> libc::in6_addr {
     }
 }
 
-pub fn nix_to_std_sockaddr(n: SockAddr) -> std::net::SocketAddr {
-    match n {
-        nix::sys::socket::SockAddr::Inet(ia) => ia.to_std(),
-        _ => unimplemented!(),
-    }
-}
-
-pub fn std_to_nix_sockaddr(addr: &SocketAddr) -> SockAddr {
-    nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::from_std(addr))
-}
-
-pub fn nix_to_io_error(n: nix::Error) -> std::io::Error {
-    n.into()
-}
-
 pub type MsgFlags = nix::sys::socket::MsgFlags;
-pub type IoVec<A> = nix::sys::uio::IoVec<A>;
+pub use std::io::{IoSlice, IoSliceMut};
 
 use nix::libc;
 
@@ -128,7 +111,7 @@ impl Default for ControlMessage {
 #[derive(Debug)]
 pub struct RecvMsg {
     pub buffer: Vec<u8>,
-    pub address: Option<SocketAddr>,
+    pub address: Option<NetAddr>,
     /* TODO: These should probably return std types */
     /* Or possibly have accessors that convert them for you */
     /* either way, we shouldn't be exporting nix types here */
@@ -138,10 +121,10 @@ pub struct RecvMsg {
 }
 
 impl RecvMsg {
-    fn new(m: nix::sys::socket::RecvMsg, buffer: Vec<u8>) -> RecvMsg {
+    fn new(m: nix::sys::socket::RecvMsg<NetAddr>, buffer: Vec<u8>) -> RecvMsg {
         let mut r = RecvMsg {
             buffer,
-            address: m.address.map(nix_to_std_sockaddr),
+            address: m.address,
             timestamp: None,
             ipv4pktinfo: None,
             ipv6pktinfo: None,
@@ -248,7 +231,7 @@ pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
 
     let mut buf = Vec::new();
     buf.resize_with(bufsize, Default::default);
-    let iov = &[IoVec::from_mut_slice(buf.as_mut_slice())];
+    let iov = &mut [IoSliceMut::new(buf.as_mut_slice())];
 
     let mut cmsg = Vec::new();
     cmsg.resize_with(65536, Default::default); /* TODO: Calculate a more reasonable size */
@@ -264,11 +247,11 @@ pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
         }
         Err(e) if e == nix::errno::Errno::EAGAIN => {
             ev.clear_ready();
-            Err(nix_to_io_error(e))
+            Err(e.into())
         }
         Err(e) => {
             ev.retain_ready();
-            Err(nix_to_io_error(e))
+            Err(e.into())
         }
     }
 }
@@ -278,11 +261,11 @@ pub async fn send_msg<F: std::os::unix::io::AsRawFd>(
     buffer: &[u8],
     cmsg: &ControlMessage,
     flags: MsgFlags,
-    from: Option<&SockAddr>,
+    from: Option<&NetAddr>,
 ) -> std::io::Result<()> {
     let mut ev = sock.writable().await?;
 
-    let iov = &[IoVec::from_slice(buffer)];
+    let iov = &[IoSlice::new(buffer)];
     let mut cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
     let mut in_pktinfo = cmsg.pktinfo4;
     let mut in6_pktinfo = cmsg.pktinfo6;

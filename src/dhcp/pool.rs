@@ -104,7 +104,7 @@ impl Pool {
             })
             .optional()
             .err()
-            == None
+            .is_none()
         {
             // This is not a fresh new database but just one with
             // the schema_version missing. We know that this is the
@@ -275,7 +275,7 @@ impl Pool {
                 |_row| Ok(Some(())),
             )
             .or_else(map_no_row_to_none)?
-            == None
+            .is_none()
         {
             Ok(Lease {
                 ip: requested,
@@ -322,7 +322,7 @@ impl Pool {
                     |_row| Ok(Some(())),
                 )
                 .or_else(map_no_row_to_none)?
-                == None
+                .is_none()
             {
                 return Ok(Lease {
                     ip: *i,

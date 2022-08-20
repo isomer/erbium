@@ -24,12 +24,10 @@ use std::sync::Arc;
 use tokio::sync;
 
 use crate::dhcp::dhcppkt::Serialise;
+use crate::net::addr::{NetAddr, ToNetAddr, WithPort as _, UNSPECIFIED4};
 use crate::net::packet;
 use crate::net::raw;
 use crate::net::udp;
-
-/* We don't want a conflict between nix libc and whatever we use, so use nix's libc */
-use nix::libc;
 
 pub mod config;
 pub mod dhcppkt;
@@ -744,18 +742,12 @@ async fn send_raw(raw: Arc<raw::RawSocket>, buf: &[u8], intf: i32) -> Result<(),
         buf,
         &raw::ControlMessage::new(),
         raw::MsgFlags::empty(),
-        /* Wow this is ugly, some wrappers here might help */
-        Some(&nix::sys::socket::SockAddr::Link(
-            nix::sys::socket::LinkAddr(nix::libc::sockaddr_ll {
-                sll_family: libc::AF_PACKET as u16,
-                sll_protocol: 0,
-                sll_ifindex: intf,
-                sll_hatype: 0,
-                sll_pkttype: 0,
-                sll_halen: 0,
-                sll_addr: [0; 8],
-            }),
-        )),
+        Some(
+            &crate::net::addr::linkaddr_for_ifindex(
+                intf.try_into().unwrap(), /* TODO: Push IfIndex type back through callstack */
+            )
+            .to_net_addr(),
+        ),
     )
     .await
     .map(|_| ())
@@ -797,21 +789,10 @@ pub struct DhcpService {
 }
 
 impl DhcpService {
-    async fn recvdhcp(&self, pkt: &[u8], src: std::net::SocketAddr, intf: u32) {
+    async fn recvdhcp(&self, pkt: &[u8], src: NetAddr, intf: u32) {
         let raw = self.rawsock.clone();
         /* First, lets find the various metadata IP addresses */
-        let ip4 = if let net::SocketAddr::V4(f) = src {
-            f
-        } else {
-            DHCP_ERRORS
-                .with_label_values(&["UNEXPECTED_IP_PROTOCOL"])
-                .inc();
-            log::warn!(
-                "Query from unexpected source protocol ({:?}), ignoring.",
-                src
-            );
-            return;
-        };
+        let ip4 = src.as_sockaddr_in().unwrap();
         let optional_dst = self.netinfo.get_ipv4_by_ifidx(intf).await;
         if optional_dst.is_none() {
             log::warn!(
@@ -941,10 +922,10 @@ impl DhcpService {
 
         /* Construct the raw packet from the reply to send */
         let replybuf = reply.serialise();
-        let etherbuf = packet::Fragment::new_udp(
-            std::net::SocketAddrV4::new(request.serverip, 67),
+        let etherbuf = packet::Fragment::new_udp4(
+            *request.serverip.with_port(67).as_sockaddr_in().unwrap(),
             &srcll,
-            ip4,
+            *ip4,
             &chaddr,
             packet::Tail::Payload(&replybuf),
         )
@@ -967,14 +948,9 @@ impl DhcpService {
         ));
         let serverids: SharedServerIds =
             Arc::new(sync::Mutex::new(std::collections::HashSet::new()));
-        let listener = UdpSocket::bind(
-            &tokio::net::lookup_host("0.0.0.0:67")
-                .await
-                .unwrap()
-                .collect::<Vec<_>>(),
-        )
-        .await
-        .map_err(RunError::ListenError)?;
+        let listener = UdpSocket::bind(&[UNSPECIFIED4.with_port(67)])
+            .await
+            .map_err(RunError::ListenError)?;
         listener
             .set_opt_ipv4_packet_info(true)
             .map_err(RunError::ListenError)?;

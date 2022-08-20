@@ -16,6 +16,7 @@
  *
  *  Infrastructure for DNS services.
  */
+use crate::net::addr::NetAddr;
 use crate::net::udp;
 
 type UdpSocket = udp::UdpSocket;
@@ -130,7 +131,7 @@ lazy_static::lazy_static! {
 
 #[cfg_attr(test, derive(Debug))]
 pub enum Error {
-    ListenError(std::io::Error, nix::sys::socket::SockAddr),
+    ListenError(std::io::Error, crate::net::addr::NetAddr),
     AcceptError(std::io::Error),
     RecvError(std::io::Error),
     ParseError(String),
@@ -529,7 +530,7 @@ pub struct DnsMessage {
     pub in_query: dnspkt::DNSPkt,
     pub in_size: usize,
     pub local_ip: std::net::IpAddr,
-    pub remote_addr: std::net::SocketAddr,
+    pub remote_addr: NetAddr,
     pub protocol: Protocol,
 }
 
@@ -546,9 +547,11 @@ impl DnsMessage {
             std::net::IpAddr::V4(v4) => hasher.input(&v4.octets()),
             std::net::IpAddr::V6(v6) => hasher.input(&v6.octets()),
         }
+        use crate::net::addr::NetAddrExt as _;
         match self.remote_addr.ip() {
-            std::net::IpAddr::V4(v4) => hasher.input(&v4.octets()),
-            std::net::IpAddr::V6(v6) => hasher.input(&v6.octets()),
+            Some(std::net::IpAddr::V4(v4)) => hasher.input(&v4.octets()),
+            Some(std::net::IpAddr::V6(v6)) => hasher.input(&v6.octets()),
+            _ => unreachable!(),
         };
         hasher.result()
     }
@@ -602,11 +605,11 @@ struct DnsListenerHandler {
 impl DnsListenerHandler {
     async fn listen_udp(
         _conf: &crate::config::SharedConfig,
-        addr: &nix::sys::socket::SockAddr,
+        addr: &crate::net::addr::NetAddr,
     ) -> Result<UdpSocket, Error> {
         let mut count: i32 = 0;
         let udp = loop {
-            match UdpSocket::bind(&[udp::nix_to_std_sockaddr(*addr)]).await {
+            match UdpSocket::bind(&[*addr]).await {
                 Ok(sock) => break sock,
                 Err(e) if e.kind() == std::io::ErrorKind::AddrNotAvailable => {
                     // Due to duplicate address detection, the IPv6 address we're binding to might
@@ -633,14 +636,12 @@ impl DnsListenerHandler {
             }
         };
 
-        match addr {
-            nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::V4(_)) => udp
-                .set_opt_ipv4_packet_info(true)
-                .map_err(|e| Error::ListenError(e, *addr))?,
-            nix::sys::socket::SockAddr::Inet(nix::sys::socket::InetAddr::V6(_)) => udp
-                .set_opt_ipv6_packet_info(true)
-                .map_err(|e| Error::ListenError(e, *addr))?,
-            _ => (),
+        if addr.as_sockaddr_in6().is_some() {
+            udp.set_opt_ipv6_packet_info(true)
+                .map_err(|e| Error::ListenError(e, *addr))?
+        } else {
+            udp.set_opt_ipv4_packet_info(true)
+                .map_err(|e| Error::ListenError(e, *addr))?
         }
 
         log::info!(
@@ -655,9 +656,13 @@ impl DnsListenerHandler {
 
     async fn listen_tcp(
         _conf: &crate::config::SharedConfig,
-        addr: &nix::sys::socket::SockAddr,
+        addr: &crate::net::addr::NetAddr,
     ) -> Result<tokio::net::TcpListener, Error> {
-        let tcp = tokio::net::TcpListener::bind(udp::nix_to_std_sockaddr(*addr))
+        use crate::net::addr::NetAddrExt as _;
+        let tcp =
+            tokio::net::TcpListener::bind(addr.to_std_socket_addr().ok_or_else(|| {
+                Error::ListenError(std::io::ErrorKind::Unsupported.into(), *addr)
+            })?)
             .await
             .map_err(|e| Error::ListenError(e, *addr))?;
 
@@ -852,7 +857,7 @@ impl DnsListenerHandler {
     fn build_dns_message(
         pkt: &[u8],
         local_ip: std::net::IpAddr,
-        remote_addr: std::net::SocketAddr,
+        remote_addr: NetAddr,
         protocol: Protocol,
     ) -> Result<DnsMessage, Error> {
         let in_query = parse::PktParser::new(pkt)
@@ -932,9 +937,13 @@ impl DnsListenerHandler {
             200,
         );
 
+        use crate::net::addr::NetAddrExt as _;
+
         // We bill this to the remote address.
         // TODO: Should we bill this to the subnet?  Eg, /56 for v6 and /24 for v4?
-        !rate_limiter.check(msg.remote_addr.ip(), cost).await
+        !rate_limiter
+            .check(msg.remote_addr.ip().unwrap(), cost)
+            .await
     }
 
     async fn run_udp(
@@ -1017,7 +1026,7 @@ impl DnsListenerHandler {
     async fn run_tcp(
         s: &std::sync::Arc<tokio::sync::RwLock<Self>>,
         mut sock: tokio::net::TcpStream,
-        sock_addr: std::net::SocketAddr,
+        sock_addr: NetAddr,
     ) -> Result<(), Error> {
         use tokio::io::AsyncReadExt as _;
 
@@ -1093,7 +1102,7 @@ impl DnsListenerHandler {
         let (sock, sock_addr) = tcp.accept().await.map_err(Error::AcceptError)?;
         let local_s = s.clone();
 
-        tokio::spawn(async move { Self::run_tcp(&local_s, sock, sock_addr).await });
+        tokio::spawn(async move { Self::run_tcp(&local_s, sock, sock_addr.into()).await });
 
         Ok(())
     }

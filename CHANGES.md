@@ -1,3 +1,6 @@
+1.0.1-rc1
+   - Beginnings of LLDP added by rayhaanj, not yet active.
+   - Upgraded nix dependency.
 1.0.0
    - Better error handling for DHCP pool failures.
    - Fix a bunch of cargo warnings.

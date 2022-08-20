@@ -21,6 +21,7 @@ use super::dnspkt;
 use super::router;
 use crate::acl;
 use crate::config;
+use crate::net::addr::NetAddrExt as _;
 
 use super::DnsMessage;
 use super::Error;
@@ -42,14 +43,14 @@ impl DnsAclHandler {
         acl::require_permission(
             &self.config.read().await.acls,
             &acl::Attributes {
-                addr: msg.remote_addr.into(),
+                addr: msg.remote_addr,
             },
             acl::PermissionType::DnsRecursion,
         )
         .map_err(Error::RefusedByAcl)?;
         if msg.in_query.question.qtype == dnspkt::RR_ANY {
             return Err(Error::Denied("ANY queries are not allowed".into()));
-        } else if msg.remote_addr.port() == 53 {
+        } else if msg.remote_addr.port() == Some(53) {
             return Err(Error::Denied("Invalid Source Port".into()));
         }
         self.next.handle_query(msg).await

@@ -73,7 +73,7 @@ impl ToString for DhcpOp {
 
 impl fmt::Debug for DhcpOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "DhcpOp({})", self.to_string());
+        write!(f, "DhcpOp({})", self.to_string())
     }
 }
 
@@ -92,7 +92,7 @@ impl ToString for HwType {
 
 impl fmt::Debug for HwType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "HwType({})", self.to_string());
+        write!(f, "HwType({})", self.to_string())
     }
 }
 
@@ -127,7 +127,7 @@ impl ToString for MessageType {
 
 impl fmt::Debug for MessageType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "{}", self.to_string());
+        write!(f, "{}", self.to_string())
     }
 }
 
@@ -602,7 +602,7 @@ impl ToString for DhcpOption {
 
 impl fmt::Debug for DhcpOption {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        return write!(f, "{}", self.to_string());
+        write!(f, "{}", self.to_string())
     }
 }
 
@@ -715,7 +715,7 @@ impl DhcpParse for u8 {
         if v.len() != 1 {
             None
         } else {
-            v.get(0).copied()
+            v.first().copied()
         }
     }
 }
@@ -753,7 +753,7 @@ impl DhcpParse for String {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Eq)]
 pub struct DhcpOptions {
     pub other: collections::HashMap<DhcpOption, Vec<u8>>,
 }
@@ -826,7 +826,7 @@ impl DhcpOptions {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub struct Dhcp {
     pub op: DhcpOp,
     pub htype: HwType,

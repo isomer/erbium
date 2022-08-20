@@ -26,6 +26,7 @@
  */
 
 use crate::config::*;
+use crate::net::addr::{NetAddr, NetAddrExt as _, WithPort as _, UNSPECIFIED6};
 use yaml_rust::yaml;
 
 #[derive(Debug)]
@@ -36,36 +37,8 @@ pub struct Permission {
     pub allow_http_leases: bool,
 }
 
-#[derive(Clone)]
-pub enum NetworkAddr {
-    Inet(std::net::SocketAddr),
-    Unix(String),
-}
-
-impl From<std::net::SocketAddr> for NetworkAddr {
-    fn from(s: std::net::SocketAddr) -> Self {
-        NetworkAddr::Inet(s)
-    }
-}
-
-impl From<tokio::net::unix::SocketAddr> for NetworkAddr {
-    fn from(s: tokio::net::unix::SocketAddr) -> Self {
-        NetworkAddr::Unix(format!("{:?}", s))
-    }
-}
-
-impl std::fmt::Display for NetworkAddr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use NetworkAddr::*;
-        match self {
-            Inet(inet) => write!(f, "{}", inet),
-            Unix(unix) => write!(f, "{}", unix),
-        }
-    }
-}
-
 pub struct Attributes {
-    pub addr: NetworkAddr,
+    pub addr: NetAddr,
 }
 
 impl std::fmt::Display for Attributes {
@@ -78,14 +51,8 @@ impl std::fmt::Display for Attributes {
 // parameters they don't care about.
 impl Default for Attributes {
     fn default() -> Self {
-        use std::net;
         Self {
-            addr: NetworkAddr::Inet(net::SocketAddr::V6(net::SocketAddrV6::new(
-                std::net::Ipv6Addr::UNSPECIFIED,
-                Default::default(),
-                Default::default(),
-                Default::default(),
-            ))),
+            addr: UNSPECIFIED6.with_port(0),
         }
     }
 }
@@ -98,16 +65,14 @@ pub struct Acl {
 }
 
 fn check_subnet(attr: &Attributes, prefix: &Prefix) -> bool {
-    use NetworkAddr::*;
-    match attr.addr {
-        Inet(sockaddr) => prefix.contains(sockaddr.ip()),
+    match attr.addr.ip() {
+        Some(sockaddr) => prefix.contains(sockaddr),
         _ => false,
     }
 }
 
 impl Acl {
     fn check(&self, attr: &Attributes) -> Option<&'_ Permission> {
-        use NetworkAddr::*;
         let mut ok = true;
         /* Check that the addr is contained within any of the subnets */
         ok = ok
@@ -117,11 +82,10 @@ impl Acl {
                 .map(|ss| ss.iter().any(|s| check_subnet(attr, s)))
                 .unwrap_or(true);
         /* Check that the addr is unix */
-        ok = ok
-            && self
-                .unix
-                .map(|u| matches!((u, &attr.addr), (true, Unix(_)) | (false, Inet(_))))
-                .unwrap_or(true);
+        if let Some(unix) = self.unix {
+            use crate::net::addr::NetAddrExt as _;
+            ok = ok && attr.addr.to_unix_addr().is_some() == unix;
+        }
 
         if ok {
             Some(&self.permission)
@@ -324,6 +288,7 @@ pub(crate) fn parse_acl(name: &str, fragment: &yaml::Yaml) -> Result<Option<Acl>
 
 #[test]
 fn acl_not_authenticated() {
+    use crate::net::addr::{Ipv4Addr, ToNetAddr as _, WithPort as _};
     let test_acls = vec![Acl {
         subnet: Some(vec![Prefix::V4(Prefix4 {
             addr: "192.0.2.0".parse().unwrap(),
@@ -338,10 +303,10 @@ fn acl_not_authenticated() {
         },
     }];
 
-    let ip = std::net::SocketAddrV4::new("192.168.0.1".parse().unwrap(), 0);
+    let ip = "192.168.0.1".parse::<Ipv4Addr>().unwrap().with_port(0);
 
     let client = Attributes {
-        addr: NetworkAddr::Inet(ip.into()),
+        addr: ip.to_net_addr(),
     };
 
     assert_eq!(
@@ -354,6 +319,7 @@ fn acl_not_authenticated() {
 
 #[test]
 fn acl_not_authorized() {
+    use crate::net::addr::{Ipv4Addr, ToNetAddr as _, WithPort as _};
     let test_acls = vec![Acl {
         subnet: Some(vec![Prefix::V4(Prefix4 {
             addr: "192.0.2.0".parse().unwrap(),
@@ -368,10 +334,10 @@ fn acl_not_authorized() {
         },
     }];
 
-    let ip = std::net::SocketAddrV4::new("192.0.2.1".parse().unwrap(), 0);
+    let ip = "192.0.2.1".parse::<Ipv4Addr>().unwrap().with_port(0);
 
     let client = Attributes {
-        addr: NetworkAddr::Inet(ip.into()),
+        addr: ip.to_net_addr(),
     };
 
     assert_eq!(
@@ -384,6 +350,7 @@ fn acl_not_authorized() {
 
 #[test]
 fn acl_allowed() {
+    use crate::net::addr::{Ipv4Addr, ToNetAddr as _, WithPort as _};
     let test_acls = vec![Acl {
         subnet: Some(vec![Prefix::V4(Prefix4 {
             addr: "192.0.2.0".parse().unwrap(),
@@ -398,10 +365,10 @@ fn acl_allowed() {
         },
     }];
 
-    let ip = std::net::SocketAddrV4::new("192.0.2.1".parse().unwrap(), 0);
+    let ip = "192.0.2.1".parse::<Ipv4Addr>().unwrap().with_port(0);
 
     let client = Attributes {
-        addr: NetworkAddr::Inet(ip.into()),
+        addr: ip.to_net_addr(),
     };
 
     assert_eq!(
