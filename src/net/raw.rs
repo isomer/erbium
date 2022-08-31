@@ -79,7 +79,7 @@ impl RawSocket {
             fd: AsyncFd::new(crate::net::socket::new_socket(
                 libc::AF_PACKET,
                 libc::SOCK_RAW,
-                protocol.0 as libc::c_int,
+                protocol.0.to_be() as libc::c_int,
             )?)?,
         })
     }
