@@ -131,7 +131,7 @@ lazy_static::lazy_static! {
 
 #[cfg_attr(test, derive(Debug))]
 pub enum Error {
-    ListenError(std::io::Error, crate::net::addr::NetAddr),
+    ListenError(std::io::Error, Box<crate::net::addr::NetAddr>),
     AcceptError(std::io::Error),
     RecvError(std::io::Error),
     ParseError(String),
@@ -620,7 +620,7 @@ impl DnsListenerHandler {
                     // when it becomes ready and bind to it then, but that would require a massive
                     // restructuring of netinfo.
                     if count > 2 {
-                        return Err(Error::ListenError(e, *addr));
+                        return Err(Error::ListenError(e, Box::new(*addr)));
                     }
                     log::warn!(
                         "Failed to bind DNS UDP to {} ({}): Retrying after {}s",
@@ -632,16 +632,16 @@ impl DnsListenerHandler {
                     count += 1;
                     continue;
                 }
-                Err(e) => return Err(Error::ListenError(e, *addr)),
+                Err(e) => return Err(Error::ListenError(e, Box::new(*addr))),
             }
         };
 
         if addr.as_sockaddr_in6().is_some() {
             udp.set_opt_ipv6_packet_info(true)
-                .map_err(|e| Error::ListenError(e, *addr))?
+                .map_err(|e| Error::ListenError(e, Box::new(*addr)))?
         } else {
             udp.set_opt_ipv4_packet_info(true)
-                .map_err(|e| Error::ListenError(e, *addr))?
+                .map_err(|e| Error::ListenError(e, Box::new(*addr)))?
         }
 
         log::info!(
@@ -659,12 +659,11 @@ impl DnsListenerHandler {
         addr: &crate::net::addr::NetAddr,
     ) -> Result<tokio::net::TcpListener, Error> {
         use crate::net::addr::NetAddrExt as _;
-        let tcp =
-            tokio::net::TcpListener::bind(addr.to_std_socket_addr().ok_or_else(|| {
-                Error::ListenError(std::io::ErrorKind::Unsupported.into(), *addr)
-            })?)
-            .await
-            .map_err(|e| Error::ListenError(e, *addr))?;
+        let tcp = tokio::net::TcpListener::bind(addr.to_std_socket_addr().ok_or_else(|| {
+            Error::ListenError(std::io::ErrorKind::Unsupported.into(), Box::new(*addr))
+        })?)
+        .await
+        .map_err(|e| Error::ListenError(e, Box::new(*addr)))?;
 
         log::info!(
             "Listening for DNS on TCP {}",

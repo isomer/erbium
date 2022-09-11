@@ -1012,7 +1012,7 @@ impl DNSPkt {
         let mut ret: Vec<u8> = Vec::new();
         let mut offsets = DomainOffsets::new();
         assert!(self.rcode.0 <= 0b1111_1111_1111);
-        let flag1: u8 = (if self.rd { 0b0000_0001 } else { 0b0 })
+        let flag1: u8 = u8::from(self.rd)
             | (if self.tc { 0b0000_0010 } else { 0b0 })
             | (if self.aa { 0b0000_0100 } else { 0b0 })
             | (if self.qr { 0b1000_0000 } else { 0b0 })
