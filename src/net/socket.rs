@@ -18,7 +18,7 @@
  */
 
 use crate::net::addr::NetAddr;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{OwnedFd, RawFd};
 
 pub fn std_to_libc_in_addr(addr: std::net::Ipv4Addr) -> libc::in_addr {
     libc::in_addr {
@@ -191,12 +191,12 @@ impl RecvMsg {
 
 #[derive(Debug)]
 pub struct SocketFd {
-    fd: RawFd,
+    fd: OwnedFd,
 }
 
 impl std::os::unix::io::AsRawFd for SocketFd {
     fn as_raw_fd(&self) -> RawFd {
-        self.fd
+        self.fd.as_raw_fd()
     }
 }
 
@@ -209,17 +209,20 @@ pub fn new_socket(
     // See https://github.com/nix-rust/nix/issues/854
     //
     // So I have to use the libc version directly.
-    let fd = unsafe {
-        libc::socket(
+    unsafe {
+        use std::os::unix::io::FromRawFd as _;
+        let fd = libc::socket(
             domain,
             ty | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
             protocol as i32,
-        )
-    };
-    if fd == -1 {
-        return Err(std::io::Error::last_os_error());
+        );
+        if fd == -1 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(SocketFd {
+            fd: OwnedFd::from_raw_fd(fd as RawFd),
+        })
     }
-    Ok(SocketFd { fd: fd as RawFd })
 }
 
 pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
@@ -254,6 +257,20 @@ pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
             Err(e.into())
         }
     }
+}
+
+/// This function makes an async stream out of calling recv_msg repeatedly.
+pub fn recv_msg_stream<F>(
+    sock: &tokio::io::unix::AsyncFd<F>,
+    bufsize: usize,
+    flags: MsgFlags,
+) -> impl futures::stream::Stream<Item = Result<RecvMsg, std::io::Error>> + '_
+where
+    F: std::os::unix::io::AsRawFd,
+{
+    futures::stream::unfold((), move |()| async move {
+        Some((recv_msg::<F>(sock, bufsize, flags).await, ()))
+    })
 }
 
 pub async fn send_msg<F: std::os::unix::io::AsRawFd>(
