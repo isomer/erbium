@@ -1755,9 +1755,9 @@ rec {
       };
       "hashbrown" = rec {
         crateName = "hashbrown";
-        version = "0.11.2";
-        edition = "2018";
-        sha256 = "0vkjsf5nzs7qcia5ya79j9sq2p1caz4crrncr1675wwyj3ag0pmb";
+        version = "0.12.3";
+        edition = "2021";
+        sha256 = "1268ka4750pyg2pbgsr43f0289l5zah4arir2k4igx5a8c6fg7la";
         authors = [
           "Amanieu d'Antras <amanieu@gmail.com>"
         ];
@@ -1785,9 +1785,9 @@ rec {
       };
       "hashlink" = rec {
         crateName = "hashlink";
-        version = "0.7.0";
+        version = "0.8.1";
         edition = "2018";
-        sha256 = "1kzs54xq1g41zph39cfdfchiafij99382zw5fk6zq7xwkh9a6jbj";
+        sha256 = "1yhgpv6k8pr7d3gp89gqcgxk2diai6gk4j05mmhdhy22ig7izzk9";
         authors = [
           "kyren <kerriganw@gmail.com>"
         ];
@@ -2275,9 +2275,9 @@ rec {
       };
       "libsqlite3-sys" = rec {
         crateName = "libsqlite3-sys";
-        version = "0.23.2";
+        version = "0.25.1";
         edition = "2018";
-        sha256 = "0n6b4mlpw9l74cl5mahnpaanyjsgpmz5y517kmnk6v09fiygrjnj";
+        sha256 = "0dfgh1rcf9v4n75kgsmh3xv927cw8rp041r9g6m7r6mwq7r5a14z";
         authors = [
           "The rusqlite developers"
         ];
@@ -3562,9 +3562,9 @@ rec {
       };
       "rusqlite" = rec {
         crateName = "rusqlite";
-        version = "0.26.3";
+        version = "0.28.0";
         edition = "2018";
-        sha256 = "1xys970qbm3zlgd66yxwzc259dn6dlljpkyg9xzlsblb5i3d792b";
+        sha256 = "0aj2jvlcdy1miahy6wsia50ak26q3ziynl8yx0raqffb7sy17qh1";
         authors = [
           "The rusqlite developers"
         ];
@@ -3590,10 +3590,6 @@ rec {
             packageId = "libsqlite3-sys";
           }
           {
-            name = "memchr";
-            packageId = "memchr";
-          }
-          {
             name = "smallvec";
             packageId = "smallvec";
           }
@@ -3608,16 +3604,15 @@ rec {
           "bundled-sqlcipher" = [ "libsqlite3-sys/bundled-sqlcipher" "bundled" ];
           "bundled-sqlcipher-vendored-openssl" = [ "libsqlite3-sys/bundled-sqlcipher-vendored-openssl" "bundled-sqlcipher" ];
           "bundled-windows" = [ "libsqlite3-sys/bundled-windows" ];
-          "byteorder" = [ "dep:byteorder" ];
           "chrono" = [ "dep:chrono" ];
           "csv" = [ "dep:csv" ];
           "csvtab" = [ "csv" "vtab" ];
           "functions" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" ];
-          "i128_blob" = [ "byteorder" ];
           "in_gecko" = [ "modern_sqlite" "libsqlite3-sys/in_gecko" ];
           "lazy_static" = [ "dep:lazy_static" ];
           "modern-full" = [ "array" "backup" "blob" "modern_sqlite" "chrono" "collation" "column_decltype" "csvtab" "extra_check" "functions" "hooks" "i128_blob" "limits" "load_extension" "serde_json" "series" "time" "trace" "unlock_notify" "url" "uuid" "vtab" "window" ];
           "modern_sqlite" = [ "libsqlite3-sys/bundled_bindings" ];
+          "release_memory" = [ "libsqlite3-sys/min_sqlite_version_3_7_16" ];
           "serde_json" = [ "dep:serde_json" ];
           "series" = [ "vtab" ];
           "session" = [ "libsqlite3-sys/session" "hooks" ];
@@ -3627,7 +3622,7 @@ rec {
           "unlock_notify" = [ "libsqlite3-sys/unlock_notify" ];
           "url" = [ "dep:url" ];
           "uuid" = [ "dep:uuid" ];
-          "vtab" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" "lazy_static" ];
+          "vtab" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" ];
           "wasm32-wasi-vfs" = [ "libsqlite3-sys/wasm32-wasi-vfs" ];
           "window" = [ "functions" ];
           "winsqlite3" = [ "libsqlite3-sys/winsqlite3" ];
