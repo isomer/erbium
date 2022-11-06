@@ -19,7 +19,7 @@
 
 /// lldppkt is an implementation of the wire format of IEEE 802.1AB-2016
 use crate::pktparser;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt};
 use pktparser::{Deserialise, Serialise};
 
 use std::convert::TryInto;
@@ -735,12 +735,19 @@ impl Deserialise for ManagementAddress {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let mgmt_addr_len = buf
-            .get_u8()
-            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)? as u8;
+        let mgmt_addr_len =
+            (buf.get_u8()
+                .ok_or(pktparser::ParseError::UnexpectedEndOfInput)? as u8)
+                - 1; /* -1 for sizeof<mgmt_addr_af> */
         let mgmt_addr_af = buf
             .get_u8()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)? as u8;
+        if !(1..=32).contains(&mgmt_addr_len) {
+            return Err(pktparser::ParseError::InvalidArgument(format!(
+                "{} outside of valid range for mgmt_addr_len",
+                mgmt_addr_len
+            )));
+        }
         let mgmt_addr = buf
             .get_bytes(mgmt_addr_len.into())
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
@@ -748,15 +755,9 @@ impl Deserialise for ManagementAddress {
         let numbering_subtype: u8 = buf
             .get_u8()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-        let mut if_number_bytes = buf
-            .get_bytes(4)
+        let if_number = buf
+            .get_be32()
             .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
-        let if_number = ReadBytesExt::read_u32::<BigEndian>(&mut if_number_bytes).map_err(|e| {
-            pktparser::ParseError::InvalidArgument(format!(
-                "Failed to read if_number from ManagementAddr: {}",
-                e
-            ))
-        })?;
 
         let oid_len = buf
             .get_u8()
@@ -1019,5 +1020,26 @@ mod tests {
         assert_eq!("LLDP [\n\tChassisID type: MacAddress value: [00, 19, 2f, a7, b2, 8d]\n\tPortID type: InterfaceAlias value: [55, 70, 6c, 69, 6e, 6b, 20, 74, 6f, 20, 53, 31]\n\tTTL: 120 seconds\n\tSystemName: S2.cisco.com\n\tSystemDescription: Cisco IOS Software, C3560 Software (C3560-ADVIPSERVICESK9-M), Version 12.2(44)SE, RELEASE SOFTWARE (fc1)\nCopyright (c) 1986-2008 by Cisco Systems, Inc.\nCompiled Sat 05-Jan-08 00:15 by weiliu\n\tPortDescription: GigabitEthernet0/13\n\tSystemCapabilities system: 20, enabled: 4\n\tOrganizationSpecific oui: [00, 80, c2] subtype: 1, value: [00, 01]\n\tOrganizationSpecific oui: [00, 12, 0f] subtype: 1, value: [03, c0, 36, 00, 10]\n\tEnd of LLDPPDU\n]", parsed.to_string());
         let reserialized = parsed.to_wire().unwrap();
         assert_eq!(reserialized, bytes);
+    }
+
+    #[test]
+    fn parse2() {
+        let bytes = [
+            1, 128, 194, 0, 0, 14, /* src mac */
+            32, 12, 200, 58, 251, 201, /* dst mac */
+            136, 204, /* ethertype */
+            2, 7, 4, 32, 12, 200, 58, 251, 199, /* type 2 */
+            4, 3, 7, 103, 50, /* type 4 */
+            6, 2, 0, 120, /* type 6 */
+            8, 0, /* type 8 */
+            10, 7, 115, 119, 105, 116, 99, 104, 49, /* type 10 */
+            12, 28, 78, 101, 116, 103, 101, 97, 114, 32, 71, 105, 103, 97, 98, 105, 116, 32, 83,
+            109, 97, 114, 116, 32, 83, 119, 105, 116, 99, 104, /* type 12 */
+            14, 4, 0, 4, 0, 4, /* type 14 */
+            16, 20, 5, 1, 192, 168, 0, 238, 2, 0, 0, 0, 13, 8, 98, 114, 111, 97, 100, 99, 111,
+            109, /* type 16 */
+            0, 0, /* eof */
+        ];
+        let parsed = LldpPacket::from_wire(&mut pktparser::Buffer::new(&bytes[14..])).unwrap();
     }
 }
