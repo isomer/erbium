@@ -1,0 +1,55 @@
+[package]
+name = "erbium-core"
+version = "0.0.0"
+authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
+edition = "2018"
+description = "Network services for small/home networks - Core code"
+license = "Apache-2.0"
+repository = "https://github.com/isomer/erbium.git"
+homepage = "https://github.com/isomer/erbium"
+
+[features]
+full=["dhcp", "radv", "http", "dns"]
+default=["dhcp", "radv", "http", "dns"]
+dhcp=[]
+dns=[] # Partially complete, not ready for use.
+radv=[]
+http=["hyper", "dhcp"] # Currently can't compile http without dhcp.
+static=["rusqlite/bundled"] # Statically link dependencies.
+fuzzing=["arbitrary"] # add arbitrary dependancy.
+
+[dependencies]
+arbitrary = { version = "0.4.7", features = ["derive"], optional=true}
+async-trait = { version = "0.1.42" }
+rust-crypto = { version = "0.2.36" }
+bytes = "1.0"
+byteorder = "1.4.3"
+env_logger = "0.9"
+erbium-net = { path = "../erbium-net" }
+futures = "0.3.8"
+hyper = { version = "0.14.5", features=["server", "http1", "stream", "runtime", "tcp"], optional=true }
+lazy_static = "1.4"
+log = "0.4"
+nix = { version = "0.25", features=["net"] } # TODO: Only erbium-net should need to depend on nix, migrate code.
+prometheus = { version="0.13", features=["process"] }
+rand = "0.8"
+rusqlite = { version = "0.26" }
+tokio-util = { version="0.6", features= ["codec"] }
+tokio = { version = "1.8.4", features = ["full"] }
+yaml-rust = { version = "0.4" }
+
+[[bin]]
+name="erbium-dns"
+required-features=["dns"]
+
+[[bin]]
+name="erbium-dhcp"
+required-features=["dhcp"]
+
+[lib]
+name = "erbium"
+path = "src/lib.rs"
+
+[build-dependencies]
+vergen = "6"
+

@@ -18,7 +18,7 @@
  */
 
 use crate::acl;
-use crate::net::addr::{tokio_to_unixaddr, NetAddr, ToNetAddr as _};
+use erbium_net::addr::{tokio_to_unixaddr, NetAddr, ToNetAddr as _};
 use ::prometheus;
 use hyper::{Body, Request, Response};
 use std::convert::Infallible;
@@ -269,7 +269,7 @@ pub async fn run(
 ) -> Result<(), Error> {
     // Set up all the listeners and listen on them.
     for addr in &conf.read().await.listeners {
-        use crate::net::addr::NetAddrExt as _;
+        use erbium_net::addr::NetAddrExt as _;
         use nix::sys::socket::{AddressFamily::*, SockaddrLike as _};
         use tokio::net::{TcpListener, UnixListener};
         match addr.family() {

@@ -26,7 +26,7 @@
  */
 
 use crate::config::*;
-use crate::net::addr::{NetAddr, NetAddrExt as _, WithPort as _, UNSPECIFIED6};
+use erbium_net::addr::{NetAddr, NetAddrExt as _, WithPort as _, UNSPECIFIED6};
 use yaml_rust::yaml;
 
 #[derive(Debug)]
@@ -83,7 +83,7 @@ impl Acl {
                 .unwrap_or(true);
         /* Check that the addr is unix */
         if let Some(unix) = self.unix {
-            use crate::net::addr::NetAddrExt as _;
+            use erbium_net::addr::NetAddrExt as _;
             ok = ok && attr.addr.to_unix_addr().is_some() == unix;
         }
 
@@ -288,7 +288,7 @@ pub(crate) fn parse_acl(name: &str, fragment: &yaml::Yaml) -> Result<Option<Acl>
 
 #[test]
 fn acl_not_authenticated() {
-    use crate::net::addr::{Ipv4Addr, ToNetAddr as _, WithPort as _};
+    use erbium_net::addr::{Ipv4Addr, ToNetAddr as _, WithPort as _};
     let test_acls = vec![Acl {
         subnet: Some(vec![Prefix::V4(Prefix4 {
             addr: "192.0.2.0".parse().unwrap(),
@@ -319,7 +319,7 @@ fn acl_not_authenticated() {
 
 #[test]
 fn acl_not_authorized() {
-    use crate::net::addr::{Ipv4Addr, ToNetAddr as _, WithPort as _};
+    use erbium_net::addr::{Ipv4Addr, ToNetAddr as _, WithPort as _};
     let test_acls = vec![Acl {
         subnet: Some(vec![Prefix::V4(Prefix4 {
             addr: "192.0.2.0".parse().unwrap(),
@@ -350,7 +350,7 @@ fn acl_not_authorized() {
 
 #[test]
 fn acl_allowed() {
-    use crate::net::addr::{Ipv4Addr, ToNetAddr as _, WithPort as _};
+    use erbium_net::addr::{Ipv4Addr, ToNetAddr as _, WithPort as _};
     let test_acls = vec![Acl {
         subnet: Some(vec![Prefix::V4(Prefix4 {
             addr: "192.0.2.0".parse().unwrap(),

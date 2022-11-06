@@ -613,7 +613,7 @@ pub trait DhcpParse {
 
 #[derive(Clone, Debug)]
 pub struct Route {
-    pub prefix: crate::net::Ipv4Subnet,
+    pub prefix: erbium_net::Ipv4Subnet,
     pub nexthop: std::net::Ipv4Addr,
 }
 
@@ -635,7 +635,7 @@ impl DhcpParse for Vec<Route> {
         let mut ret = vec![];
         while let Some(prefixlen) = it.next() {
             let prefix =
-                crate::net::Ipv4Subnet::new(parse_ip_from_iter(&mut it)?, prefixlen).ok()?;
+                erbium_net::Ipv4Subnet::new(parse_ip_from_iter(&mut it)?, prefixlen).ok()?;
             let nexthop = parse_ip_from_iter(&mut it)?;
             ret.push(Route { prefix, nexthop });
         }
@@ -1157,7 +1157,7 @@ fn test_type_serialisation() {
     );
     assert_eq!(
         serialise_one_for_test(DhcpOptionTypeValue::Routes(vec![Route {
-            prefix: crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
+            prefix: erbium_net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
             nexthop: "192.0.2.254".parse().unwrap(),
         }])),
         vec![24, 192, 0, 2, 0, 192, 0, 2, 254]

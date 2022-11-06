@@ -16,7 +16,7 @@
  *
  *  Functions to create raw packets as a [u8]
  */
-use crate::net::addr::Inet4Addr;
+use crate::addr::Inet4Addr;
 use std::net;
 
 const fn partial_netsum(current: u32, buffer: &[u8]) -> u32 {

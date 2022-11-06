@@ -16,7 +16,7 @@
  *
  *  Erbium Configuration parsing.
  */
-use crate::net::addr::*;
+use erbium_net::addr::*;
 use std::convert::TryFrom;
 use std::os::unix::fs::PermissionsExt as _;
 use tokio::io::AsyncReadExt as _;
@@ -756,7 +756,7 @@ impl AddressType {
     pub async fn as_sockaddrs(
         &self,
         addresses: &[Prefix],
-        netinfo: &crate::net::netinfo::SharedNetInfo,
+        netinfo: &erbium_net::netinfo::SharedNetInfo,
         port: u16,
     ) -> Vec<NetAddr> {
         match self {
@@ -797,7 +797,7 @@ pub type SharedConfig = std::sync::Arc<tokio::sync::RwLock<Config>>;
 
 async fn find_listener_addresses(
     addresses: &[Prefix],
-    netinfo: &crate::net::netinfo::SharedNetInfo,
+    netinfo: &erbium_net::netinfo::SharedNetInfo,
 ) -> Vec<std::net::IpAddr> {
     let mut ret = vec![];
     for (ifaddr, _len) in netinfo.get_if_prefixes().await {

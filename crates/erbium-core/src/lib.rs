@@ -26,7 +26,6 @@ pub mod dns;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod lldp;
-pub mod net;
 pub mod pktparser;
 pub mod radv;
 

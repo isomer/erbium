@@ -28,7 +28,7 @@ pub struct Policy {
     pub match_all: bool,
     pub match_interface: Option<Option<String>>,
     pub match_chaddr: Option<Vec<u8>>,
-    pub match_subnet: Option<crate::net::Ipv4Subnet>,
+    pub match_subnet: Option<erbium_net::Ipv4Subnet>,
     pub match_other:
         std::collections::HashMap<dhcppkt::DhcpOption, Option<dhcppkt::DhcpOptionTypeValue>>,
     pub apply_address: Option<super::pool::PoolAddresses>,
@@ -128,7 +128,7 @@ impl Config {
                                             })?; /* TODO: remove unwrap */
                                         let prefixlen = it.next().unwrap().parse().unwrap();
                                         prefix = Some(
-                                            crate::net::Ipv4Subnet::new(ip, prefixlen).map_err(
+                                            erbium_net::Ipv4Subnet::new(ip, prefixlen).map_err(
                                                 |e| Error::InvalidConfig(format!("{}", e)),
                                             )?,
                                         );
@@ -181,7 +181,7 @@ impl Config {
         }
     }
 
-    fn parse_subnet(fragment: &yaml::Yaml) -> Result<Option<crate::net::Ipv4Subnet>, Error> {
+    fn parse_subnet(fragment: &yaml::Yaml) -> Result<Option<erbium_net::Ipv4Subnet>, Error> {
         match fragment {
             yaml::Yaml::Null => Ok(None),
             yaml::Yaml::String(s) => {
@@ -193,7 +193,7 @@ impl Config {
                     )))
                 } else {
                     Ok(Some(
-                        crate::net::Ipv4Subnet::new(
+                        erbium_net::Ipv4Subnet::new(
                             sections[0]
                                 .parse()
                                 .map_err(|x| Error::InvalidConfig(format!("{}", x)))?,

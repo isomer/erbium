@@ -16,8 +16,8 @@
  *
  *  Infrastructure for DNS services.
  */
-use crate::net::addr::NetAddr;
-use crate::net::udp;
+use erbium_net::addr::NetAddr;
+use erbium_net::udp;
 
 type UdpSocket = udp::UdpSocket;
 
@@ -131,7 +131,7 @@ lazy_static::lazy_static! {
 
 #[cfg_attr(test, derive(Debug))]
 pub enum Error {
-    ListenError(std::io::Error, Box<crate::net::addr::NetAddr>),
+    ListenError(std::io::Error, Box<erbium_net::addr::NetAddr>),
     AcceptError(std::io::Error),
     RecvError(std::io::Error),
     ParseError(String),
@@ -547,7 +547,7 @@ impl DnsMessage {
             std::net::IpAddr::V4(v4) => hasher.input(&v4.octets()),
             std::net::IpAddr::V6(v6) => hasher.input(&v6.octets()),
         }
-        use crate::net::addr::NetAddrExt as _;
+        use erbium_net::addr::NetAddrExt as _;
         match self.remote_addr.ip() {
             Some(std::net::IpAddr::V4(v4)) => hasher.input(&v4.octets()),
             Some(std::net::IpAddr::V6(v6)) => hasher.input(&v6.octets()),
@@ -605,7 +605,7 @@ struct DnsListenerHandler {
 impl DnsListenerHandler {
     async fn listen_udp(
         _conf: &crate::config::SharedConfig,
-        addr: &crate::net::addr::NetAddr,
+        addr: &erbium_net::addr::NetAddr,
     ) -> Result<UdpSocket, Error> {
         let mut count: i32 = 0;
         let udp = loop {
@@ -656,9 +656,9 @@ impl DnsListenerHandler {
 
     async fn listen_tcp(
         _conf: &crate::config::SharedConfig,
-        addr: &crate::net::addr::NetAddr,
+        addr: &erbium_net::addr::NetAddr,
     ) -> Result<tokio::net::TcpListener, Error> {
-        use crate::net::addr::NetAddrExt as _;
+        use erbium_net::addr::NetAddrExt as _;
         let tcp = tokio::net::TcpListener::bind(addr.to_std_socket_addr().ok_or_else(|| {
             Error::ListenError(std::io::ErrorKind::Unsupported.into(), Box::new(*addr))
         })?)
@@ -677,7 +677,7 @@ impl DnsListenerHandler {
 
     async fn new(
         conf: crate::config::SharedConfig,
-        netinfo: &crate::net::netinfo::SharedNetInfo,
+        netinfo: &erbium_net::netinfo::SharedNetInfo,
     ) -> Result<Self, Error> {
         let mut udp_listeners = vec![];
         let mut tcp_listeners = vec![];
@@ -936,7 +936,7 @@ impl DnsListenerHandler {
             200,
         );
 
-        use crate::net::addr::NetAddrExt as _;
+        use erbium_net::addr::NetAddrExt as _;
 
         // We bill this to the remote address.
         // TODO: Should we bill this to the subnet?  Eg, /56 for v6 and /24 for v4?
@@ -1171,7 +1171,7 @@ impl DnsService {
 
     pub async fn new(
         conf: crate::config::SharedConfig,
-        netinfo: &crate::net::netinfo::SharedNetInfo,
+        netinfo: &erbium_net::netinfo::SharedNetInfo,
     ) -> Result<Self, Error> {
         Ok(Self {
             next: tokio::sync::RwLock::new(DnsListenerHandler::new(conf, netinfo).await?).into(),

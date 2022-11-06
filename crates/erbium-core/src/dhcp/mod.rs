@@ -24,10 +24,10 @@ use std::sync::Arc;
 use tokio::sync;
 
 use crate::dhcp::dhcppkt::Serialise;
-use crate::net::addr::{NetAddr, ToNetAddr, WithPort as _, UNSPECIFIED4};
-use crate::net::packet;
-use crate::net::raw;
-use crate::net::udp;
+use erbium_net::addr::{NetAddr, ToNetAddr, WithPort as _, UNSPECIFIED4};
+use erbium_net::packet;
+use erbium_net::raw;
+use erbium_net::udp;
 
 pub mod config;
 pub mod dhcppkt;
@@ -568,7 +568,7 @@ fn log_options(req: &dhcppkt::Dhcp) {
     );
 }
 
-async fn log_pkt(request: &DHCPRequest, netinfo: &crate::net::netinfo::SharedNetInfo) {
+async fn log_pkt(request: &DHCPRequest, netinfo: &erbium_net::netinfo::SharedNetInfo) {
     use std::fmt::Write as _;
     let mut s = "".to_string();
     write!(
@@ -674,7 +674,7 @@ pub async fn build_default_config(
             if let super::config::Prefix::V4(p4) = prefix {
                 use crate::config::Match as _;
                 use crate::config::PrefixOps as _;
-                let subnet = crate::net::Ipv4Subnet::new(p4.network(), p4.prefixlen).ok()?;
+                let subnet = erbium_net::Ipv4Subnet::new(p4.network(), p4.prefixlen).ok()?;
                 let mut ret = config::Policy {
                     match_subnet: Some(subnet),
                     apply_address: Some(
@@ -743,7 +743,7 @@ async fn send_raw(raw: Arc<raw::RawSocket>, buf: &[u8], intf: i32) -> Result<(),
         &raw::ControlMessage::new(),
         raw::MsgFlags::empty(),
         Some(
-            &crate::net::addr::linkaddr_for_ifindex(
+            &erbium_net::addr::linkaddr_for_ifindex(
                 intf.try_into().unwrap(), /* TODO: Push IfIndex type back through callstack */
             )
             .to_net_addr(),
@@ -780,9 +780,9 @@ impl ToString for RunError {
 }
 
 pub struct DhcpService {
-    netinfo: crate::net::netinfo::SharedNetInfo,
+    netinfo: erbium_net::netinfo::SharedNetInfo,
     conf: crate::config::SharedConfig,
-    rawsock: std::sync::Arc<crate::net::raw::RawSocket>,
+    rawsock: std::sync::Arc<erbium_net::raw::RawSocket>,
     pool: std::sync::Arc<sync::Mutex<pool::Pool>>,
     serverids: SharedServerIds,
     listener: UdpSocket,
@@ -898,7 +898,7 @@ impl DhcpService {
         log_options(&reply);
 
         /* Collect metadata ready to send */
-        let srcll = if let Some(crate::net::netinfo::LinkLayer::Ethernet(srcll)) =
+        let srcll = if let Some(erbium_net::netinfo::LinkLayer::Ethernet(srcll)) =
             self.netinfo.get_linkaddr_by_ifidx(intf).await
         {
             srcll
@@ -938,7 +938,7 @@ impl DhcpService {
     }
 
     async fn new_internal(
-        netinfo: crate::net::netinfo::SharedNetInfo,
+        netinfo: erbium_net::netinfo::SharedNetInfo,
         conf: super::config::SharedConfig,
     ) -> Result<Self, RunError> {
         let rawsock =
@@ -972,7 +972,7 @@ impl DhcpService {
     }
 
     pub async fn new(
-        netinfo: crate::net::netinfo::SharedNetInfo,
+        netinfo: erbium_net::netinfo::SharedNetInfo,
         conf: super::config::SharedConfig,
     ) -> Result<Self, String> {
         match Self::new_internal(netinfo, conf).await {
@@ -1038,7 +1038,7 @@ impl DhcpService {
 #[test]
 fn test_policy() {
     let cfg = config::Policy {
-        match_subnet: Some(crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap()),
+        match_subnet: Some(erbium_net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap()),
         ..Default::default()
     };
     let req = DHCPRequest {
@@ -1311,7 +1311,7 @@ addresses: [192.0.2.53/24]
     let pkt = test::mk_dhcp_request();
     let base = build_default_config(&*conf.read().await, &pkt).await;
 
-    let network = crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap();
+    let network = erbium_net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap();
 
     assert_eq!(base.policies[0].match_subnet.unwrap().addr, network.addr);
     assert_eq!(

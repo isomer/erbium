@@ -17,7 +17,7 @@
  *  Common Socket Traits
  */
 
-use crate::net::addr::NetAddr;
+use crate::addr::NetAddr;
 use std::os::unix::io::{OwnedFd, RawFd};
 
 pub fn std_to_libc_in_addr(addr: std::net::Ipv4Addr) -> libc::in_addr {

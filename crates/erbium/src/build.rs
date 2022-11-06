@@ -3,6 +3,7 @@ extern crate vergen;
 fn main() {
     let mut conf = vergen::Config::default();
     *conf.git_mut().semver_dirty_mut() = Some("-dirty");
+    *conf.cargo_mut().features_mut() = true;
     match vergen::vergen(conf.clone()) {
         Ok(()) => {}
         Err(_) => {

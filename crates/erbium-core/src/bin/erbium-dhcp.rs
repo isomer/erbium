@@ -52,7 +52,7 @@ async fn go() -> Result<(), Error> {
             return Ok(());
         }
     };
-    let netinfo = erbium::net::netinfo::SharedNetInfo::new().await;
+    let netinfo = erbium_net::netinfo::SharedNetInfo::new().await;
     let conf = erbium::config::load_config_from_path(config_file)
         .await
         .map_err(|e| Error::ConfigError(config_file.to_path_buf(), e))?;

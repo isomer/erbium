@@ -1,0 +1,34 @@
+[package]
+name = "erbium"
+version = "1.0.2-rc1"
+authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
+edition = "2018"
+default-run = "erbium"
+description = "Network services for small/home networks"
+license = "Apache-2.0"
+repository = "https://github.com/isomer/erbium.git"
+build = "src/build.rs"
+homepage = "https://github.com/isomer/erbium"
+
+[features]
+full=["dhcp", "radv", "http", "dns"]
+default=["dhcp", "radv", "http", "dns"]
+dhcp=["erbium-core/dhcp"]
+dns=["erbium-core/dns"]
+radv=["erbium-core/radv"]
+http=["erbium-core/http"]
+static=["erbium-core/static"] # Statically link dependencies.
+
+[dependencies]
+async-std = { version = "1.12.0", features = ["tokio1"] }
+async-trait = { version = "0.1.42" }
+env_logger = "0.9"
+erbium-core = { path = "../erbium-core" }
+erbium-net = { path = "../erbium-net" }
+futures = "0.3.8"
+log = "0.4"
+tokio = { version = "1.8.4", features = ["full"] }
+
+[build-dependencies]
+vergen = "6"
+

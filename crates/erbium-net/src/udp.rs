@@ -23,7 +23,7 @@
 // This should not export libc::, nix:: or tokio:: types, only std:: and it's own types to insulate
 // the rest of the program of the horrors of portability.
 
-use crate::net::addr::NetAddr;
+use crate::addr::NetAddr;
 use std::convert::TryFrom;
 use std::io;
 use std::net;
@@ -36,9 +36,9 @@ pub struct UdpSocket {
     fd: AsyncFd<mio::net::UdpSocket>,
 }
 
-pub type MsgFlags = crate::net::socket::MsgFlags;
-pub type ControlMessage = crate::net::socket::ControlMessage;
-pub type RecvMsg = crate::net::socket::RecvMsg;
+pub type MsgFlags = crate::socket::MsgFlags;
+pub type ControlMessage = crate::socket::ControlMessage;
+pub type RecvMsg = crate::socket::RecvMsg;
 
 pub fn std_to_libc_in_addr(addr: net::Ipv4Addr) -> libc::in_addr {
     libc::in_addr {
@@ -66,7 +66,7 @@ impl TryFrom<mio::net::UdpSocket> for UdpSocket {
 
 impl UdpSocket {
     pub async fn bind(addrs: &[NetAddr]) -> Result<Self, io::Error> {
-        use crate::net::addr::NetAddrExt as _;
+        use crate::addr::NetAddrExt as _;
         let mut last_err = None;
 
         for addr in addrs {
@@ -85,7 +85,7 @@ impl UdpSocket {
     }
 
     pub async fn recv_msg(&self, bufsize: usize, flags: MsgFlags) -> io::Result<RecvMsg> {
-        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
+        crate::socket::recv_msg(&self.fd, bufsize, flags).await
     }
 
     pub async fn send_msg(
@@ -95,7 +95,7 @@ impl UdpSocket {
         flags: MsgFlags,
         addr: Option<&NetAddr>,
     ) -> io::Result<()> {
-        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
+        crate::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
 
     pub fn local_addr(&self) -> Result<NetAddr, io::Error> {

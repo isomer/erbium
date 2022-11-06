@@ -23,7 +23,7 @@ use std::os::unix::io::AsRawFd;
 use std::os::unix::io::RawFd;
 use tokio::io::unix::AsyncFd;
 
-use crate::net::{addr::NetAddr, udp};
+use crate::{addr::NetAddr, udp};
 use nix::libc;
 
 pub type Error = std::io::Error;
@@ -64,7 +64,7 @@ impl EthProto {
 
 #[derive(Debug)]
 pub struct RawSocket {
-    fd: AsyncFd<crate::net::socket::SocketFd>,
+    fd: AsyncFd<crate::socket::SocketFd>,
 }
 
 impl AsRawFd for RawSocket {
@@ -76,7 +76,7 @@ impl AsRawFd for RawSocket {
 impl RawSocket {
     pub fn new(protocol: EthProto) -> Result<Self> {
         Ok(Self {
-            fd: AsyncFd::new(crate::net::socket::new_socket(
+            fd: AsyncFd::new(crate::socket::new_socket(
                 libc::AF_PACKET,
                 libc::SOCK_RAW,
                 protocol.0.to_be() as libc::c_int,
@@ -93,8 +93,8 @@ impl RawSocket {
         &self,
         bufsize: usize,
         flags: MsgFlags,
-    ) -> io::Result<crate::net::socket::RecvMsg> {
-        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
+    ) -> io::Result<crate::socket::RecvMsg> {
+        crate::socket::recv_msg(&self.fd, bufsize, flags).await
     }
 
     pub async fn send_msg(
@@ -104,7 +104,7 @@ impl RawSocket {
         flags: MsgFlags,
         addr: Option<&NetAddr>,
     ) -> io::Result<()> {
-        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
+        crate::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
 
     pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
@@ -118,7 +118,7 @@ impl RawSocket {
 
 #[derive(Debug)]
 pub struct CookedRawSocket {
-    fd: AsyncFd<crate::net::socket::SocketFd>,
+    fd: AsyncFd<crate::socket::SocketFd>,
 }
 
 impl AsRawFd for CookedRawSocket {
@@ -130,7 +130,7 @@ impl AsRawFd for CookedRawSocket {
 impl CookedRawSocket {
     pub fn new(protocol: EthProto) -> Result<Self> {
         Ok(Self {
-            fd: AsyncFd::new(crate::net::socket::new_socket(
+            fd: AsyncFd::new(crate::socket::new_socket(
                 libc::AF_PACKET,
                 libc::SOCK_RAW,
                 protocol.0 as libc::c_int,
@@ -147,8 +147,8 @@ impl CookedRawSocket {
         &self,
         bufsize: usize,
         flags: MsgFlags,
-    ) -> io::Result<crate::net::socket::RecvMsg> {
-        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
+    ) -> io::Result<crate::socket::RecvMsg> {
+        crate::socket::recv_msg(&self.fd, bufsize, flags).await
     }
 
     pub async fn send_msg(
@@ -158,7 +158,7 @@ impl CookedRawSocket {
         flags: MsgFlags,
         addr: Option<&NetAddr>,
     ) -> io::Result<()> {
-        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
+        crate::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
 
     pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
@@ -172,7 +172,7 @@ impl CookedRawSocket {
 
 #[derive(Debug)]
 pub struct Raw6Socket {
-    fd: AsyncFd<crate::net::socket::SocketFd>,
+    fd: AsyncFd<crate::socket::SocketFd>,
 }
 
 impl AsRawFd for Raw6Socket {
@@ -184,7 +184,7 @@ impl AsRawFd for Raw6Socket {
 impl Raw6Socket {
     pub fn new(protocol: IpProto) -> Result<Self> {
         Ok(Self {
-            fd: AsyncFd::new(crate::net::socket::new_socket(
+            fd: AsyncFd::new(crate::socket::new_socket(
                 libc::AF_INET6,
                 libc::SOCK_RAW,
                 protocol.0 as libc::c_int,
@@ -201,8 +201,8 @@ impl Raw6Socket {
         &self,
         bufsize: usize,
         flags: MsgFlags,
-    ) -> io::Result<crate::net::socket::RecvMsg> {
-        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
+    ) -> io::Result<crate::socket::RecvMsg> {
+        crate::socket::recv_msg(&self.fd, bufsize, flags).await
     }
 
     pub async fn send_msg(
@@ -212,7 +212,7 @@ impl Raw6Socket {
         flags: MsgFlags,
         addr: Option<&NetAddr>,
     ) -> io::Result<()> {
-        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
+        crate::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
 
     pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
@@ -226,7 +226,7 @@ impl Raw6Socket {
 
 #[derive(Debug)]
 pub struct Raw4Socket {
-    fd: AsyncFd<crate::net::socket::SocketFd>,
+    fd: AsyncFd<crate::socket::SocketFd>,
 }
 
 impl AsRawFd for Raw4Socket {
@@ -238,7 +238,7 @@ impl AsRawFd for Raw4Socket {
 impl Raw4Socket {
     pub fn new(protocol: IpProto) -> Result<Self> {
         Ok(Self {
-            fd: AsyncFd::new(crate::net::socket::new_socket(
+            fd: AsyncFd::new(crate::socket::new_socket(
                 libc::AF_INET,
                 libc::SOCK_RAW,
                 protocol.0 as libc::c_int,
@@ -255,8 +255,8 @@ impl Raw4Socket {
         &self,
         bufsize: usize,
         flags: MsgFlags,
-    ) -> io::Result<crate::net::socket::RecvMsg> {
-        crate::net::socket::recv_msg(&self.fd, bufsize, flags).await
+    ) -> io::Result<crate::socket::RecvMsg> {
+        crate::socket::recv_msg(&self.fd, bufsize, flags).await
     }
 
     pub async fn send_msg(
@@ -266,7 +266,7 @@ impl Raw4Socket {
         flags: MsgFlags,
         addr: Option<&NetAddr>,
     ) -> io::Result<()> {
-        crate::net::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
+        crate::socket::send_msg(&self.fd, buffer, cmsg, flags, addr).await
     }
 
     pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(

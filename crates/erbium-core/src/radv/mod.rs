@@ -17,7 +17,7 @@
  *  IPv6 Router Advertisement Code
  */
 
-use crate::net::addr::{ALL_NODES, ALL_ROUTERS};
+use erbium_net::addr::{ALL_NODES, ALL_ROUTERS};
 use rand::Rng;
 use std::convert::TryInto as _;
 
@@ -80,9 +80,9 @@ impl std::fmt::Debug for Void {
 }
 
 pub struct RaAdvService {
-    netinfo: crate::net::netinfo::SharedNetInfo,
+    netinfo: erbium_net::netinfo::SharedNetInfo,
     conf: crate::config::SharedConfig,
-    rawsock: std::sync::Arc<crate::net::raw::Raw6Socket>,
+    rawsock: std::sync::Arc<erbium_net::raw::Raw6Socket>,
 }
 
 #[derive(Eq, PartialEq)]
@@ -157,37 +157,37 @@ impl PartialOrd for ScopeSorter {
 
 impl RaAdvService {
     pub fn new(
-        netinfo: crate::net::netinfo::SharedNetInfo,
+        netinfo: erbium_net::netinfo::SharedNetInfo,
         conf: super::config::SharedConfig,
     ) -> Result<Self, Error> {
         let rawsock = std::sync::Arc::new(
-            crate::net::raw::Raw6Socket::new(crate::net::raw::IpProto::ICMP6).map_err(Error::Io)?,
+            erbium_net::raw::Raw6Socket::new(erbium_net::raw::IpProto::ICMP6).map_err(Error::Io)?,
         );
 
         rawsock
-            .set_socket_option(crate::net::Ipv6RecvPacketInfo, &true)
+            .set_socket_option(erbium_net::Ipv6RecvPacketInfo, &true)
             .map_err(Error::Io)?;
         //TODO
         //rawsock
-        //    .set_socket_option(crate::net::Ipv6UnicastHops, &255)
+        //    .set_socket_option(erbium_net::Ipv6UnicastHops, &255)
         //    .map_err(Error::Io)?;
         use std::os::unix::io::AsRawFd as _;
-        crate::net::socket::set_ipv6_unicast_hoplimit(rawsock.as_raw_fd(), 255)
+        erbium_net::socket::set_ipv6_unicast_hoplimit(rawsock.as_raw_fd(), 255)
             .map_err(|e| Error::Io(e.into()))?;
         //rawsock
-        //    .set_socket_option(crate::net::Ipv6MulticastHops, &255)
+        //    .set_socket_option(erbium_net::Ipv6MulticastHops, &255)
         //    .map_err(Error::Io)?;
-        crate::net::socket::set_ipv6_multicast_hoplimit(rawsock.as_raw_fd(), 255)
+        erbium_net::socket::set_ipv6_multicast_hoplimit(rawsock.as_raw_fd(), 255)
             .map_err(|e| Error::Io(e.into()))?;
         //rawsock
-        //    .set_socket_option(crate::net::Ipv6RecvHopLimit, &true)
+        //    .set_socket_option(erbium_net::Ipv6RecvHopLimit, &true)
         //    .map_err(Error::Io)?;
         //rawsock
-        //    .set_socket_option(crate::net::Ipv6ImcpFilter, ...)?;
+        //    .set_socket_option(erbium_net::Ipv6ImcpFilter, ...)?;
         //    .map_err(Error::Io)?;
         rawsock
             .set_socket_option(
-                crate::net::Ipv6AddMembership,
+                erbium_net::Ipv6AddMembership,
                 &nix::sys::socket::Ipv6MembershipRequest::new(ALL_ROUTERS),
             )
             .map_err(Error::Io)?;
@@ -290,7 +290,7 @@ impl RaAdvService {
     ) -> icmppkt::RtrAdvertisement {
         /* Add the LL address of the interface, if it exists. */
         let ll = match self.netinfo.get_linkaddr_by_ifidx(ifidx).await {
-            Some(crate::net::netinfo::LinkLayer::Ethernet(lladdr)) => Some(lladdr),
+            Some(erbium_net::netinfo::LinkLayer::Ethernet(lladdr)) => Some(lladdr),
             _ => None,
         };
 
@@ -404,12 +404,12 @@ impl RaAdvService {
     async fn send_announcement(
         &self,
         msg: icmppkt::RtrAdvertisement,
-        dst: crate::net::addr::NetAddr,
+        dst: erbium_net::addr::NetAddr,
         intf: u32,
     ) -> Result<(), Error> {
         let smsg = icmppkt::Icmp6::RtrAdvert(msg);
         let s = icmppkt::serialise(&smsg);
-        use crate::net::socket;
+        use erbium_net::socket;
         let cmsg = if intf != 0 {
             socket::ControlMessage::new().set_src6_intf(intf)
         } else {
@@ -437,7 +437,7 @@ impl RaAdvService {
 
     async fn handle_solicit(
         &self,
-        rm: crate::net::socket::RecvMsg,
+        rm: erbium_net::socket::RecvMsg,
         _in_opt: &icmppkt::NDOptions,
     ) -> Result<(), Error> {
         if let Some(ifidx) = rm.local_intf() {
@@ -463,7 +463,7 @@ impl RaAdvService {
         let msg = self.build_announcement_by_ifidx(ifidx).await?;
         let dst = std::net::SocketAddr::V6(std::net::SocketAddrV6::new(
             ALL_NODES,
-            crate::net::raw::IpProto::ICMP6.into(), /* port */
+            erbium_net::raw::IpProto::ICMP6.into(), /* port */
             0,                                      /* flowid */
             ifidx,                                  /* scope_id */
         ))
@@ -497,7 +497,7 @@ impl RaAdvService {
         loop {
             let rm = match self
                 .rawsock
-                .recv_msg(65536, crate::net::raw::MsgFlags::empty())
+                .recv_msg(65536, erbium_net::raw::MsgFlags::empty())
                 .await
             {
                 Ok(m) => m,

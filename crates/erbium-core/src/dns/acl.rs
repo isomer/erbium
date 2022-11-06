@@ -21,7 +21,7 @@ use super::dnspkt;
 use super::router;
 use crate::acl;
 use crate::config;
-use crate::net::addr::NetAddrExt as _;
+use erbium_net::addr::NetAddrExt as _;
 
 use super::DnsMessage;
 use super::Error;

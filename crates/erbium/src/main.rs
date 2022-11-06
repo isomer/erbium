@@ -60,7 +60,7 @@ async fn go() -> Result<(), Error> {
         std::path::Path::new(&args[1])
     };
     /* Build the shared network information database that various systems depend on */
-    let netinfo = net::netinfo::SharedNetInfo::new().await;
+    let netinfo = erbium_net::netinfo::SharedNetInfo::new().await;
 
     /* Load the configuration from disk */
     let conf = erbium::config::load_config_from_path(config_file)
@@ -117,10 +117,10 @@ async fn go() -> Result<(), Error> {
 #[tokio::main]
 async fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-
     info!(
-        "erbium {}{}",
+        "erbium {} [{}]{}",
         env!("CARGO_PKG_VERSION"),
+        env!("VERGEN_CARGO_FEATURES"),
         option_env!("VERGEN_GIT_SHA")
             .map(|sha| format!(" ({})", sha))
             .unwrap_or_else(|| "".into())

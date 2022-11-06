@@ -87,7 +87,7 @@ pub fn mk_default_config() -> crate::config::Config {
         dhcp: dhcp::config::Config {
             policies: vec![dhcp::config::Policy {
                 match_subnet: Some(
-                    crate::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
+                    erbium_net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
                 ),
                 apply_address: Some(apply_address),
                 ..Default::default()
