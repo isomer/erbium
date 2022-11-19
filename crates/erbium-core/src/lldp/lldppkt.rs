@@ -30,7 +30,7 @@ use std::io::ErrorKind;
 /// LLDP PDUs are simply a concatenation of TLVs in an Ethernet frame with type 0x88cc.
 /// At the end of the PDU there is an empty TLV header.
 /// The first three TLVs must be: ChassisID, PortID and TTL.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct LldpPacket {
     pub tlvs: Vec<LldpTlv>,
 }
@@ -119,7 +119,7 @@ impl std::fmt::Display for LldpPacket {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct LldpTlvHeader {
     pub ty: u8,      // 7 bits on the wire.
     pub length: u16, // 9 bits on the wire
@@ -148,7 +148,7 @@ impl Deserialise for LldpTlvHeader {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum LldpTlv {
     /// 8.5.2
     ChassisID(ChassisId),
@@ -301,7 +301,7 @@ impl std::fmt::Display for LldpTlv {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct UnknownTlv {
     ty: u8,
     payload: Vec<u8>,
@@ -330,10 +330,10 @@ impl std::fmt::Display for UnknownTlv {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ChassisId {
-    r#type: ChassisIdType,
-    identifier: Vec<u8>,
+    pub r#type: ChassisIdType,
+    pub identifier: Vec<u8>,
 }
 
 impl Serialise for ChassisId {
@@ -372,7 +372,7 @@ impl std::fmt::Display for ChassisId {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ChassisIdType {
     ChassisComponent,
     InterfaceAlias,
@@ -438,7 +438,7 @@ impl std::fmt::Display for ChassisIdType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct PortId {
     pub r#type: PortIdType,
     pub identifier: Vec<u8>,
@@ -481,7 +481,7 @@ impl std::fmt::Display for PortId {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PortIdType {
     InterfaceAlias,
     PortComponent,
@@ -547,7 +547,7 @@ impl std::fmt::Display for PortIdType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Ttl(u16);
 
 impl Deserialise for Ttl {
@@ -582,7 +582,7 @@ impl std::fmt::Display for Ttl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct PortDescription {
     pub description: String,
 }
@@ -613,7 +613,7 @@ impl std::fmt::Display for PortDescription {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SystemName(String);
 
 impl Deserialise for SystemName {
@@ -642,7 +642,7 @@ impl std::fmt::Display for SystemName {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct SystemDescription(String);
 
 impl Deserialise for SystemDescription {
@@ -671,7 +671,7 @@ impl std::fmt::Display for SystemDescription {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct SystemCapabilities {
     pub sys_cap: u16,
     pub enabled_cap: u16,
@@ -721,7 +721,7 @@ impl std::fmt::Display for SystemCapabilities {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ManagementAddress {
     pub address: Vec<u8>,
     /// Called management address subtype by IEEE802.1AB
@@ -817,7 +817,7 @@ impl std::fmt::Display for ManagementAddress {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct OrganizationSpecific {
     pub oui: [u8; 3],
     pub subtype: u8,

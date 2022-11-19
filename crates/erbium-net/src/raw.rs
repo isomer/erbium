@@ -60,6 +60,7 @@ pub struct EthProto(u16);
 impl EthProto {
     pub const IP4: EthProto = EthProto(0x0800);
     pub const ALL: EthProto = EthProto(0x0003);
+    pub const LLDP: EthProto = EthProto(0x88cc);
 }
 
 #[derive(Debug)]

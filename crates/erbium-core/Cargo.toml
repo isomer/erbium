@@ -46,6 +46,10 @@ required-features=["dns"]
 name="erbium-dhcp"
 required-features=["dhcp"]
 
+[[bin]]
+name="erbium-lldp"
+#required-features=["lldp"]
+
 [lib]
 name = "erbium"
 path = "src/lib.rs"
