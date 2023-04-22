@@ -1,6 +1,5 @@
 [package]
 name = "erbium-core"
-version = "0.0.0"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2021"
 description = "Network services for small/home networks - Core code"
@@ -8,6 +7,7 @@ license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/isomer/erbium.git"
 homepage = "https://github.com/isomer/erbium"
+version.workspace = true
 
 [features]
 full=["dhcp", "radv", "http", "dns"]

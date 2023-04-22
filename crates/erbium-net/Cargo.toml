@@ -1,9 +1,9 @@
 [package]
 name = "erbium-net"
-version = "0.0.0"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2021"
 description = "Network services for small/home networks - Low level networking abstractions"
+version.workspace = true
 
 [dependencies]
 futures = "0.3.8"

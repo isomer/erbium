@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "erbium-core"
-version = "0.0.0"
+version = "1.0.3"
 dependencies = [
  "arbitrary",
  "async-trait",
@@ -312,7 +312,7 @@ dependencies = [
 
 [[package]]
 name = "erbium-net"
-version = "0.0.0"
+version = "1.0.3"
 dependencies = [
  "futures",
  "log",
