@@ -1,5 +1,16 @@
 use tokio;
 
+fn get_resource_path(path: &str) -> std::path::PathBuf {
+    let mut r = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    /* The resources are in the top level workspace, but we can't put code there, so we need to go
+     * up two levels from our manifest directory to find them.
+     */
+    r.push("../..");
+    r.push(path);
+    println!("path: {}", r.display());
+    r
+}
+
 #[tokio::test]
 /* Extract examples from the config manpage.  Examples are between .EX/.EE pairs.  Once extracted,
  * run the config parser over them to make sure they're valid.
@@ -8,7 +19,7 @@ async fn man_page_example_configs() {
     use tokio::io::AsyncReadExt as _;
 
     let mut contents = Default::default();
-    tokio::fs::File::open("man/erbium.conf.5")
+    tokio::fs::File::open(get_resource_path("man/erbium.conf.5"))
         .await
         .unwrap()
         .read_to_string(&mut contents)
@@ -44,7 +55,7 @@ async fn validate_example_config() {
     use tokio::io::AsyncReadExt as _;
 
     let mut contents = Default::default();
-    tokio::fs::File::open("erbium.conf.example")
+    tokio::fs::File::open(get_resource_path("erbium.conf.example"))
         .await
         .unwrap()
         .read_to_string(&mut contents)

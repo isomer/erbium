@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -18,10 +18,12 @@
  */
 
 use crate::acl;
-use erbium_net::addr::{tokio_to_unixaddr, NetAddr, ToNetAddr as _};
 use ::prometheus;
+use erbium_net::addr::{tokio_to_unixaddr, NetAddr, ToNetAddr as _};
 use hyper::{Body, Request, Response};
 use std::convert::Infallible;
+// TODO: the code here that depends on nix should move into erbium-net
+use erbium_net::nix;
 
 #[derive(Debug)]
 pub enum Error {

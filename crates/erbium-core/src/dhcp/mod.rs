@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -366,12 +366,12 @@ struct Response {
     maxlease: Option<std::time::Duration>,
 }
 
-fn handle_discover<'l>(
+fn handle_discover(
     pools: &mut pool::Pool,
     req: &DHCPRequest,
     _serverids: &ServerIds,
     base: &[config::Policy],
-    conf: &'l super::config::Config,
+    conf: &super::config::Config,
 ) -> Result<dhcppkt::Dhcp, DhcpError> {
     /* Build the default response we are about to reply with, it will be filled in later */
     let mut response: Response = Response {

@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -50,17 +50,17 @@ impl GenericTokenBucket {
     }
 
     // If the bucket is currently "over full", then cap it at the maximum fullness.
-    fn get_tokens_with_time<T: Clock>(&self, now: u32) -> TokenCount {
+    fn get_tokens_with_time(&self, now: u32) -> TokenCount {
         std::cmp::max(self.0, now - Self::MAX_TOKENS / Self::TOKENS_PER_SECOND)
     }
 
     fn get_tokens<T: Clock>(&mut self) -> TokenCount {
-        self.get_tokens_with_time::<T>(T::now())
+        self.get_tokens_with_time(T::now())
     }
 
     pub fn check<T: Clock>(&self, tokens: u32) -> bool {
         let now = T::now();
-        let cur_tokens = self.get_tokens_with_time::<T>(now);
+        let cur_tokens = self.get_tokens_with_time(now);
         let avail_tokens = (now as i64 - cur_tokens as i64) * (Self::TOKENS_PER_SECOND as i64);
         /*
                 println!(

@@ -1,6 +1,5 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-extern crate erbium;
 
 fuzz_target!(|data: &[u8]| {
     let mut pools = erbium::dhcp::pool::Pool::new_in_memory().expect("failed to create pool");
@@ -10,7 +9,7 @@ fuzz_target!(|data: &[u8]| {
         dhcp: erbium::dhcp::config::Config {
             policies: vec![erbium::dhcp::config::Policy {
                 match_subnet: Some(
-                    erbium::net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
+                    erbium_net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
                 ),
                 ..Default::default()
             }],

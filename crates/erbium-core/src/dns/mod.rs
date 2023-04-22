@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -20,10 +20,6 @@ use erbium_net::addr::NetAddr;
 use erbium_net::udp;
 
 type UdpSocket = udp::UdpSocket;
-
-extern crate crypto;
-extern crate nix;
-extern crate rand;
 
 mod acl;
 mod bucket;

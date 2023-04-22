@@ -4,14 +4,15 @@ name = "erbium-fuzz"
 version = "0.0.0"
 authors = ["Automatically generated"]
 publish = false
-edition = "2018"
+edition = "2021"
 
 [package.metadata]
 cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.3"
-erbium = { path="..", features=["fuzzing"] }
+erbium-core = { path="..", features=["fuzzing"] }
+erbium-net = { path="../../erbium-net" }
 
 # Prevent this from interfering with workspaces
 [workspace]

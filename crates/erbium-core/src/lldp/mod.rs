@@ -42,7 +42,7 @@ impl LldpService {
                                         }) => log::info!(
                                             "{:?}: Peer IfAlias: {}",
                                             msg.local_intf(),
-                                            String::from_utf8_lossy(&identifier)
+                                            String::from_utf8_lossy(identifier)
                                         ),
                                         LldpTlv::ChassisID(ChassisId {
                                             r#type: ChassisIdType::PortComponent,
@@ -50,7 +50,7 @@ impl LldpService {
                                         }) => log::info!(
                                             "{:?}: Peer entPhysicalAlias: {}",
                                             msg.local_intf(),
-                                            String::from_utf8_lossy(&identifier)
+                                            String::from_utf8_lossy(identifier)
                                         ),
                                         LldpTlv::ChassisID(ChassisId {
                                             r#type: ChassisIdType::MacAddress,
@@ -91,7 +91,7 @@ impl LldpService {
                                         }) => log::info!(
                                             "{:?}: Peer Locally Defined Name: {}",
                                             msg.local_intf(),
-                                            String::from_utf8_lossy(&identifier)
+                                            String::from_utf8_lossy(identifier)
                                         ),
                                         LldpTlv::PortID(PortId {
                                             r#type: ty,
@@ -101,7 +101,7 @@ impl LldpService {
                                                 "{:?}: Peer Port {:?}: {}",
                                                 msg.local_intf(),
                                                 ty,
-                                                String::from_utf8_lossy(&identifier)
+                                                String::from_utf8_lossy(identifier)
                                             );
                                         }
                                         other => {

@@ -1,6 +1,12 @@
 [workspace]
 members = [ "crates/*" ]
 
+[workspace.package]
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/isomer/erbium.git"
+homepage = "https://github.com/isomer/erbium"
+
 [profile.release]
 lto = "fat"
 codegen-units = 1

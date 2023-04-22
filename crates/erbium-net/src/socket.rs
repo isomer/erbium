@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -184,7 +184,7 @@ impl RecvMsg {
         if let Some(pi) = self.ipv6pktinfo {
             Some(pi.ipi6_ifindex as i32)
         } else {
-            self.ipv4pktinfo.map(|pi| pi.ipi_ifindex as i32)
+            self.ipv4pktinfo.map(|pi| pi.ipi_ifindex)
         }
     }
 }
@@ -214,7 +214,7 @@ pub fn new_socket(
         let fd = libc::socket(
             domain,
             ty | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
-            protocol as i32,
+            protocol,
         );
         if fd == -1 {
             return Err(std::io::Error::last_os_error());
@@ -244,9 +244,9 @@ pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
 
     match nix::sys::socket::recvmsg(sock.get_ref().as_raw_fd(), iov, Some(&mut cmsg), flags) {
         Ok(rm) => {
-            buf.truncate(rm.bytes);
+            let buf = rm.iovs().next().unwrap();
             ev.retain_ready();
-            Ok(RecvMsg::new(rm, buf))
+            Ok(RecvMsg::new(rm, buf.into()))
         }
         Err(e) if e == nix::errno::Errno::EAGAIN => {
             ev.clear_ready();

@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -21,6 +21,10 @@ pub mod raw;
 pub mod socket;
 pub mod udp;
 
+/* TODO: only erbium-net should use nix and not expose this as an external API, but we've not got
+ * there yet, so export the version we use here so that everything is always consistent.
+ */
+pub use nix;
 pub use nix::sys::socket::sockopt::*;
 
 // TODO: Write better Debug or to_string() method.

@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -60,8 +60,9 @@ impl Error {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub enum ConfigValue<T: Clone> {
+    #[default]
     NotSpecified,
     DontSet,
     Value(T),
@@ -123,12 +124,6 @@ impl<T: Clone> ConfigValue<T> {
             (ConfigValue::DontSet, _) => ConfigValue::DontSet,
             (ConfigValue::Value(v), _) => ConfigValue::Value(v.clone()),
         }
-    }
-}
-
-impl<T: Clone> Default for ConfigValue<T> {
-    fn default() -> Self {
-        ConfigValue::NotSpecified
     }
 }
 

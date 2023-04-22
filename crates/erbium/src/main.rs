@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -121,7 +121,7 @@ async fn main() {
         "erbium {} [{}]{}",
         env!("CARGO_PKG_VERSION"),
         env!("VERGEN_CARGO_FEATURES"),
-        option_env!("VERGEN_GIT_SHA")
+        option_env!("VERGEN_GIT_DESCRIBE")
             .map(|sha| format!(" ({})", sha))
             .unwrap_or_else(|| "".into())
     );

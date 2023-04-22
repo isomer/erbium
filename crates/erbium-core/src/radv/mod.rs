@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -20,6 +20,10 @@
 use erbium_net::addr::{ALL_NODES, ALL_ROUTERS};
 use rand::Rng;
 use std::convert::TryInto as _;
+// TODO: erbium_net is the only place that should use nix, so we should migrate the code here that
+// depends on nix to erbium_net, but in the meantime to keep everything consistent we rely on
+// erbium_net's exported version of nix.
+use erbium_net::nix;
 
 pub(crate) mod config;
 pub mod icmppkt;

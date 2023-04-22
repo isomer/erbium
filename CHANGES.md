@@ -1,3 +1,5 @@
+1.0.2
+   - Upgraded dependencies, cleaned up new clippy warnings.
 1.0.1-rc1
    - Beginnings of LLDP added by rayhaanj, not yet active.
    - Upgraded nix dependency.

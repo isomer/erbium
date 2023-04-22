@@ -2,18 +2,15 @@
 name = "erbium-net"
 version = "0.0.0"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
-edition = "2018"
+edition = "2021"
 description = "Network services for small/home networks - Low level networking abstractions"
-license = "Apache-2.0"
-repository = "https://github.com/isomer/erbium.git"
-homepage = "https://github.com/isomer/erbium"
 
 [dependencies]
 futures = "0.3.8"
 log = "0.4"
 mio = { version = "0.8", features=["net", "os-poll"] }
-netlink-packet-route = ">=0.8"
+netlink-packet-route = "0.13"
 netlink-sys = { version=">=0.7, <0.8", features=["tokio_socket"] }
-nix = { version = "0.25", features=["net"] }
+nix = { version = "0.26", features=["net"] }
 tokio = { version = "1.8.4", features = ["full"] }
 

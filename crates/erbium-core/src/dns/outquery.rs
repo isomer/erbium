@@ -1,4 +1,4 @@
-/*   Copyright 2021 Perry Lorier
+/*   Copyright 2023 Perry Lorier
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
  *  Send queries "out" to the next server.
  */
 
-use crate::dns::rand::RngCore;
+use rand::RngCore;
 use std::cell::Cell;
 use std::sync::Arc;
 use tokio::net::UdpSocket;

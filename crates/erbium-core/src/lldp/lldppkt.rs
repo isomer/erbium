@@ -127,7 +127,7 @@ pub struct LldpTlvHeader {
 
 impl Serialise for LldpTlvHeader {
     fn to_wire(&self) -> std::result::Result<Vec<u8>, std::io::Error> {
-        let out: u16 = ((self.ty as u16) << 9) as u16 | (0b0000_0001_1111_1111 & self.length);
+        let out: u16 = ((self.ty as u16) << 9) | (0b0000_0001_1111_1111 & self.length);
         let mut vec = vec![];
         WriteBytesExt::write_u16::<BigEndian>(&mut vec, out)?;
         Ok(vec)
@@ -735,13 +735,13 @@ impl Deserialise for ManagementAddress {
     fn from_wire(
         buf: &mut pktparser::Buffer<'_>,
     ) -> std::result::Result<Self, pktparser::ParseError> {
-        let mgmt_addr_len =
-            (buf.get_u8()
-                .ok_or(pktparser::ParseError::UnexpectedEndOfInput)? as u8)
-                - 1; /* -1 for sizeof<mgmt_addr_af> */
+        let mgmt_addr_len = (buf
+            .get_u8()
+            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?)
+            - 1; /* -1 for sizeof<mgmt_addr_af> */
         let mgmt_addr_af = buf
             .get_u8()
-            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)? as u8;
+            .ok_or(pktparser::ParseError::UnexpectedEndOfInput)?;
         if !(1..=32).contains(&mgmt_addr_len) {
             return Err(pktparser::ParseError::InvalidArgument(format!(
                 "{} outside of valid range for mgmt_addr_len",
@@ -1040,6 +1040,6 @@ mod tests {
             109, /* type 16 */
             0, 0, /* eof */
         ];
-        let parsed = LldpPacket::from_wire(&mut pktparser::Buffer::new(&bytes[14..])).unwrap();
+        let _parsed = LldpPacket::from_wire(&mut pktparser::Buffer::new(&bytes[14..])).unwrap();
     }
 }
