@@ -940,7 +940,7 @@ rec {
       };
       "erbium-core" = rec {
         crateName = "erbium-core";
-        version = "0.0.0";
+        version = "1.0.3";
         edition = "2021";
         crateBin = [
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
@@ -1049,7 +1049,7 @@ rec {
       };
       "erbium-net" = rec {
         crateName = "erbium-net";
-        version = "0.0.0";
+        version = "1.0.3";
         edition = "2021";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/erbium-net; };
         authors = [
