@@ -55,15 +55,13 @@ fn mk_dhcp_request_pkt() -> dhcppkt::Dhcp {
         ],
         sname: vec![],
         file: vec![],
-        options: dhcppkt::DhcpOptions {
-            ..Default::default()
-        }
-        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST)
-        .set_option(&dhcppkt::OPTION_HOSTNAME, &vec![dhcppkt::OPTION_HOSTNAME]) // TODO: is this correct?
-        .set_option(
-            &dhcppkt::OPTION_PARAMLIST,
-            &vec![1u8, 3u8, 6u8, 15, 26, 28, 51, 58, 59, 43],
-        ),
+        options: dhcppkt::DhcpOptions::default()
+            .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST)
+            .set_option(&dhcppkt::OPTION_HOSTNAME, &vec![dhcppkt::OPTION_HOSTNAME]) // TODO: is this correct?
+            .set_option(
+                &dhcppkt::OPTION_PARAMLIST,
+                &vec![1u8, 3u8, 6u8, 15, 26, 28, 51, 58, 59, 43],
+            ),
     }
 }
 
