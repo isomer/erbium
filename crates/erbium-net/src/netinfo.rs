@@ -17,13 +17,11 @@
  *  API for finding out information about interfaces.
  *  Currently uses netlink, but ideally should eventually be generalised for other platforms.
  */
-use netlink_packet_route::AddressHeader;
-use netlink_packet_route::NetlinkPayload::InnerMessage;
+use netlink_packet_core::constants::*;
+use netlink_packet_core::NetlinkPayload::InnerMessage;
+use netlink_packet_core::*;
 use netlink_packet_route::RtnlMessage::*;
-use netlink_packet_route::{
-    constants::*, AddressMessage, LinkMessage, NetlinkHeader, NetlinkMessage, NetlinkPayload,
-    RouteMessage, RtnlMessage,
-};
+use netlink_packet_route::{constants::*, AddressMessage, LinkMessage, RouteMessage, RtnlMessage};
 use netlink_sys::TokioSocket as Socket;
 use netlink_sys::{protocols, AsyncSocket as _, AsyncSocketExt as _, SocketAddr};
 
@@ -311,14 +309,13 @@ impl NetLinkNetInfo {
     }
 
     async fn send_linkdump(socket: &mut Socket, seq: &mut u32) {
-        let mut packet = NetlinkMessage {
-            header: NetlinkHeader {
-                flags: NLM_F_REQUEST | NLM_F_DUMP,
-                sequence_number: *seq,
-                ..Default::default()
-            },
-            payload: NetlinkPayload::from(RtnlMessage::GetLink(LinkMessage::default())),
-        };
+        let mut hdr = NetlinkHeader::default();
+        hdr.flags = NLM_F_REQUEST | NLM_F_DUMP;
+        hdr.sequence_number = *seq;
+        let mut packet = NetlinkMessage::new(
+            hdr,
+            NetlinkPayload::from(RtnlMessage::GetLink(LinkMessage::default())),
+        );
         *seq += 1;
 
         packet.finalize();
@@ -340,21 +337,13 @@ impl NetLinkNetInfo {
     }
 
     async fn send_routedump(socket: &mut Socket, seq: &mut u32, address_family: u8) {
-        use netlink_packet_route::RouteHeader;
-        let mut packet = NetlinkMessage {
-            header: NetlinkHeader {
-                flags: NLM_F_REQUEST | NLM_F_DUMP,
-                sequence_number: *seq,
-                ..Default::default()
-            },
-            payload: NetlinkPayload::from(RtnlMessage::GetRoute(RouteMessage {
-                header: RouteHeader {
-                    address_family,
-                    ..Default::default()
-                },
-                ..Default::default()
-            })),
-        };
+        let mut hdr = NetlinkHeader::default();
+        hdr.flags = NLM_F_REQUEST | NLM_F_DUMP;
+        hdr.sequence_number = *seq;
+        let mut rmsg = RouteMessage::default();
+        rmsg.header.address_family = address_family;
+        let mut packet =
+            NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::GetRoute(rmsg)));
 
         *seq += 1;
 
@@ -387,20 +376,15 @@ impl NetLinkNetInfo {
     }
 
     async fn send_addrdump(socket: &mut Socket, seq: &mut u32) {
-        let mut packet = NetlinkMessage {
-            header: NetlinkHeader {
-                flags: NLM_F_REQUEST | NLM_F_DUMP,
-                sequence_number: *seq,
-                ..Default::default()
-            },
-            payload: NetlinkPayload::from(RtnlMessage::GetAddress(AddressMessage {
-                header: AddressHeader {
-                    family: AF_PACKET as u8,
-                    ..Default::default()
-                },
-                ..Default::default()
-            })),
-        };
+        let mut hdr = NetlinkHeader::default();
+        hdr.flags = NLM_F_REQUEST | NLM_F_DUMP;
+        hdr.sequence_number = *seq;
+
+        let mut amsg = AddressMessage::default();
+        amsg.header.family = AF_PACKET as u8;
+
+        let mut packet =
+            NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::GetAddress(amsg)));
 
         *seq += 1;
 
@@ -627,124 +611,84 @@ impl SharedNetInfo {
     pub async fn get_ipv4_default_route(
         &self,
     ) -> Option<(Option<std::net::Ipv4Addr>, Option<u32>)> {
-        self.0
-            .read()
-            .await
-            .routeinfo
-            .iter()
-            .filter_map(|ri| {
-                if ri.prefixlen == 0 && ri.addr.is_ipv4() {
-                    Some((
-                        if let Some(std::net::IpAddr::V4(nexthop)) = ri.nexthop {
-                            Some(nexthop)
-                        } else {
-                            None
-                        },
-                        ri.oifidx,
-                    ))
-                } else {
-                    None
-                }
-            })
-            .next()
+        self.0.read().await.routeinfo.iter().find_map(|ri| {
+            if ri.prefixlen == 0 && ri.addr.is_ipv4() {
+                Some((
+                    if let Some(std::net::IpAddr::V4(nexthop)) = ri.nexthop {
+                        Some(nexthop)
+                    } else {
+                        None
+                    },
+                    ri.oifidx,
+                ))
+            } else {
+                None
+            }
+        })
     }
 
     pub async fn get_ipv6_default_route(
         &self,
     ) -> Option<(Option<std::net::Ipv6Addr>, Option<u32>)> {
-        self.0
-            .read()
-            .await
-            .routeinfo
-            .iter()
-            .filter_map(|ri| {
-                if ri.prefixlen == 0 && ri.addr.is_ipv6() {
-                    Some((
-                        if let Some(std::net::IpAddr::V6(nexthop)) = ri.nexthop {
-                            Some(nexthop)
-                        } else {
-                            None
-                        },
-                        ri.oifidx,
-                    ))
-                } else {
-                    None
-                }
-            })
-            .next()
+        self.0.read().await.routeinfo.iter().find_map(|ri| {
+            if ri.prefixlen == 0 && ri.addr.is_ipv6() {
+                Some((
+                    if let Some(std::net::IpAddr::V6(nexthop)) = ri.nexthop {
+                        Some(nexthop)
+                    } else {
+                        None
+                    },
+                    ri.oifidx,
+                ))
+            } else {
+                None
+            }
+        })
     }
 }
 
 #[tokio::test]
 async fn test_interface() {
     use netlink_packet_route::rtnl;
-    use netlink_packet_route::{AddressHeader, LinkHeader};
     const IFIDX: u32 = 10;
     let ni = SharedNetInfo::new_for_test();
+    let mut hdr = NetlinkHeader::default();
+    hdr.sequence_number = 1;
+    let mut lmsg = LinkMessage::default();
+    lmsg.header.index = IFIDX;
+    lmsg.header.link_layer_type = ARPHRD_ETHER;
+    lmsg.nlas = vec![
+        rtnl::link::nlas::Nla::IfName("test1".into()),
+        rtnl::link::nlas::Nla::Mtu(1500),
+        rtnl::link::nlas::Nla::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x00]),
+        rtnl::link::nlas::Nla::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+    ];
     NetLinkNetInfo::process_message(
         &ni,
-        &NetlinkMessage {
-            header: NetlinkHeader {
-                sequence_number: 1,
-                ..Default::default()
-            },
-            payload: NetlinkPayload::from(RtnlMessage::NewLink(LinkMessage {
-                header: LinkHeader {
-                    index: IFIDX,
-                    link_layer_type: ARPHRD_ETHER,
-                    ..Default::default()
-                },
-                nlas: vec![
-                    rtnl::link::nlas::Nla::IfName("test1".into()),
-                    rtnl::link::nlas::Nla::Mtu(1500),
-                    rtnl::link::nlas::Nla::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x00]),
-                    rtnl::link::nlas::Nla::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
-                ],
-                ..Default::default()
-            })),
-        },
+        &NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::NewLink(lmsg))),
     )
     .await;
+    hdr.sequence_number = 2;
+    let mut amsg = AddressMessage::default();
+    amsg.header.index = IFIDX;
+    amsg.header.family = AF_INET as u8;
+    amsg.header.prefix_len = 24;
+    amsg.nlas = vec![rtnl::address::nlas::Nla::Address(vec![192, 0, 2, 1])];
     NetLinkNetInfo::process_message(
         &ni,
-        &NetlinkMessage {
-            header: NetlinkHeader {
-                sequence_number: 2,
-                ..Default::default()
-            },
-            payload: NetlinkPayload::from(RtnlMessage::NewAddress(AddressMessage {
-                header: AddressHeader {
-                    index: IFIDX,
-                    family: AF_INET as u8,
-                    prefix_len: 24,
-                    ..Default::default()
-                },
-                nlas: vec![rtnl::address::nlas::Nla::Address(vec![192, 0, 2, 1])],
-                ..Default::default()
-            })),
-        },
+        &NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::NewAddress(amsg))),
     )
     .await;
+    let mut a6msg = AddressMessage::default();
+    a6msg.header.index = IFIDX;
+    a6msg.header.family = AF_INET as u8;
+    a6msg.header.prefix_len = 24;
+    a6msg.nlas = vec![rtnl::address::nlas::Nla::Address(vec![
+        0x20, 0x1, 0xd, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ])];
     NetLinkNetInfo::process_message(
         &ni,
-        &NetlinkMessage {
-            header: NetlinkHeader {
-                sequence_number: 2,
-                ..Default::default()
-            },
-            payload: NetlinkPayload::from(RtnlMessage::NewAddress(AddressMessage {
-                header: AddressHeader {
-                    index: IFIDX,
-                    family: AF_INET6 as u8,
-                    prefix_len: 24,
-                    ..Default::default()
-                },
-                nlas: vec![rtnl::address::nlas::Nla::Address(vec![
-                    0x20, 0x1, 0xd, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                ])],
-                ..Default::default()
-            })),
-        },
+        &NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::NewAddress(a6msg))),
     )
     .await;
     assert!(ni.get_interfaces().await.contains(&"test1".into()));
@@ -759,28 +703,19 @@ async fn test_interface() {
         Some(LinkLayer::Ethernet([0x00, 0x53, 0x00, 0x00, 0x00, 0x00]))
     );
     /* It's common to get a second NewLink, make sure we preserve the addresses */
+    hdr.sequence_number = 1;
+    let mut lmsg = LinkMessage::default();
+    lmsg.header.index = IFIDX;
+    lmsg.header.link_layer_type = ARPHRD_ETHER;
+    lmsg.nlas = vec![
+        rtnl::link::nlas::Nla::IfName("test1".into()),
+        rtnl::link::nlas::Nla::Mtu(1501),
+        rtnl::link::nlas::Nla::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x01]),
+        rtnl::link::nlas::Nla::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE]),
+    ];
     NetLinkNetInfo::process_message(
         &ni,
-        &NetlinkMessage {
-            header: NetlinkHeader {
-                sequence_number: 1,
-                ..Default::default()
-            },
-            payload: NetlinkPayload::from(RtnlMessage::NewLink(LinkMessage {
-                header: LinkHeader {
-                    index: IFIDX,
-                    link_layer_type: ARPHRD_ETHER,
-                    ..Default::default()
-                },
-                nlas: vec![
-                    rtnl::link::nlas::Nla::IfName("test1".into()),
-                    rtnl::link::nlas::Nla::Mtu(1501),
-                    rtnl::link::nlas::Nla::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x01]),
-                    rtnl::link::nlas::Nla::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE]),
-                ],
-                ..Default::default()
-            })),
-        },
+        &NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::NewLink(lmsg))),
     )
     .await;
     /* Did this disturb the data that was already there? */
