@@ -1077,6 +1077,10 @@ rec {
             features = [ "net" "os-poll" ];
           }
           {
+            name = "netlink-packet-core";
+            packageId = "netlink-packet-core";
+          }
+          {
             name = "netlink-packet-route";
             packageId = "netlink-packet-route";
           }
@@ -2354,9 +2358,9 @@ rec {
       };
       "netlink-packet-core" = rec {
         crateName = "netlink-packet-core";
-        version = "0.4.2";
+        version = "0.5.0";
         edition = "2018";
-        sha256 = "15qj97azqrkrkmp2w5cfwxhd16b6hmb8rs33csca4wafpnsqlnrl";
+        sha256 = "0njkzy91g5039y3icl8gdsd4q39ds47zyh2wc68lpnpz9ssz0p3y";
         authors = [
           "Corentin Henry <corentinhenry@gmail.com>"
         ];
@@ -2382,9 +2386,9 @@ rec {
       };
       "netlink-packet-route" = rec {
         crateName = "netlink-packet-route";
-        version = "0.13.0";
+        version = "0.15.0";
         edition = "2018";
-        sha256 = "06lg6j147b2b8v470wx2q567z22i1bmr9rkz4fcc4wwkfknybppm";
+        sha256 = "0g1565p2mz87l1i6582n5rciscbcrcp5g3y36q9g11vxqwr3x6ga";
         authors = [
           "Corentin Henry <corentinhenry@gmail.com>"
         ];
