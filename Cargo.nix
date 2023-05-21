@@ -599,7 +599,7 @@ rec {
         ];
         
       };
-      "bitflags 1.3.2" = rec {
+      "bitflags" = rec {
         crateName = "bitflags";
         version = "1.3.2";
         edition = "2018";
@@ -614,22 +614,21 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" ];
       };
-      "bitflags 2.3.1" = rec {
-        crateName = "bitflags";
-        version = "2.3.1";
-        edition = "2021";
-        sha256 = "114bi2p1rnd632c840dblx21dznijv26y18mnr3vc2sa52bgqxk7";
+      "block-buffer" = rec {
+        crateName = "block-buffer";
+        version = "0.10.4";
+        edition = "2018";
+        sha256 = "0w9sa2ypmrsqqvc20nhwr75wbb5cjr4kkyhpjm1z1lv2kdicfy1h";
         authors = [
-          "The Rust Project Developers"
+          "RustCrypto Developers"
         ];
-        features = {
-          "arbitrary" = [ "dep:arbitrary" ];
-          "bytemuck" = [ "dep:bytemuck" ];
-          "compiler_builtins" = [ "dep:compiler_builtins" ];
-          "core" = [ "dep:core" ];
-          "rustc-dep-of-std" = [ "core" "compiler_builtins" ];
-          "serde" = [ "dep:serde" ];
-        };
+        dependencies = [
+          {
+            name = "generic-array";
+            packageId = "generic-array";
+          }
+        ];
+        
       };
       "blocking" = rec {
         crateName = "blocking";
@@ -763,6 +762,33 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "std" ];
       };
+      "cpufeatures" = rec {
+        crateName = "cpufeatures";
+        version = "0.2.7";
+        edition = "2018";
+        sha256 = "0n7y7ls0g1svrjr6ymjv338q8ajc91sv2amdpgn7pi0j42m1wk1y";
+        authors = [
+          "RustCrypto Developers"
+        ];
+        dependencies = [
+          {
+            name = "libc";
+            packageId = "libc";
+            target = { target, features }: (stdenv.hostPlatform.config == "aarch64-linux-android");
+          }
+          {
+            name = "libc";
+            packageId = "libc";
+            target = { target, features }: ((target."arch" == "aarch64") && (target."os" == "linux"));
+          }
+          {
+            name = "libc";
+            packageId = "libc";
+            target = { target, features }: ((target."arch" == "aarch64") && (target."vendor" == "apple"));
+          }
+        ];
+        
+      };
       "crossbeam-utils" = rec {
         crateName = "crossbeam-utils";
         version = "0.8.15";
@@ -779,6 +805,31 @@ rec {
           "loom" = [ "dep:loom" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
+      };
+      "crypto-common" = rec {
+        crateName = "crypto-common";
+        version = "0.1.6";
+        edition = "2018";
+        sha256 = "1cvby95a6xg7kxdz5ln3rl9xh66nz66w46mm3g56ri1z5x815yqv";
+        authors = [
+          "RustCrypto Developers"
+        ];
+        dependencies = [
+          {
+            name = "generic-array";
+            packageId = "generic-array";
+            features = [ "more_lengths" ];
+          }
+          {
+            name = "typenum";
+            packageId = "typenum";
+          }
+        ];
+        features = {
+          "getrandom" = [ "rand_core/getrandom" ];
+          "rand_core" = [ "dep:rand_core" ];
+        };
+        resolvedDefaultFeatures = [ "std" ];
       };
       "ctor" = rec {
         crateName = "ctor";
@@ -831,6 +882,46 @@ rec {
           }
         ];
         
+      };
+      "digest" = rec {
+        crateName = "digest";
+        version = "0.10.7";
+        edition = "2018";
+        sha256 = "14p2n6ih29x81akj097lvz7wi9b6b9hvls0lwrv7b6xwyy0s5ncy";
+        authors = [
+          "RustCrypto Developers"
+        ];
+        dependencies = [
+          {
+            name = "block-buffer";
+            packageId = "block-buffer";
+            optional = true;
+          }
+          {
+            name = "crypto-common";
+            packageId = "crypto-common";
+          }
+          {
+            name = "subtle";
+            packageId = "subtle";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+        ];
+        features = {
+          "blobby" = [ "dep:blobby" ];
+          "block-buffer" = [ "dep:block-buffer" ];
+          "const-oid" = [ "dep:const-oid" ];
+          "core-api" = [ "block-buffer" ];
+          "default" = [ "core-api" ];
+          "dev" = [ "blobby" ];
+          "mac" = [ "subtle" ];
+          "oid" = [ "const-oid" ];
+          "rand_core" = [ "crypto-common/rand_core" ];
+          "std" = [ "alloc" "crypto-common/std" ];
+          "subtle" = [ "dep:subtle" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "block-buffer" "core-api" "default" "mac" "std" "subtle" ];
       };
       "env_logger" = rec {
         crateName = "env_logger";
@@ -976,6 +1067,10 @@ rec {
             packageId = "bytes";
           }
           {
+            name = "digest";
+            packageId = "digest";
+          }
+          {
             name = "env_logger";
             packageId = "env_logger";
           }
@@ -986,6 +1081,10 @@ rec {
           {
             name = "futures";
             packageId = "futures";
+          }
+          {
+            name = "hmac";
+            packageId = "hmac";
           }
           {
             name = "hyper";
@@ -1008,15 +1107,15 @@ rec {
           }
           {
             name = "rand";
-            packageId = "rand 0.8.5";
+            packageId = "rand";
           }
           {
             name = "rusqlite";
             packageId = "rusqlite";
           }
           {
-            name = "rust-crypto";
-            packageId = "rust-crypto";
+            name = "sha2";
+            packageId = "sha2";
           }
           {
             name = "tokio";
@@ -1237,16 +1336,6 @@ rec {
           "default" = [ "std" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
-      };
-      "fuchsia-cprng" = rec {
-        crateName = "fuchsia-cprng";
-        version = "0.1.1";
-        edition = "2018";
-        sha256 = "1fnkqrbz7ixxzsb04bsz9p0zzazanma8znfdqjvh39n14vapfvx0";
-        authors = [
-          "Erick Tryzelaar <etryzelaar@google.com>"
-        ];
-        
       };
       "futures" = rec {
         crateName = "futures";
@@ -1574,19 +1663,33 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "async-await" "async-await-macro" "channel" "futures-channel" "futures-io" "futures-macro" "futures-sink" "io" "memchr" "sink" "slab" "std" ];
       };
-      "gcc" = rec {
-        crateName = "gcc";
-        version = "0.3.55";
+      "generic-array" = rec {
+        crateName = "generic-array";
+        version = "0.14.7";
         edition = "2015";
-        crateBin = [];
-        sha256 = "1hng1sajn4r67hndvhjysswz8niayjwvcj42zphpxzhbz89kjpwg";
+        sha256 = "16lyyrzrljfq424c3n8kfwkqihlimmsg5nhshbbp48np3yjrqr45";
+        libName = "generic_array";
         authors = [
-          "Alex Crichton <alex@alexcrichton.com>"
+          "Bartłomiej Kamiński <fizyk20@gmail.com>"
+          "Aaron Trent <novacrazy@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "typenum";
+            packageId = "typenum";
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "version_check";
+            packageId = "version_check";
+          }
         ];
         features = {
-          "parallel" = [ "rayon" ];
-          "rayon" = [ "dep:rayon" ];
+          "serde" = [ "dep:serde" ];
+          "zeroize" = [ "dep:zeroize" ];
         };
+        resolvedDefaultFeatures = [ "more_lengths" ];
       };
       "getrandom" = rec {
         crateName = "getrandom";
@@ -1609,7 +1712,7 @@ rec {
           }
           {
             name = "wasi";
-            packageId = "wasi 0.11.0+wasi-snapshot-preview1";
+            packageId = "wasi";
             usesDefaultFeatures = false;
             target = { target, features }: (target."os" == "wasi");
           }
@@ -1760,6 +1863,32 @@ rec {
           "std" = [ "alloc" ];
         };
         resolvedDefaultFeatures = [ "alloc" "default" "std" ];
+      };
+      "hmac" = rec {
+        crateName = "hmac";
+        version = "0.12.1";
+        edition = "2018";
+        sha256 = "0pmbr069sfg76z7wsssfk5ddcqd9ncp79fyz6zcm6yn115yc6jbc";
+        authors = [
+          "RustCrypto Developers"
+        ];
+        dependencies = [
+          {
+            name = "digest";
+            packageId = "digest";
+            features = [ "mac" ];
+          }
+        ];
+        devDependencies = [
+          {
+            name = "digest";
+            packageId = "digest";
+            features = [ "dev" ];
+          }
+        ];
+        features = {
+          "std" = [ "digest/std" ];
+        };
       };
       "http" = rec {
         crateName = "http";
@@ -2124,9 +2253,9 @@ rec {
       };
       "libsqlite3-sys" = rec {
         crateName = "libsqlite3-sys";
-        version = "0.26.0";
+        version = "0.25.2";
         edition = "2018";
-        sha256 = "09j3v5nhgvjdyskgwajhg9g6v3b2ij0lxiz8qqav2cxic7zjxhmg";
+        sha256 = "1ym7x39ihcf2s0iyd3iqk6i283kgxcrdc7hxig94cybi7p83by19";
         authors = [
           "The rusqlite developers"
         ];
@@ -2155,15 +2284,19 @@ rec {
           "bundled-sqlcipher-vendored-openssl" = [ "bundled-sqlcipher" "openssl-sys/vendored" ];
           "bundled-windows" = [ "cc" "bundled_bindings" ];
           "cc" = [ "dep:cc" ];
-          "default" = [ "min_sqlite_version_3_14_0" ];
-          "min_sqlite_version_3_14_0" = [ "pkg-config" "vcpkg" ];
+          "default" = [ "min_sqlite_version_3_6_8" ];
+          "min_sqlite_version_3_6_23" = [ "pkg-config" "vcpkg" ];
+          "min_sqlite_version_3_6_8" = [ "pkg-config" "vcpkg" ];
+          "min_sqlite_version_3_7_16" = [ "pkg-config" "vcpkg" ];
+          "min_sqlite_version_3_7_7" = [ "pkg-config" "vcpkg" ];
           "openssl-sys" = [ "dep:openssl-sys" ];
           "pkg-config" = [ "dep:pkg-config" ];
           "preupdate_hook" = [ "buildtime_bindgen" ];
           "session" = [ "preupdate_hook" "buildtime_bindgen" ];
           "vcpkg" = [ "dep:vcpkg" ];
+          "winsqlite3" = [ "min_sqlite_version_3_7_16" ];
         };
-        resolvedDefaultFeatures = [ "bundled" "bundled_bindings" "cc" "default" "min_sqlite_version_3_14_0" "pkg-config" "vcpkg" ];
+        resolvedDefaultFeatures = [ "bundled" "bundled_bindings" "cc" "default" "min_sqlite_version_3_6_8" "pkg-config" "vcpkg" ];
       };
       "linked-hash-map" = rec {
         crateName = "linked-hash-map";
@@ -2341,7 +2474,7 @@ rec {
           }
           {
             name = "wasi";
-            packageId = "wasi 0.11.0+wasi-snapshot-preview1";
+            packageId = "wasi";
             target = { target, features }: (target."os" == "wasi");
           }
           {
@@ -2399,7 +2532,7 @@ rec {
           }
           {
             name = "bitflags";
-            packageId = "bitflags 1.3.2";
+            packageId = "bitflags";
           }
           {
             name = "byteorder";
@@ -2513,7 +2646,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 1.3.2";
+            packageId = "bitflags";
           }
           {
             name = "cfg-if";
@@ -2732,7 +2865,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 1.3.2";
+            packageId = "bitflags";
             target = { target, features }: target."windows";
           }
           {
@@ -2820,7 +2953,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 1.3.2";
+            packageId = "bitflags";
           }
           {
             name = "byteorder";
@@ -2954,75 +3087,7 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" "proc-macro" ];
       };
-      "rand 0.3.23" = rec {
-        crateName = "rand";
-        version = "0.3.23";
-        edition = "2015";
-        sha256 = "0v679h38pjjqj5h4md7v2slsvj6686qgcn7p9fbw3h43iwnk1b34";
-        authors = [
-          "The Rust Project Developers"
-        ];
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-          }
-          {
-            name = "rand";
-            packageId = "rand 0.4.6";
-          }
-        ];
-        features = {
-          "nightly" = [ "i128_support" ];
-        };
-      };
-      "rand 0.4.6" = rec {
-        crateName = "rand";
-        version = "0.4.6";
-        edition = "2015";
-        sha256 = "14qjfv3gggzhnma20k0sc1jf8y6pplsaq7n1j9ls5c8kf2wl0a2m";
-        authors = [
-          "The Rust Project Developers"
-        ];
-        dependencies = [
-          {
-            name = "fuchsia-cprng";
-            packageId = "fuchsia-cprng";
-            target = { target, features }: (target."os" == "fuchsia");
-          }
-          {
-            name = "libc";
-            packageId = "libc";
-            optional = true;
-            target = { target, features }: target."unix";
-          }
-          {
-            name = "rand_core";
-            packageId = "rand_core 0.3.1";
-            usesDefaultFeatures = false;
-            target = { target, features }: (target."env" == "sgx");
-          }
-          {
-            name = "rdrand";
-            packageId = "rdrand";
-            target = { target, features }: (target."env" == "sgx");
-          }
-          {
-            name = "winapi";
-            packageId = "winapi";
-            target = { target, features }: target."windows";
-            features = [ "minwindef" "ntsecapi" "profileapi" "winnt" ];
-          }
-        ];
-        features = {
-          "default" = [ "std" ];
-          "libc" = [ "dep:libc" ];
-          "nightly" = [ "i128_support" ];
-          "std" = [ "libc" ];
-        };
-        resolvedDefaultFeatures = [ "default" "libc" "std" ];
-      };
-      "rand 0.8.5" = rec {
+      "rand" = rec {
         crateName = "rand";
         version = "0.8.5";
         edition = "2018";
@@ -3047,7 +3112,7 @@ rec {
           }
           {
             name = "rand_core";
-            packageId = "rand_core 0.6.4";
+            packageId = "rand_core";
           }
         ];
         features = {
@@ -3085,7 +3150,7 @@ rec {
           }
           {
             name = "rand_core";
-            packageId = "rand_core 0.6.4";
+            packageId = "rand_core";
           }
         ];
         features = {
@@ -3096,45 +3161,7 @@ rec {
         };
         resolvedDefaultFeatures = [ "std" ];
       };
-      "rand_core 0.3.1" = rec {
-        crateName = "rand_core";
-        version = "0.3.1";
-        edition = "2015";
-        sha256 = "0jzdgszfa4bliigiy4hi66k7fs3gfwi2qxn8vik84ph77fwdwvvs";
-        authors = [
-          "The Rand Project Developers"
-          "The Rust Project Developers"
-        ];
-        dependencies = [
-          {
-            name = "rand_core";
-            packageId = "rand_core 0.4.2";
-          }
-        ];
-        features = {
-          "alloc" = [ "rand_core/alloc" ];
-          "default" = [ "std" ];
-          "serde1" = [ "rand_core/serde1" ];
-          "std" = [ "rand_core/std" ];
-        };
-      };
-      "rand_core 0.4.2" = rec {
-        crateName = "rand_core";
-        version = "0.4.2";
-        edition = "2015";
-        sha256 = "1p09ynysrq1vcdlmcqnapq4qakl2yd1ng3kxh3qscpx09k2a6cww";
-        authors = [
-          "The Rand Project Developers"
-          "The Rust Project Developers"
-        ];
-        features = {
-          "serde" = [ "dep:serde" ];
-          "serde1" = [ "serde" "serde_derive" ];
-          "serde_derive" = [ "dep:serde_derive" ];
-          "std" = [ "alloc" ];
-        };
-      };
-      "rand_core 0.6.4" = rec {
+      "rand_core" = rec {
         crateName = "rand_core";
         version = "0.6.4";
         edition = "2018";
@@ -3158,26 +3185,6 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "getrandom" "std" ];
       };
-      "rdrand" = rec {
-        crateName = "rdrand";
-        version = "0.4.0";
-        edition = "2015";
-        sha256 = "1cjq0kwx1bk7jx3kzyciiish5gqsj7620dm43dc52sr8fzmm9037";
-        authors = [
-          "Simonas Kazlauskas <rdrand@kazlauskas.me>"
-        ];
-        dependencies = [
-          {
-            name = "rand_core";
-            packageId = "rand_core 0.3.1";
-            usesDefaultFeatures = false;
-          }
-        ];
-        features = {
-          "default" = [ "std" ];
-        };
-        resolvedDefaultFeatures = [ "default" "std" ];
-      };
       "redox_syscall" = rec {
         crateName = "redox_syscall";
         version = "0.2.16";
@@ -3190,7 +3197,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 1.3.2";
+            packageId = "bitflags";
           }
         ];
         
@@ -3254,16 +3261,16 @@ rec {
       };
       "rusqlite" = rec {
         crateName = "rusqlite";
-        version = "0.29.0";
+        version = "0.28.0";
         edition = "2018";
-        sha256 = "1wj12rmwa8g0bfhsk307fl84k0xcw8ji872xx3k447apdl1rv6sl";
+        sha256 = "0aj2jvlcdy1miahy6wsia50ak26q3ziynl8yx0raqffb7sy17qh1";
         authors = [
           "The rusqlite developers"
         ];
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 2.3.1";
+            packageId = "bitflags";
           }
           {
             name = "fallible-iterator";
@@ -3288,6 +3295,8 @@ rec {
         ];
         features = {
           "array" = [ "vtab" ];
+          "backup" = [ "libsqlite3-sys/min_sqlite_version_3_6_23" ];
+          "blob" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" ];
           "buildtime_bindgen" = [ "libsqlite3-sys/buildtime_bindgen" ];
           "bundled" = [ "libsqlite3-sys/bundled" "modern_sqlite" ];
           "bundled-full" = [ "modern-full" "bundled" ];
@@ -3297,69 +3306,28 @@ rec {
           "chrono" = [ "dep:chrono" ];
           "csv" = [ "dep:csv" ];
           "csvtab" = [ "csv" "vtab" ];
+          "functions" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" ];
           "in_gecko" = [ "modern_sqlite" "libsqlite3-sys/in_gecko" ];
+          "lazy_static" = [ "dep:lazy_static" ];
           "modern-full" = [ "array" "backup" "blob" "modern_sqlite" "chrono" "collation" "column_decltype" "csvtab" "extra_check" "functions" "hooks" "i128_blob" "limits" "load_extension" "serde_json" "series" "time" "trace" "unlock_notify" "url" "uuid" "vtab" "window" ];
           "modern_sqlite" = [ "libsqlite3-sys/bundled_bindings" ];
+          "release_memory" = [ "libsqlite3-sys/min_sqlite_version_3_7_16" ];
           "serde_json" = [ "dep:serde_json" ];
           "series" = [ "vtab" ];
           "session" = [ "libsqlite3-sys/session" "hooks" ];
           "sqlcipher" = [ "libsqlite3-sys/sqlcipher" ];
           "time" = [ "dep:time" ];
+          "trace" = [ "libsqlite3-sys/min_sqlite_version_3_6_23" ];
           "unlock_notify" = [ "libsqlite3-sys/unlock_notify" ];
           "url" = [ "dep:url" ];
           "uuid" = [ "dep:uuid" ];
+          "vtab" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" ];
           "wasm32-wasi-vfs" = [ "libsqlite3-sys/wasm32-wasi-vfs" ];
           "window" = [ "functions" ];
           "winsqlite3" = [ "libsqlite3-sys/winsqlite3" ];
           "with-asan" = [ "libsqlite3-sys/with-asan" ];
         };
         resolvedDefaultFeatures = [ "bundled" "modern_sqlite" ];
-      };
-      "rust-crypto" = rec {
-        crateName = "rust-crypto";
-        version = "0.2.36";
-        edition = "2015";
-        sha256 = "0aias7gh2ypj4skmh6hfsjli4fhnvcvf9s1ljjpz9m9zk79havgp";
-        libName = "crypto";
-        authors = [
-          "The Rust-Crypto Project Developers"
-        ];
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-          }
-          {
-            name = "rand";
-            packageId = "rand 0.3.23";
-          }
-          {
-            name = "rustc-serialize";
-            packageId = "rustc-serialize";
-          }
-          {
-            name = "time";
-            packageId = "time 0.1.45";
-          }
-        ];
-        buildDependencies = [
-          {
-            name = "gcc";
-            packageId = "gcc";
-          }
-        ];
-        features = {
-        };
-      };
-      "rustc-serialize" = rec {
-        crateName = "rustc-serialize";
-        version = "0.3.24";
-        edition = "2015";
-        sha256 = "1nkg3vasg7nk80ffkazizgiyv3hb1l9g3d8h17cajbkx538jiwfw";
-        authors = [
-          "The Rust Project Developers"
-        ];
-        
       };
       "rustix 0.36.14" = rec {
         crateName = "rustix";
@@ -3373,7 +3341,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 1.3.2";
+            packageId = "bitflags";
           }
           {
             name = "errno";
@@ -3485,7 +3453,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags 1.3.2";
+            packageId = "bitflags";
           }
           {
             name = "errno";
@@ -3633,6 +3601,46 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" ];
       };
+      "sha2" = rec {
+        crateName = "sha2";
+        version = "0.10.6";
+        edition = "2018";
+        sha256 = "1h5xrrv2y06kr1gsz4pwrm3lsp206nm2gjxgbf21wfrfzsavgrl2";
+        authors = [
+          "RustCrypto Developers"
+        ];
+        dependencies = [
+          {
+            name = "cfg-if";
+            packageId = "cfg-if";
+          }
+          {
+            name = "cpufeatures";
+            packageId = "cpufeatures";
+            target = { target, features }: ((target."arch" == "aarch64") || (target."arch" == "x86_64") || (target."arch" == "x86"));
+          }
+          {
+            name = "digest";
+            packageId = "digest";
+          }
+        ];
+        devDependencies = [
+          {
+            name = "digest";
+            packageId = "digest";
+            features = [ "dev" ];
+          }
+        ];
+        features = {
+          "asm" = [ "sha2-asm" ];
+          "asm-aarch64" = [ "asm" ];
+          "default" = [ "std" ];
+          "oid" = [ "digest/oid" ];
+          "sha2-asm" = [ "dep:sha2-asm" ];
+          "std" = [ "digest/std" ];
+        };
+        resolvedDefaultFeatures = [ "default" "std" ];
+      };
       "signal-hook-registry" = rec {
         crateName = "signal-hook-registry";
         version = "1.4.1";
@@ -3719,6 +3727,19 @@ rec {
           "Nikolai Vazquez"
         ];
         features = {
+        };
+      };
+      "subtle" = rec {
+        crateName = "subtle";
+        version = "2.5.0";
+        edition = "2018";
+        sha256 = "1g2yjs7gffgmdvkkq0wrrh0pxds3q0dv6dhkw9cdpbib656xdkc1";
+        authors = [
+          "Isis Lovecruft <isis@patternsinthevoid.net>"
+          "Henry de Valence <hdevalence@hdevalence.ca>"
+        ];
+        features = {
+          "default" = [ "std" "i128" ];
         };
       };
       "syn 1.0.109" = rec {
@@ -3847,43 +3868,7 @@ rec {
         ];
         
       };
-      "time 0.1.45" = rec {
-        crateName = "time";
-        version = "0.1.45";
-        edition = "2015";
-        sha256 = "0nl0pzv9yf56djy8y5dx25nka5pr2q1ivlandb3d24pksgx7ly8v";
-        authors = [
-          "The Rust Project Developers"
-        ];
-        dependencies = [
-          {
-            name = "libc";
-            packageId = "libc";
-          }
-          {
-            name = "wasi";
-            packageId = "wasi 0.10.0+wasi-snapshot-preview1";
-            target = { target, features }: (target."os" == "wasi");
-          }
-          {
-            name = "winapi";
-            packageId = "winapi";
-            target = { target, features }: target."windows";
-            features = [ "std" "minwinbase" "minwindef" "ntdef" "profileapi" "sysinfoapi" "timezoneapi" ];
-          }
-        ];
-        devDependencies = [
-          {
-            name = "winapi";
-            packageId = "winapi";
-            features = [ "std" "processthreadsapi" "winbase" ];
-          }
-        ];
-        features = {
-          "rustc-serialize" = [ "dep:rustc-serialize" ];
-        };
-      };
-      "time 0.3.21" = rec {
+      "time" = rec {
         crateName = "time";
         version = "0.3.21";
         edition = "2021";
@@ -4251,6 +4236,21 @@ rec {
         ];
         
       };
+      "typenum" = rec {
+        crateName = "typenum";
+        version = "1.16.0";
+        edition = "2018";
+        sha256 = "1fhb9iaqyjn4dzn2vl86kxjhp4xpw5gynczlnqzf4x6rjgpn2ya9";
+        build = "build/main.rs";
+        authors = [
+          "Paho Lurie-Gregg <paho@paholg.com>"
+          "Andre Bogus <bogusandre@gmail.com>"
+        ];
+        features = {
+          "scale-info" = [ "dep:scale-info" ];
+          "scale_info" = [ "scale-info/derive" ];
+        };
+      };
       "unicode-ident" = rec {
         crateName = "unicode-ident";
         version = "1.0.8";
@@ -4320,7 +4320,7 @@ rec {
           }
           {
             name = "time";
-            packageId = "time 0.3.21";
+            packageId = "time";
             optional = true;
             features = [ "formatting" "parsing" ];
           }
@@ -4386,24 +4386,7 @@ rec {
         ];
         
       };
-      "wasi 0.10.0+wasi-snapshot-preview1" = rec {
-        crateName = "wasi";
-        version = "0.10.0+wasi-snapshot-preview1";
-        edition = "2018";
-        sha256 = "07y3l8mzfzzz4cj09c8y90yak4hpsi9g7pllyzpr6xvwrabka50s";
-        authors = [
-          "The Cranelift Project Developers"
-        ];
-        features = {
-          "compiler_builtins" = [ "dep:compiler_builtins" ];
-          "core" = [ "dep:core" ];
-          "default" = [ "std" ];
-          "rustc-dep-of-std" = [ "compiler_builtins" "core" "rustc-std-workspace-alloc" ];
-          "rustc-std-workspace-alloc" = [ "dep:rustc-std-workspace-alloc" ];
-        };
-        resolvedDefaultFeatures = [ "default" "std" ];
-      };
-      "wasi 0.11.0+wasi-snapshot-preview1" = rec {
+      "wasi" = rec {
         crateName = "wasi";
         version = "0.11.0+wasi-snapshot-preview1";
         edition = "2018";
@@ -5088,7 +5071,7 @@ rec {
         features = {
           "debug" = [ "impl-debug" ];
         };
-        resolvedDefaultFeatures = [ "consoleapi" "errhandlingapi" "fileapi" "handleapi" "minwinbase" "minwindef" "ntdef" "ntsecapi" "processenv" "profileapi" "std" "sysinfoapi" "timezoneapi" "winbase" "wincon" "winerror" "winnt" "ws2ipdef" "ws2tcpip" ];
+        resolvedDefaultFeatures = [ "consoleapi" "errhandlingapi" "fileapi" "handleapi" "minwindef" "processenv" "std" "winbase" "wincon" "winerror" "winnt" "ws2ipdef" "ws2tcpip" ];
       };
       "winapi-i686-pc-windows-gnu" = rec {
         crateName = "winapi-i686-pc-windows-gnu";
