@@ -1,30 +1,11 @@
 use tokio;
 
-fn get_resource_path(path: &str) -> std::path::PathBuf {
-    let mut r = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    /* The resources are in the top level workspace, but we can't put code there, so we need to go
-     * up two levels from our manifest directory to find them.
-     */
-    r.push("../..");
-    r.push(path);
-    println!("path: {}", r.display());
-    r
-}
-
 #[tokio::test]
 /* Extract examples from the config manpage.  Examples are between .EX/.EE pairs.  Once extracted,
  * run the config parser over them to make sure they're valid.
  */
 async fn man_page_example_configs() {
-    use tokio::io::AsyncReadExt as _;
-
-    let mut contents = Default::default();
-    tokio::fs::File::open(get_resource_path("man/erbium.conf.5"))
-        .await
-        .unwrap()
-        .read_to_string(&mut contents)
-        .await
-        .unwrap();
+    let mut contents = include_str!("../../../man/erbium.conf.5");
     let mut example: String = Default::default();
     let mut in_example = false;
     let mut examples = 0;
@@ -52,15 +33,7 @@ async fn man_page_example_configs() {
 
 #[tokio::test]
 async fn validate_example_config() {
-    use tokio::io::AsyncReadExt as _;
-
-    let mut contents = Default::default();
-    tokio::fs::File::open(get_resource_path("erbium.conf.example"))
-        .await
-        .unwrap()
-        .read_to_string(&mut contents)
-        .await
-        .unwrap();
+    let mut contents = include_str!("../../../erbium.conf.example").to_string();
     // If the line is indented, replace the "#" with a " ", keeping the indentation.
     contents = contents.replace("\n#  ", "\n  ");
     // If the line is not indented, then strip the leading "# "
