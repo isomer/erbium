@@ -599,7 +599,7 @@ rec {
         ];
         
       };
-      "bitflags" = rec {
+      "bitflags 1.3.2" = rec {
         crateName = "bitflags";
         version = "1.3.2";
         edition = "2018";
@@ -613,6 +613,23 @@ rec {
           "rustc-dep-of-std" = [ "core" "compiler_builtins" ];
         };
         resolvedDefaultFeatures = [ "default" ];
+      };
+      "bitflags 2.3.1" = rec {
+        crateName = "bitflags";
+        version = "2.3.1";
+        edition = "2021";
+        sha256 = "114bi2p1rnd632c840dblx21dznijv26y18mnr3vc2sa52bgqxk7";
+        authors = [
+          "The Rust Project Developers"
+        ];
+        features = {
+          "arbitrary" = [ "dep:arbitrary" ];
+          "bytemuck" = [ "dep:bytemuck" ];
+          "compiler_builtins" = [ "dep:compiler_builtins" ];
+          "core" = [ "dep:core" ];
+          "rustc-dep-of-std" = [ "core" "compiler_builtins" ];
+          "serde" = [ "dep:serde" ];
+        };
       };
       "block-buffer" = rec {
         crateName = "block-buffer";
@@ -968,7 +985,7 @@ rec {
       };
       "erbium" = rec {
         crateName = "erbium";
-        version = "1.0.3";
+        version = "1.0.4";
         edition = "2021";
         crateBin = [
           { name = "erbium"; path = "src/main.rs"; }
@@ -1034,7 +1051,7 @@ rec {
       };
       "erbium-core" = rec {
         crateName = "erbium-core";
-        version = "1.0.3";
+        version = "1.0.4";
         edition = "2021";
         crateBin = [
           { name = "erbium-dns"; path = "src/bin/erbium-dns.rs"; }
@@ -1151,7 +1168,7 @@ rec {
       };
       "erbium-net" = rec {
         crateName = "erbium-net";
-        version = "1.0.3";
+        version = "1.0.4";
         edition = "2021";
         src = lib.cleanSourceWith { filter = sourceFilter;  src = ./crates/erbium-net; };
         authors = [
@@ -2253,9 +2270,9 @@ rec {
       };
       "libsqlite3-sys" = rec {
         crateName = "libsqlite3-sys";
-        version = "0.25.2";
+        version = "0.26.0";
         edition = "2018";
-        sha256 = "1ym7x39ihcf2s0iyd3iqk6i283kgxcrdc7hxig94cybi7p83by19";
+        sha256 = "09j3v5nhgvjdyskgwajhg9g6v3b2ij0lxiz8qqav2cxic7zjxhmg";
         authors = [
           "The rusqlite developers"
         ];
@@ -2284,19 +2301,15 @@ rec {
           "bundled-sqlcipher-vendored-openssl" = [ "bundled-sqlcipher" "openssl-sys/vendored" ];
           "bundled-windows" = [ "cc" "bundled_bindings" ];
           "cc" = [ "dep:cc" ];
-          "default" = [ "min_sqlite_version_3_6_8" ];
-          "min_sqlite_version_3_6_23" = [ "pkg-config" "vcpkg" ];
-          "min_sqlite_version_3_6_8" = [ "pkg-config" "vcpkg" ];
-          "min_sqlite_version_3_7_16" = [ "pkg-config" "vcpkg" ];
-          "min_sqlite_version_3_7_7" = [ "pkg-config" "vcpkg" ];
+          "default" = [ "min_sqlite_version_3_14_0" ];
+          "min_sqlite_version_3_14_0" = [ "pkg-config" "vcpkg" ];
           "openssl-sys" = [ "dep:openssl-sys" ];
           "pkg-config" = [ "dep:pkg-config" ];
           "preupdate_hook" = [ "buildtime_bindgen" ];
           "session" = [ "preupdate_hook" "buildtime_bindgen" ];
           "vcpkg" = [ "dep:vcpkg" ];
-          "winsqlite3" = [ "min_sqlite_version_3_7_16" ];
         };
-        resolvedDefaultFeatures = [ "bundled" "bundled_bindings" "cc" "default" "min_sqlite_version_3_6_8" "pkg-config" "vcpkg" ];
+        resolvedDefaultFeatures = [ "bundled" "bundled_bindings" "cc" "default" "min_sqlite_version_3_14_0" "pkg-config" "vcpkg" ];
       };
       "linked-hash-map" = rec {
         crateName = "linked-hash-map";
@@ -2532,7 +2545,7 @@ rec {
           }
           {
             name = "bitflags";
-            packageId = "bitflags";
+            packageId = "bitflags 1.3.2";
           }
           {
             name = "byteorder";
@@ -2646,7 +2659,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags";
+            packageId = "bitflags 1.3.2";
           }
           {
             name = "cfg-if";
@@ -2865,7 +2878,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags";
+            packageId = "bitflags 1.3.2";
             target = { target, features }: target."windows";
           }
           {
@@ -2953,7 +2966,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags";
+            packageId = "bitflags 1.3.2";
           }
           {
             name = "byteorder";
@@ -3197,7 +3210,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags";
+            packageId = "bitflags 1.3.2";
           }
         ];
         
@@ -3261,16 +3274,16 @@ rec {
       };
       "rusqlite" = rec {
         crateName = "rusqlite";
-        version = "0.28.0";
+        version = "0.29.0";
         edition = "2018";
-        sha256 = "0aj2jvlcdy1miahy6wsia50ak26q3ziynl8yx0raqffb7sy17qh1";
+        sha256 = "1wj12rmwa8g0bfhsk307fl84k0xcw8ji872xx3k447apdl1rv6sl";
         authors = [
           "The rusqlite developers"
         ];
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags";
+            packageId = "bitflags 2.3.1";
           }
           {
             name = "fallible-iterator";
@@ -3295,8 +3308,6 @@ rec {
         ];
         features = {
           "array" = [ "vtab" ];
-          "backup" = [ "libsqlite3-sys/min_sqlite_version_3_6_23" ];
-          "blob" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" ];
           "buildtime_bindgen" = [ "libsqlite3-sys/buildtime_bindgen" ];
           "bundled" = [ "libsqlite3-sys/bundled" "modern_sqlite" ];
           "bundled-full" = [ "modern-full" "bundled" ];
@@ -3306,22 +3317,17 @@ rec {
           "chrono" = [ "dep:chrono" ];
           "csv" = [ "dep:csv" ];
           "csvtab" = [ "csv" "vtab" ];
-          "functions" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" ];
           "in_gecko" = [ "modern_sqlite" "libsqlite3-sys/in_gecko" ];
-          "lazy_static" = [ "dep:lazy_static" ];
           "modern-full" = [ "array" "backup" "blob" "modern_sqlite" "chrono" "collation" "column_decltype" "csvtab" "extra_check" "functions" "hooks" "i128_blob" "limits" "load_extension" "serde_json" "series" "time" "trace" "unlock_notify" "url" "uuid" "vtab" "window" ];
           "modern_sqlite" = [ "libsqlite3-sys/bundled_bindings" ];
-          "release_memory" = [ "libsqlite3-sys/min_sqlite_version_3_7_16" ];
           "serde_json" = [ "dep:serde_json" ];
           "series" = [ "vtab" ];
           "session" = [ "libsqlite3-sys/session" "hooks" ];
           "sqlcipher" = [ "libsqlite3-sys/sqlcipher" ];
           "time" = [ "dep:time" ];
-          "trace" = [ "libsqlite3-sys/min_sqlite_version_3_6_23" ];
           "unlock_notify" = [ "libsqlite3-sys/unlock_notify" ];
           "url" = [ "dep:url" ];
           "uuid" = [ "dep:uuid" ];
-          "vtab" = [ "libsqlite3-sys/min_sqlite_version_3_7_7" ];
           "wasm32-wasi-vfs" = [ "libsqlite3-sys/wasm32-wasi-vfs" ];
           "window" = [ "functions" ];
           "winsqlite3" = [ "libsqlite3-sys/winsqlite3" ];
@@ -3341,7 +3347,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags";
+            packageId = "bitflags 1.3.2";
           }
           {
             name = "errno";
@@ -3453,7 +3459,7 @@ rec {
         dependencies = [
           {
             name = "bitflags";
-            packageId = "bitflags";
+            packageId = "bitflags 1.3.2";
           }
           {
             name = "errno";
