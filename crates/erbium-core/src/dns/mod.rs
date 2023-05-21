@@ -530,26 +530,30 @@ pub struct DnsMessage {
     pub protocol: Protocol,
 }
 
+type CookieDigest = hmac::Hmac<sha2::Sha256>;
+
 impl DnsMessage {
     // Calculate the value of the cookie based on a key.
     // This uses the client cookie, the source and dest ip addresses for generating the cookie.
-    fn calculate_cookie(&self, client: &[u8], key: &[u8]) -> crypto::mac::MacResult {
-        use crypto::mac::Mac;
+    fn calculate_cookie(&self, client: &[u8], key: &[u8]) -> CookieDigest {
+        use hmac::Mac as _;
         // I'm not a crypto expert, but I am to understand that Hmac is the safest way to use a
         // hash function to avoid length extension attacks.
-        let mut hasher = crypto::hmac::Hmac::new(crypto::sha2::Sha256::new(), key);
-        hasher.input(client);
+        let mut hasher =
+            CookieDigest::new_from_slice(key).expect("should always be able to create a key");
+        hasher.update(client);
         match self.local_ip {
-            std::net::IpAddr::V4(v4) => hasher.input(&v4.octets()),
-            std::net::IpAddr::V6(v6) => hasher.input(&v6.octets()),
+            std::net::IpAddr::V4(v4) => hasher.update(&v4.octets()),
+            std::net::IpAddr::V6(v6) => hasher.update(&v6.octets()),
         }
         use erbium_net::addr::NetAddrExt as _;
         match self.remote_addr.ip() {
-            Some(std::net::IpAddr::V4(v4)) => hasher.input(&v4.octets()),
-            Some(std::net::IpAddr::V6(v6)) => hasher.input(&v6.octets()),
+            Some(std::net::IpAddr::V4(v4)) => hasher.update(&v4.octets()),
+            Some(std::net::IpAddr::V6(v6)) => hasher.update(&v6.octets()),
             _ => unreachable!(),
         };
-        hasher.result()
+
+        hasher
     }
 
     fn validate_cookie_key(&self, key: &[u8]) -> CookieStatus {
@@ -559,8 +563,9 @@ impl DnsMessage {
             .as_ref()
             .and_then(|edns| edns.get_cookie())
         {
+            use hmac::Mac as _;
             let myserver = self.calculate_cookie(client, key);
-            if myserver == crypto::mac::MacResult::new(server) {
+            if myserver.verify_slice(server).is_ok() {
                 CookieStatus::Good
             } else {
                 CookieStatus::Bad
@@ -580,9 +585,15 @@ impl DnsMessage {
         }
     }
 
-    async fn calculate_current_cookie(&self, client: &[u8]) -> crypto::mac::MacResult {
+    async fn calculate_current_cookie(&self, client: &[u8]) -> [u8; 32] {
+        use hmac::Mac as _;
         let key = CookieKeys::get_current_key(&COOKIE_KEYS).await;
         self.calculate_cookie(client, &key)
+            .finalize()
+            .into_bytes()
+            .as_slice()
+            .try_into()
+            .unwrap()
     }
 
     async fn validate_cookie(&self) -> CookieStatus {
@@ -721,7 +732,7 @@ impl DnsListenerHandler {
             .and_then(|edns| edns.get_cookie())
         {
             let server = msg.calculate_current_cookie(client).await;
-            edns.set_cookie(client, &server.code()[..32]);
+            edns.set_cookie(client, &server);
         }
     }
 
