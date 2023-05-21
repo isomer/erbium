@@ -25,7 +25,7 @@ use netlink_packet_route::{
     RouteMessage, RtnlMessage,
 };
 use netlink_sys::TokioSocket as Socket;
-use netlink_sys::{protocols, SocketAddr};
+use netlink_sys::{protocols, AsyncSocket as _, AsyncSocketExt as _, SocketAddr};
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum LinkLayer {
@@ -332,7 +332,7 @@ impl NetLinkNetInfo {
 
         packet.serialize(&mut buf[..]);
 
-        socket.add_membership(RTNLGRP_LINK).unwrap();
+        socket.socket_mut().add_membership(RTNLGRP_LINK).unwrap();
 
         if let Err(e) = socket.send(&buf[..]).await {
             log::warn!("SEND ERROR {}", e);
@@ -370,8 +370,14 @@ impl NetLinkNetInfo {
         packet.serialize(&mut buf[..]);
 
         match address_family as u16 {
-            AF_INET => socket.add_membership(RTNLGRP_IPV4_ROUTE).unwrap(),
-            AF_INET6 => socket.add_membership(RTNLGRP_IPV6_ROUTE).unwrap(),
+            AF_INET => socket
+                .socket_mut()
+                .add_membership(RTNLGRP_IPV4_ROUTE)
+                .unwrap(),
+            AF_INET6 => socket
+                .socket_mut()
+                .add_membership(RTNLGRP_IPV6_ROUTE)
+                .unwrap(),
             _ => unreachable!(),
         }
 
@@ -409,8 +415,14 @@ impl NetLinkNetInfo {
 
         packet.serialize(&mut buf[..]);
 
-        socket.add_membership(RTNLGRP_IPV4_IFADDR).unwrap();
-        socket.add_membership(RTNLGRP_IPV6_IFADDR).unwrap();
+        socket
+            .socket_mut()
+            .add_membership(RTNLGRP_IPV4_IFADDR)
+            .unwrap();
+        socket
+            .socket_mut()
+            .add_membership(RTNLGRP_IPV6_IFADDR)
+            .unwrap();
 
         if let Err(e) = socket.send(&buf[..]).await {
             log::warn!("SEND ERROR {}", e);
@@ -449,12 +461,10 @@ impl NetLinkNetInfo {
 
     async fn run(sni: SharedNetInfo, chan: tokio::sync::mpsc::Sender<()>) {
         let mut socket = Socket::new(protocols::NETLINK_ROUTE).unwrap();
-        let _port_number = socket.bind_auto().unwrap().port_number();
         let mut seq = 1;
-        socket.connect(&SocketAddr::new(0, 0)).unwrap();
+        socket.socket_mut().connect(&SocketAddr::new(0, 0)).unwrap();
 
-        let mut receive_buffer = vec![0; 4096];
-        let mut offset = 0;
+        let mut bytes = bytes::BytesMut::with_capacity(4096);
 
         NetLinkNetInfo::send_linkdump(&mut socket, &mut seq).await;
         enum State {
@@ -466,10 +476,9 @@ impl NetLinkNetInfo {
         }
         let mut state = State::ReadingLink;
         // we set the NLM_F_DUMP flag so we expect a multipart rx_packet in response.
-        while let Ok(size) = socket.recv(&mut receive_buffer[..]).await {
+        while let Ok(()) = socket.recv(&mut bytes).await {
             loop {
-                let bytes = &receive_buffer[offset..];
-                let rx_packet = <NetlinkMessage<RtnlMessage>>::deserialize(bytes).unwrap();
+                let rx_packet = <NetlinkMessage<RtnlMessage>>::deserialize(&bytes).unwrap();
 
                 if NetLinkNetInfo::process_message(&sni, &rx_packet).await {
                     match state {
@@ -495,12 +504,6 @@ impl NetLinkNetInfo {
                         }
                         State::Done => {}
                     }
-                }
-
-                offset += rx_packet.header.length as usize;
-                if offset == size || rx_packet.header.length == 0 {
-                    offset = 0;
-                    break;
                 }
             }
         }

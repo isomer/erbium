@@ -1,3 +1,5 @@
+UNRELEASED
+   - Upgraded dependencies
 1.0.3
    - Upgraded dependencies, cleaned up new clippy warnings.
 1.0.1-rc1
