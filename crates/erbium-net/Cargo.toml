@@ -4,6 +4,7 @@ authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
 edition = "2021"
 description = "Network services for small/home networks - Low level networking abstractions"
 version.workspace = true
+license.workspace = true
 
 [dependencies]
 bytes = { version = ">=1.2" }

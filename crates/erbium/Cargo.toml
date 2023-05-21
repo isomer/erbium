@@ -23,8 +23,8 @@ static=["erbium-core/static"] # Statically link dependencies.
 async-std = { version = "1.12.0", features = ["tokio1"] }
 async-trait = { version = "0.1.42" }
 env_logger = "0.10"
-erbium-core = { path = "../erbium-core" }
-erbium-net = { path = "../erbium-net" }
+erbium-core = { path = "../erbium-core", version="1.0.4"}
+erbium-net = { path = "../erbium-net" , version="1.0.4"}
 futures = "0.3.8"
 log = "0.4"
 tokio = { version = "1.8.4", features = ["full"] }
