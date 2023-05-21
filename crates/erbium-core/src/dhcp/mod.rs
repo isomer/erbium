@@ -346,9 +346,7 @@ impl ResponseOptions {
     }
 
     pub fn to_options(&self) -> dhcppkt::DhcpOptions {
-        let mut opt = dhcppkt::DhcpOptions {
-            ..Default::default()
-        };
+        let mut opt = dhcppkt::DhcpOptions::default();
         for (k, v) in &self.option {
             if let Some(d) = v {
                 opt.other.insert(*k, d.to_vec());
@@ -375,11 +373,9 @@ fn handle_discover(
 ) -> Result<dhcppkt::Dhcp, DhcpError> {
     /* Build the default response we are about to reply with, it will be filled in later */
     let mut response: Response = Response {
-        options: ResponseOptions {
-            ..Default::default()
-        }
-        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
-        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
+        options: ResponseOptions::default()
+            .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
+            .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
         ..Default::default()
     };
 
@@ -457,11 +453,9 @@ fn handle_request(
         }
     }
     let mut response: Response = Response {
-        options: ResponseOptions {
-            ..Default::default()
-        }
-        .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
-        .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
+        options: ResponseOptions::default()
+            .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPOFFER)
+            .set_option(&dhcppkt::OPTION_SERVERID, &req.serverip),
         ..Default::default()
     };
     let base_policy = apply_policies(req, base, &mut response);
@@ -1048,7 +1042,7 @@ fn test_policy() {
     let mut resp = Default::default();
     let policies = vec![cfg];
 
-    assert_eq!(apply_policies(&req, policies.as_slice(), &mut resp), true);
+    assert!(apply_policies(&req, policies.as_slice(), &mut resp));
 }
 
 #[tokio::test]
@@ -1205,13 +1199,7 @@ async fn test_defaults() {
     assert_eq!(
         resp.options
             .get_option::<Vec<u8>>(&dhcppkt::OPTION_CAPTIVEPORTAL),
-        Some(
-            "example.com"
-                .as_bytes()
-                .iter()
-                .copied()
-                .collect::<Vec<u8>>()
-        )
+        Some("example.com".as_bytes().to_vec())
     );
     assert_eq!(
         resp.options
@@ -1281,13 +1269,7 @@ async fn test_base() {
     assert_eq!(
         resp.options
             .get_option::<Vec<u8>>(&dhcppkt::OPTION_CAPTIVEPORTAL),
-        Some(
-            "example.com"
-                .as_bytes()
-                .iter()
-                .copied()
-                .collect::<Vec<u8>>()
-        )
+        Some("example.com".as_bytes().to_vec())
     );
     assert_eq!(
         resp.options
