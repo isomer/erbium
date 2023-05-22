@@ -57,5 +57,5 @@ name = "erbium"
 path = "src/lib.rs"
 
 [build-dependencies]
-vergen = "8"
+vergen = ">=6,<=8"
 
