@@ -45,7 +45,7 @@ pub enum NDOptionValue {
 }
 
 #[cfg(fuzzing)]
-impl Arbitrary for NDOptionValue {
+impl<'a> Arbitrary<'a> for NDOptionValue {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
         use std::convert::TryFrom as _;
         match u.int_in_range(0..=5)? {
@@ -136,7 +136,7 @@ pub struct RtrAdvertisement {
 }
 
 #[cfg(fuzzing)]
-impl Arbitrary for RtrAdvertisement {
+impl<'a> Arbitrary<'a> for RtrAdvertisement {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
         Ok(Self {
             hop_limit: <_>::arbitrary(u)?,
@@ -161,7 +161,7 @@ pub struct AdvPrefix {
 }
 
 #[cfg(fuzzing)]
-impl Arbitrary for AdvPrefix {
+impl<'a> Arbitrary<'a> for AdvPrefix {
     fn arbitrary(u: &mut arbitrary::Unstructured<'_>) -> arbitrary::Result<Self> {
         Ok(AdvPrefix {
             prefixlen: u.int_in_range(0..=128)?,

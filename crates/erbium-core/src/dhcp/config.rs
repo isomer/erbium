@@ -81,6 +81,19 @@ pub struct Config {
 }
 
 impl Config {
+    /// Function to provide a dummy policy for fuzzing.
+    #[cfg(fuzzing)]
+    pub fn get_fuzzing_config() -> Self {
+        Self {
+            policies: vec![Policy {
+                match_subnet: Some(
+                    erbium_net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
+                ),
+                ..Default::default()
+            }],
+        }
+    }
+
     pub fn get_all_used_addresses(&self) -> std::collections::HashSet<std::net::Ipv4Addr> {
         self.policies
             .iter()

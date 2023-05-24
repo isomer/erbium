@@ -625,10 +625,7 @@ async fn log_pkt(request: &DHCPRequest, netinfo: &erbium_net::netinfo::SharedNet
 ///  - match-subnet: prefix4
 ///    apply-subnet: prefix4 # with the current requestip removed.
 /// ```
-pub async fn build_default_config(
-    conf: &crate::config::Config,
-    request: &DHCPRequest,
-) -> config::Policy {
+pub fn build_default_config(conf: &crate::config::Config, request: &DHCPRequest) -> config::Policy {
     let mut default_policy = config::Policy {
         match_all: true, /* We always want this policy to match. */
         ..Default::default()
@@ -710,7 +707,7 @@ pub async fn build_default_config(
     default_policy
 }
 
-pub async fn handle_pkt(
+pub fn handle_pkt(
     pools: &mut pool::Pool,
     request: &DHCPRequest,
     serverids: ServerIds,
@@ -718,11 +715,11 @@ pub async fn handle_pkt(
 ) -> Result<dhcppkt::Dhcp, DhcpError> {
     match request.pkt.options.get_messagetype() {
         Some(dhcppkt::DHCPDISCOVER) => {
-            let base = [build_default_config(conf, request).await];
+            let base = [build_default_config(conf, request)];
             handle_discover(pools, request, &serverids, &base, conf)
         }
         Some(dhcppkt::DHCPREQUEST) => {
-            let base = [build_default_config(conf, request).await];
+            let base = [build_default_config(conf, request)];
             handle_request(pools, request, &serverids, &base, conf)
         }
         Some(x) => Err(DhcpError::UnknownMessageType(x)),
@@ -840,9 +837,7 @@ impl DhcpService {
                 &request,
                 get_serverids(&self.serverids).await,
                 &lockedconf,
-            )
-            .await
-            {
+            ) {
                 Err(e) => {
                     log::warn!(
                         "{}: Failed to handle {}: {}",

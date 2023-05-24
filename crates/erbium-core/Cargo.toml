@@ -13,14 +13,14 @@ version.workspace = true
 full=["dhcp", "radv", "http", "dns"]
 default=["dhcp", "radv", "http", "dns"]
 dhcp=[]
-dns=[] # Partially complete, not ready for use.
+dns=[]
 radv=[]
 http=["hyper", "dhcp"] # Currently can't compile http without dhcp.
 static=["rusqlite/bundled"] # Statically link dependencies.
-fuzzing=["arbitrary"] # add arbitrary dependancy.
+fuzzing=["dep:arbitrary"] # add arbitrary dependancy.
 
 [dependencies]
-arbitrary = { version = "0.4.7", features = ["derive"], optional=true}
+arbitrary = { version = "1.1", features = ["derive"], optional=true}
 async-trait = { version = "0.1.42" }
 byteorder = "1.4.3"
 bytes = "1.0"

@@ -6,17 +6,9 @@ fuzz_target!(|data: &[u8]| {
     let serverids = std::collections::HashSet::new();
 
     let cfg = erbium::config::Config {
-        dhcp: erbium::dhcp::config::Config {
-            policies: vec![erbium::dhcp::config::Policy {
-                match_subnet: Some(
-                    erbium_net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap(),
-                ),
-                ..Default::default()
-            }],
-        },
+        dhcp: erbium::dhcp::config::Config::get_fuzzing_config(),
         ..Default::default()
     };
-
     if let Ok(pkt) = erbium::dhcp::dhcppkt::parse(data) {
         let request = erbium::dhcp::DHCPRequest {
             pkt,
@@ -26,7 +18,7 @@ fuzz_target!(|data: &[u8]| {
             if_router: None,
         };
 
-        if let Ok(reply) = erbium::dhcp::handle_pkt(&mut pools, &request, serverids, &cfg).await {
+        if let Ok(reply) = erbium::dhcp::handle_pkt(&mut pools, &request, serverids, &cfg) {
             let _ = reply.serialise();
         }
     }

@@ -1,7 +1,6 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 extern crate erbium;
-use libfuzzer_sys::arbitrary::Arbitrary as _;
 
 fuzz_target!(|pkt: erbium::dns::dnspkt::DNSPkt| {
     let d1 = pkt.serialise();
