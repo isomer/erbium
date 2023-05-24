@@ -784,6 +784,7 @@ pub struct Config {
     pub addresses: Vec<Prefix>,
     pub listeners: Vec<NetAddr>,
     pub dns_listeners: AddressType,
+    #[cfg(feature = "dns")]
     pub dns_routes: Vec<crate::dns::config::Route>,
     pub acls: Vec<crate::acl::Acl>,
 }
@@ -826,6 +827,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut addresses = None;
         let mut listeners = None;
         let mut dns_listeners = None;
+        #[cfg(feature = "dns")]
         let mut dns_routes = None;
         let mut default_listen_style = DefaultAddressType::Unspecified;
         let mut acls = None;
@@ -876,7 +878,9 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                     acls = parse_array("acls", s, crate::acl::parse_acl)?;
                 }
                 (Some("dns-routes"), s) => {
+                    #[cfg(feature = "dns")] {
                     dns_routes = crate::dns::config::parse_dns_routes("dns-routes", s)?;
+                    }
                 }
                 (Some(x), _) => {
                     return Err(Error::InvalidConfig(format!(
@@ -911,6 +915,7 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                 }
                 DefaultAddressType::Interface => AddressType::BindInterface,
             }),
+            #[cfg(feature = "dns")]
             dns_routes: dns_routes.unwrap_or_default(),
             captive_portal,
             listeners: listeners.unwrap_or_else(|| {
