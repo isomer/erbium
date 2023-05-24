@@ -19,6 +19,7 @@
 
 use futures::StreamExt as _;
 use log::{error, info};
+use tokio::task::JoinHandle;
 
 use erbium::*;
 
@@ -68,7 +69,7 @@ async fn go() -> Result<(), Error> {
         .map_err(|e| Error::Config(config_file.to_path_buf(), e))?;
 
     /* Initialise each of the services, and record them */
-    let mut services = futures::stream::FuturesUnordered::new();
+    let mut services = futures::stream::FuturesUnordered::<JoinHandle<Result<(), String>>>::new();
     #[cfg(feature = "dns")]
     {
         let dns = dns::DnsService::new(conf.clone(), &netinfo)
@@ -100,7 +101,7 @@ async fn go() -> Result<(), Error> {
 
         services.push(tokio::spawn(async move { radv.run().await }));
     }
-    #[cfg(feature = "http")]
+    #[cfg(all(feature = "http", feature = "dhcp"))]
     http::run(dhcp, conf.clone())
         .await
         .map_err(|x| Error::Service(x.to_string()))?;
