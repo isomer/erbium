@@ -167,15 +167,16 @@ rec {
       };
       "arbitrary" = rec {
         crateName = "arbitrary";
-        version = "0.4.7";
+        version = "1.3.0";
         edition = "2018";
-        sha256 = "0sa55cynafwzvlhyhfpm3vmi2fydj3ipdj5yfbaif7l56cixfmfv";
+        sha256 = "0km5cj0sxfzv863blfjpz49mlikaxbaslyzk463i9jn1fgzril72";
         authors = [
           "The Rust-Fuzz Project Developers"
           "Nick Fitzgerald <fitzgen@gmail.com>"
           "Manish Goregaokar <manishsmail@gmail.com>"
           "Simonas Kazlauskas <arbitrary@kazlauskas.me>"
           "Brian L. Troutwine <brian@troutwine.us>"
+          "Corey Farwell <coreyf@rwell.org>"
         ];
         dependencies = [
           {
@@ -873,15 +874,16 @@ rec {
       };
       "derive_arbitrary" = rec {
         crateName = "derive_arbitrary";
-        version = "0.4.7";
-        edition = "2018";
-        sha256 = "1rp0z4k0j5ip0bx6dssg97l4q6bakhf6lm5h1lpr3p3kwjsi585i";
+        version = "1.3.0";
+        edition = "2021";
+        sha256 = "1dy8pmv7d8diqhbh1b88v8q5g0inwkgb465877jqimbjqjgfpkgk";
         procMacro = true;
         authors = [
           "The Rust-Fuzz Project Developers"
           "Nick Fitzgerald <fitzgen@gmail.com>"
           "Manish Goregaokar <manishsmail@gmail.com>"
           "Andre Bogus <bogusandre@gmail.com>"
+          "Corey Farwell <coreyf@rwell.org>"
         ];
         dependencies = [
           {
@@ -895,7 +897,7 @@ rec {
           {
             name = "syn";
             packageId = "syn 1.0.109";
-            features = [ "derive" ];
+            features = [ "derive" "parsing" ];
           }
         ];
         
@@ -1156,15 +1158,14 @@ rec {
           }
         ];
         features = {
-          "arbitrary" = [ "dep:arbitrary" ];
           "default" = [ "dhcp" "radv" "http" "dns" ];
           "full" = [ "dhcp" "radv" "http" "dns" ];
-          "fuzzing" = [ "arbitrary" ];
+          "fuzzing" = [ "dep:arbitrary" ];
           "http" = [ "hyper" "dhcp" ];
           "hyper" = [ "dep:hyper" ];
           "static" = [ "rusqlite/bundled" ];
         };
-        resolvedDefaultFeatures = [ "arbitrary" "default" "dhcp" "dns" "full" "fuzzing" "http" "hyper" "radv" "static" ];
+        resolvedDefaultFeatures = [ "default" "dhcp" "dns" "full" "fuzzing" "http" "hyper" "radv" "static" ];
       };
       "erbium-net" = rec {
         crateName = "erbium-net";
