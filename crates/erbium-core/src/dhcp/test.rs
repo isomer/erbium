@@ -136,9 +136,7 @@ async fn test_handle_pkt() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
-    dhcp::handle_pkt(&mut p, &request, serverids, &conf)
-        .await
-        .expect("Failed to handle request");
+    dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
 }
 
 #[test]
@@ -468,9 +466,8 @@ async fn offer_required() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
-    let reply = dhcp::handle_pkt(&mut p, &request, serverids, &conf)
-        .await
-        .expect("Failed to handle request");
+    let reply =
+        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
     assert_eq!(reply.op, dhcppkt::OP_BOOTREPLY);
     assert_eq!(reply.htype, dhcppkt::HWTYPE_ETHERNET);
     assert_eq!(reply.hlen, 6);
@@ -521,9 +518,8 @@ async fn ack_required() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
-    let reply = dhcp::handle_pkt(&mut p, &request, serverids, &conf)
-        .await
-        .expect("Failed to handle request");
+    let reply =
+        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
     assert_eq!(reply.op, dhcppkt::OP_BOOTREPLY);
     assert_eq!(reply.htype, dhcppkt::HWTYPE_ETHERNET);
     assert_eq!(reply.hlen, 6);
@@ -578,9 +574,8 @@ async fn test_renew_unknown() {
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     serverids.insert(SERVER_IP);
     let conf = mk_default_config();
-    let reply = dhcp::handle_pkt(&mut p, &request, serverids, &conf)
-        .await
-        .expect("Failed to handle request");
+    let reply =
+        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect("Failed to handle request");
     assert_eq!(reply.yiaddr, EXAMPLE_IP2);
 }
 
@@ -606,7 +601,6 @@ async fn test_full() {
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPDISCOVER);
 
     let offer = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
-        .await
         .expect("Failed to handle request");
 
     serverids.insert(offer.options.get_serverid().unwrap());
@@ -625,7 +619,6 @@ async fn test_full() {
         .set_option(&dhcppkt::OPTION_ADDRESSREQUEST, &offer.yiaddr);
 
     let ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
-        .await
         .expect("Failed to handle request");
 
     assert_eq!(ack.options.get_messagetype(), Some(dhcppkt::DHCPACK));
@@ -643,7 +636,6 @@ async fn test_full() {
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPREQUEST);
     /* no server id */
     let ack = dhcp::handle_pkt(&mut p, &request, serverids.clone(), &conf)
-        .await
         .expect("Failed to handle request");
     assert_eq!(ack.options.get_messagetype(), Some(dhcppkt::DHCPACK));
     assert_eq!(ack.yiaddr, offer.yiaddr); /* Did we get back the same address? */
@@ -659,9 +651,8 @@ async fn test_full() {
         .set_option(&dhcppkt::OPTION_MSGTYPE, &dhcppkt::DHCPRELEASE);
     /* no server id */
     /* release is not supported, so we expect an error here.  But we shouldn't crash */
-    let _ack = dhcp::handle_pkt(&mut p, &request, serverids, &conf)
-        .await
-        .expect_err("Failed to handle request");
+    let _ack =
+        dhcp::handle_pkt(&mut p, &request, serverids, &conf).expect_err("Failed to handle request");
 }
 
 #[tokio::test]

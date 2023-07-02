@@ -1178,7 +1178,7 @@ async fn test_defaults() {
         captive_portal: Some("example.com".into()),
         ..test::mk_default_config()
     };
-    let base = [build_default_config(&conf, &pkt).await];
+    let base = [build_default_config(&conf, &pkt)];
     println!("base={:?}", base);
     let resp =
         handle_discover(&mut p, &pkt, &serverids, &base, &conf).expect("Failed to handle request");
@@ -1239,7 +1239,7 @@ async fn test_base() {
         },
         ..Default::default()
     };
-    let base = build_default_config(&conf, &pkt).await;
+    let base = build_default_config(&conf, &pkt);
     /* The generated policy should not allocate 192.0.2.3, because that is allocated in the
      * custom dhcp policy provided.
      */
@@ -1286,7 +1286,7 @@ addresses: [192.0.2.53/24]
     .unwrap();
 
     let pkt = test::mk_dhcp_request();
-    let base = build_default_config(&*conf.read().await, &pkt).await;
+    let base = build_default_config(&*conf.read().await, &pkt);
 
     let network = erbium_net::Ipv4Subnet::new("192.0.2.0".parse().unwrap(), 24).unwrap();
 

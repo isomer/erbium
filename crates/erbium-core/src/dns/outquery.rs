@@ -407,7 +407,7 @@ pub struct OutQuery {
 impl OutQuery {
     pub fn new() -> Self {
         OutQuery {
-            rng: Arc::new(Mutex::new(Cell::new(rand::rngs::OsRng::default()))),
+            rng: Arc::new(Mutex::new(Cell::new(rand::rngs::OsRng))),
         }
     }
 

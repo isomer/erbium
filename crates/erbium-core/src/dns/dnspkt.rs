@@ -1104,7 +1104,6 @@ impl DNSPkt {
             ret.splice(6..7, ancount.to_be_bytes().iter().copied());
             ret.splice(8..9, nscount.to_be_bytes().iter().copied());
             ret.splice(10..11, adcount.to_be_bytes().iter().copied());
-        } else {
         }
 
         ret

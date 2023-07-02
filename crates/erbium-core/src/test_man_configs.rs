@@ -5,7 +5,7 @@ use tokio;
  * run the config parser over them to make sure they're valid.
  */
 async fn man_page_example_configs() {
-    let mut contents = include_str!("../../../man/erbium.conf.5");
+    let contents = include_str!("../../../man/erbium.conf.5");
     let mut example: String = Default::default();
     let mut in_example = false;
     let mut examples = 0;

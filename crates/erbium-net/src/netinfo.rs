@@ -25,6 +25,12 @@ use netlink_packet_route::{constants::*, AddressMessage, LinkMessage, RouteMessa
 use netlink_sys::TokioSocket as Socket;
 use netlink_sys::{protocols, AsyncSocket as _, AsyncSocketExt as _, SocketAddr};
 
+#[cfg(not(test))]
+use log::{trace, warn};
+
+#[cfg(test)]
+use {println as trace, println as warn};
+
 #[derive(Clone, PartialEq, Eq)]
 pub enum LinkLayer {
     Ethernet([u8; 6]),
@@ -138,7 +144,7 @@ impl NetLinkNetInfo {
             ARPHRD_LOOPBACK => LinkLayer::None,
             ARPHRD_SIT => LinkLayer::None, // Actually this is a IpAddr, but we don't do DHCP over it, so...
             l => {
-                log::warn!("Unknown Linklayer: {:?}", l);
+                warn!("Unknown Linklayer: {:?}", l);
                 LinkLayer::None
             }
         }
@@ -168,7 +174,7 @@ impl NetLinkNetInfo {
              */
             ii.addresses.push(ifaddr);
             let (ip, prefixlen) = ifaddr;
-            log::trace!(
+            trace!(
                 "Found addr {}/{} for {}(#{}), now {:?}",
                 ip,
                 prefixlen,
@@ -186,7 +192,7 @@ impl NetLinkNetInfo {
         let ii = ni.intf.get_mut(&ifindex).unwrap(); // TODO: Error?
         ii.addresses.retain(|&x| x != ifaddr);
         let (ip, prefixlen) = ifaddr;
-        log::trace!(
+        trace!(
             "Lost addr {}/{} for {}(#{}), now {:?}",
             ip,
             prefixlen,
@@ -232,7 +238,7 @@ impl NetLinkNetInfo {
             flags: IfFlags(ifflags),
         };
 
-        log::trace!(
+        trace!(
             "Found new interface {}(#{}) {:?} ({:?})",
             ifinfo.name,
             ifidx,
@@ -292,14 +298,14 @@ impl NetLinkNetInfo {
 
     async fn process_newroute(sni: &SharedNetInfo, route: &RouteMessage) {
         if let Some(ri) = NetLinkNetInfo::decode_route(route) {
-            log::trace!("New Route: {}", ri);
+            trace!("New Route: {}", ri);
             sni.0.write().await.routeinfo.push(ri);
         }
     }
 
     async fn process_delroute(sni: &SharedNetInfo, route: &RouteMessage) {
         if let Some(ri) = NetLinkNetInfo::decode_route(route) {
-            log::trace!("Del Route: {}", ri);
+            trace!("Del Route: {}", ri);
             /* We basically assume there will only ever be one route for each prefix.
              * We'd have to be a lot more careful if we were to support multiple routes to a
              * particular prefix
@@ -332,7 +338,7 @@ impl NetLinkNetInfo {
         socket.socket_mut().add_membership(RTNLGRP_LINK).unwrap();
 
         if let Err(e) = socket.send(&buf[..]).await {
-            log::warn!("SEND ERROR {}", e);
+            warn!("SEND ERROR {}", e);
         }
     }
 
@@ -371,7 +377,7 @@ impl NetLinkNetInfo {
         }
 
         if let Err(e) = socket.send(&buf[..]).await {
-            log::warn!("SEND ERROR {}", e);
+            warn!("SEND ERROR {}", e);
         }
     }
 
@@ -409,7 +415,7 @@ impl NetLinkNetInfo {
             .unwrap();
 
         if let Err(e) = socket.send(&buf[..]).await {
-            log::warn!("SEND ERROR {}", e);
+            warn!("SEND ERROR {}", e);
         }
     }
 
@@ -437,7 +443,7 @@ impl NetLinkNetInfo {
             }
             NetlinkPayload::Done => true,
             e => {
-                log::warn!("Unknown: {:?}", e);
+                warn!("Unknown: {:?}", e);
                 false
             }
         }
@@ -447,8 +453,6 @@ impl NetLinkNetInfo {
         let mut socket = Socket::new(protocols::NETLINK_ROUTE).unwrap();
         let mut seq = 1;
         socket.socket_mut().connect(&SocketAddr::new(0, 0)).unwrap();
-
-        let mut bytes = bytes::BytesMut::with_capacity(4096);
 
         NetLinkNetInfo::send_linkdump(&mut socket, &mut seq).await;
         enum State {
@@ -460,34 +464,34 @@ impl NetLinkNetInfo {
         }
         let mut state = State::ReadingLink;
         // we set the NLM_F_DUMP flag so we expect a multipart rx_packet in response.
-        while let Ok(()) = socket.recv(&mut bytes).await {
-            loop {
-                let rx_packet = <NetlinkMessage<RtnlMessage>>::deserialize(&bytes).unwrap();
+        while let Ok((pkt, _)) = socket.recv_from_full().await {
+            let rx_packet = <NetlinkMessage<RtnlMessage>>::deserialize(&pkt).unwrap();
 
-                if NetLinkNetInfo::process_message(&sni, &rx_packet).await {
-                    match state {
-                        State::ReadingLink => {
-                            NetLinkNetInfo::send_addrdump(&mut socket, &mut seq).await;
-                            state = State::ReadingAddr
-                        }
-                        State::ReadingAddr => {
-                            NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET as u8)
-                                .await;
-                            state = State::ReadingRoute4
-                        }
-                        State::ReadingRoute4 => {
-                            NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET6 as u8)
-                                .await;
-                            state = State::ReadingRoute6
-                        }
-                        State::ReadingRoute6 => {
-                            // Try and inform anyone listening that we have completed.
-                            // But if it fails, don't worry, we'll send another one soonish.
-                            let _ = chan.try_send(());
-                            state = State::Done
-                        }
-                        State::Done => {}
+            if NetLinkNetInfo::process_message(&sni, &rx_packet).await {
+                match state {
+                    State::ReadingLink => {
+                        trace!("Finished Link");
+                        NetLinkNetInfo::send_addrdump(&mut socket, &mut seq).await;
+                        state = State::ReadingAddr
                     }
+                    State::ReadingAddr => {
+                        trace!("Finished Addr");
+                        NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET as u8).await;
+                        state = State::ReadingRoute4
+                    }
+                    State::ReadingRoute4 => {
+                        trace!("Finished Route4");
+                        NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET6 as u8).await;
+                        state = State::ReadingRoute6
+                    }
+                    State::ReadingRoute6 => {
+                        // Try and inform anyone listening that we have completed.
+                        // But if it fails, don't worry, we'll send another one soonish.
+                        trace!("Finished Route6");
+                        let _ = chan.try_send(());
+                        state = State::Done
+                    }
+                    State::Done => {}
                 }
             }
         }
@@ -737,4 +741,12 @@ async fn test_interface() {
         ni.get_linkaddr_by_ifidx(IFIDX).await,
         Some(LinkLayer::Ethernet([0x00, 0x53, 0x00, 0x00, 0x00, 0x01]))
     );
+}
+
+#[tokio::test]
+async fn test_netinfo_startup() {
+    // Initialise netinfo and make sure it doesn't block indefinately on startup.
+    println!("about to start");
+    let _ = SharedNetInfo::new().await;
+    println!("new complete");
 }

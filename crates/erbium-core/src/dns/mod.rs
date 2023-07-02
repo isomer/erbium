@@ -49,7 +49,7 @@ impl CookieKeys {
         use rand::distributions::Distribution as _;
         use rand::Rng as _;
         use tokio::time::{Duration, Instant};
-        let mut rng = rand::rngs::OsRng::default();
+        let mut rng = rand::rngs::OsRng;
         Self {
             next_refresh: Instant::now()
                 + rand::distributions::Uniform::new(
@@ -75,7 +75,7 @@ impl CookieKeys {
             // TODO: This only does one rotation, it's possibly both keys have expired, in which
             // case we should rotate both.
             let mut cookies = s.write().await;
-            let mut rng = rand::rngs::OsRng::default();
+            let mut rng = rand::rngs::OsRng;
             *cookies = Self {
                 next_refresh: Instant::now()
                     + rand::distributions::Uniform::new(
