@@ -1,2 +1,3 @@
 { nixpkgs ? import <nixpkgs> {} }:
-(nixpkgs.callPackage ./Cargo.nix { inherit nixpkgs; }).rootCrate.build
+let cargo_nix = import ./Cargo.nix { pkgs = nixpkgs; };
+in cargo_nix.workspaceMembers.erbium.build
