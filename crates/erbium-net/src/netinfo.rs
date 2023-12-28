@@ -465,33 +465,37 @@ impl NetLinkNetInfo {
         let mut state = State::ReadingLink;
         // we set the NLM_F_DUMP flag so we expect a multipart rx_packet in response.
         while let Ok((pkt, _)) = socket.recv_from_full().await {
-            let rx_packet = <NetlinkMessage<RtnlMessage>>::deserialize(&pkt).unwrap();
+            let mut offset = 0;
+            while offset < pkt.len() {
+                let rx_packet = <NetlinkMessage<RtnlMessage>>::deserialize(&pkt[offset..]).unwrap();
+                offset += rx_packet.header.length as usize;
 
-            if NetLinkNetInfo::process_message(&sni, &rx_packet).await {
-                match state {
-                    State::ReadingLink => {
-                        trace!("Finished Link");
-                        NetLinkNetInfo::send_addrdump(&mut socket, &mut seq).await;
-                        state = State::ReadingAddr
+                if NetLinkNetInfo::process_message(&sni, &rx_packet).await {
+                    match state {
+                        State::ReadingLink => {
+                            trace!("Finished Link");
+                            NetLinkNetInfo::send_addrdump(&mut socket, &mut seq).await;
+                            state = State::ReadingAddr
+                        }
+                        State::ReadingAddr => {
+                            trace!("Finished Addr");
+                            NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET as u8).await;
+                            state = State::ReadingRoute4
+                        }
+                        State::ReadingRoute4 => {
+                            trace!("Finished Route4");
+                            NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET6 as u8).await;
+                            state = State::ReadingRoute6
+                        }
+                        State::ReadingRoute6 => {
+                            // Try and inform anyone listening that we have completed.
+                            // But if it fails, don't worry, we'll send another one soonish.
+                            trace!("Finished Route6");
+                            let _ = chan.try_send(());
+                            state = State::Done
+                        }
+                        State::Done => {}
                     }
-                    State::ReadingAddr => {
-                        trace!("Finished Addr");
-                        NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET as u8).await;
-                        state = State::ReadingRoute4
-                    }
-                    State::ReadingRoute4 => {
-                        trace!("Finished Route4");
-                        NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET6 as u8).await;
-                        state = State::ReadingRoute6
-                    }
-                    State::ReadingRoute6 => {
-                        // Try and inform anyone listening that we have completed.
-                        // But if it fails, don't worry, we'll send another one soonish.
-                        trace!("Finished Route6");
-                        let _ = chan.try_send(());
-                        state = State::Done
-                    }
-                    State::Done => {}
                 }
             }
         }
