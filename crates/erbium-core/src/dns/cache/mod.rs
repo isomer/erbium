@@ -48,6 +48,8 @@ lazy_static::lazy_static! {
 struct CacheKey {
     qname: dnspkt::Domain,
     qtype: dnspkt::Type,
+    edns_do: bool,
+    cd: bool,
 }
 
 struct CacheValue {
@@ -257,17 +259,18 @@ impl CacheHandler {
         msg: &super::DnsMessage,
         addr: std::net::SocketAddr,
     ) -> Result<dnspkt::DNSPkt, Error> {
-        let q = &msg.in_query.question;
         /* Only do caching for IN queries */
-        if q.qclass != dnspkt::CLASS_IN {
+        if msg.in_query.question.qclass != dnspkt::CLASS_IN {
             log::trace!("[{:x}] Not caching non-IN query", msg.in_query.qid);
             DNS_CACHE.with_label_values(&["UNCACHABLE_CLASS"]).inc();
             return self.next.handle_query(msg, addr).await;
         }
 
         let ck = CacheKey {
-            qname: q.qdomain.clone(),
-            qtype: q.qtype,
+            qname: msg.in_query.question.qdomain.clone(),
+            qtype: msg.in_query.question.qtype,
+            edns_do: msg.in_query.edns_do,
+            cd: msg.in_query.cd,
         };
 
         {

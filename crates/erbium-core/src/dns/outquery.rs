@@ -372,26 +372,26 @@ impl TcpNameserver {
     }
 }
 
-fn create_outquery(id: u16, q: &dnspkt::Question) -> dnspkt::DNSPkt {
+fn create_outquery(id: u16, in_query: &dnspkt::DNSPkt) -> dnspkt::DNSPkt {
     dnspkt::DNSPkt {
         qid: id,
-        rd: true,
-        tc: false,
-        aa: false,
-        qr: false,
+        rd: true,  /* recursion desired */
+        tc: false, /* truncated */
+        aa: false, /* authoritative answer */
+        qr: false, /* query / response - true if response */
         opcode: dnspkt::OPCODE_QUERY,
 
-        cd: false,
-        ad: false,
-        ra: false,
+        cd: false, /* checking disabled */
+        ad: false, /* authenticated data */
+        ra: false, /* recursion available */
         rcode: dnspkt::NOERROR,
 
-        bufsize: 4096,
+        bufsize: 4096, /* maybe this should be copied from the in query? */
 
         edns_ver: Some(0),
-        edns_do: false,
+        edns_do: in_query.edns_do,
 
-        question: q.clone(),
+        question: in_query.question.clone(),
         answer: vec![],
         nameserver: vec![],
         additional: vec![],
@@ -554,9 +554,8 @@ impl OutQuery {
         msg: &super::DnsMessage,
         addr: std::net::SocketAddr,
     ) -> Result<dnspkt::DNSPkt, Error> {
-        let q = &msg.in_query.question;
         let id = self.rng.lock().await.get().next_u32() as u16;
-        let oq = create_outquery(id, q);
+        let oq = create_outquery(id, &msg.in_query);
 
         let out_reply;
         match msg.protocol {
