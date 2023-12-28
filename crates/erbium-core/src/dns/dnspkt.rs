@@ -282,7 +282,11 @@ impl fmt::Display for Question {
 
 impl fmt::Debug for Question {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Question({})", self)
+        write!(
+            f,
+            "Question({:?} {:?} {:?})",
+            self.qdomain, self.qclass, self.qtype
+        )
     }
 }
 
@@ -1025,7 +1029,7 @@ impl DNSPkt {
         let mut additional = self.additional.clone();
 
         if self.edns.is_some() {
-            let edns = self.edns.clone().unwrap_or_else(EdnsData::new);
+            let edns = self.edns.clone().unwrap_or_default();
 
             additional.push(RR {
                 domain: Domain::from(vec![]),
