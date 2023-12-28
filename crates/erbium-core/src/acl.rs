@@ -83,8 +83,7 @@ impl Acl {
                 .unwrap_or(true);
         /* Check that the addr is unix */
         if let Some(unix) = self.unix {
-            use erbium_net::addr::NetAddrExt as _;
-            ok = ok && attr.addr.to_unix_addr().is_some() == unix;
+            ok = ok && attr.addr.as_unix_addr().is_some() == unix;
         }
 
         if ok {
