@@ -24,7 +24,7 @@ jobs:
       run: |
         nix-env -iA cachix -f https://cachix.org/api/v1/install
         $HOME/.nix-profile/bin/cachix use eigenvalue
-        nix-env -i -f https://github.com/kolloch/crate2nix/archive/refs/tags/0.10.0.tar.gz
+        nix-env -i -f https://github.com/cargo2nix/cargo2nix/archive/refs/tags/v0.11.0.tar.gz
 
     - name: Run crate2nix
       run: |
