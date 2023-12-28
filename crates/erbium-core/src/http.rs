@@ -271,7 +271,6 @@ pub async fn run(
 ) -> Result<(), Error> {
     // Set up all the listeners and listen on them.
     for addr in &conf.read().await.listeners {
-        use erbium_net::addr::NetAddrExt as _;
         use nix::sys::socket::{AddressFamily::*, SockaddrLike as _};
         use tokio::net::{TcpListener, UnixListener};
         match addr.family() {
@@ -292,7 +291,7 @@ pub async fn run(
                 tokio::task::spawn(run_listener(conf.clone(), dhcp.clone(), listener));
             }
             Some(Unix) => {
-                let s = addr.to_unix_addr().unwrap();
+                let s = addr.as_unix_addr().unwrap();
                 let listener;
                 if let Some(path) = s.path() {
                     loop {

@@ -44,7 +44,7 @@ impl<X: nix::sys::socket::SockaddrLike> ToNetAddr for X {
     fn to_net_addr(&self) -> NetAddr {
         use nix::sys::socket::SockaddrLike;
         unsafe {
-            NetAddr::from_raw(<Self as SockaddrLike>::as_ptr(self), Some(Self::size())).unwrap()
+            NetAddr::from_raw(<Self as SockaddrLike>::as_ptr(self), Some(self.len())).unwrap()
         }
     }
 }
@@ -96,7 +96,6 @@ impl WithPort for std::net::IpAddr {
 // So this trait will be used on exactly one type - NetAddr.
 pub trait NetAddrExt {
     fn to_std_socket_addr(&self) -> Option<std::net::SocketAddr>;
-    fn to_unix_addr(&self) -> Option<UnixAddr>;
     fn ip(&self) -> Option<std::net::IpAddr>;
     fn port(&self) -> Option<u16>;
 }
@@ -107,15 +106,6 @@ impl NetAddrExt for NetAddr {
             Some(std::net::SocketAddrV4::from(v4).into())
         } else if let Some(&v6) = self.as_sockaddr_in6() {
             Some(std::net::SocketAddrV6::from(v6).into())
-        } else {
-            None
-        }
-    }
-    // unixaddr is difficult to create from just a sockaddr. (https://github.com/nix-rust/nix/issues/1800)
-    fn to_unix_addr(&self) -> Option<UnixAddr> {
-        use nix::sys::socket::SockaddrLike;
-        if self.family() == Some(nix::sys::socket::AddressFamily::Unix) {
-            unsafe { UnixAddr::from_raw(<Self as SockaddrLike>::as_ptr(self), Some(Self::size())) }
         } else {
             None
         }
