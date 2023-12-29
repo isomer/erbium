@@ -121,16 +121,14 @@ fn test_prefix() {
 
 #[test]
 fn test_contains() {
-    assert_eq!(
+    assert!(
         Ipv4Subnet::new("192.168.0.128".parse().unwrap(), 25)
             .unwrap()
-            .contains("192.168.0.200".parse().unwrap()),
-        true
+            .contains("192.168.0.200".parse().unwrap())
     );
-    assert_eq!(
-        Ipv4Subnet::new("192.168.0.128".parse().unwrap(), 25)
+    assert!(
+        !Ipv4Subnet::new("192.168.0.128".parse().unwrap(), 25)
             .unwrap()
-            .contains("192.168.0.100".parse().unwrap()),
-        false
+            .contains("192.168.0.100".parse().unwrap())
     );
 }

@@ -1,4 +1,4 @@
-use tokio;
+
 
 #[tokio::test]
 /* Extract examples from the config manpage.  Examples are between .EX/.EE pairs.  Once extracted,
@@ -10,7 +10,7 @@ async fn man_page_example_configs() {
     let mut in_example = false;
     let mut examples = 0;
 
-    for line in contents.split("\n") {
+    for line in contents.split('\n') {
         if line == ".EX" {
             example = "".into();
             in_example = true;

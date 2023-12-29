@@ -106,7 +106,7 @@ fn test_tokens() {
     let mut bucket = GenericTokenBucket::new();
     bucket.empty::<RealTimeClock>();
     bucket.refill::<RealTimeClock>(20);
-    assert_eq!(bucket.check::<RealTimeClock>(10), true);
+    assert!(bucket.check::<RealTimeClock>(10));
     bucket.deplete::<RealTimeClock>(40);
-    assert_eq!(bucket.check::<RealTimeClock>(10), false);
+    assert!(!bucket.check::<RealTimeClock>(10));
 }

@@ -58,7 +58,7 @@ fn test_router_solitication_reserved_must_be_ignored() {
         133u8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 253, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
         0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
     ];
-    assert_eq!(icmppkt::parse(&pkt).is_ok(), true);
+    assert!(icmppkt::parse(&pkt).is_ok());
 }
 
 /* Section 4.1: The link-layer address of the sender, if known.  MUST NOT be included if the Source
@@ -76,7 +76,7 @@ fn test_solicitations_may_contain_unknown_options() {
         133u8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 253, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
         0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
     ];
-    assert_eq!(icmppkt::parse(&pkt).is_ok(), true);
+    assert!(icmppkt::parse(&pkt).is_ok());
 }
 
 /* Section 4.2: Source Address MUST be the link-local address assigned to the interface from which
@@ -135,7 +135,7 @@ fn test_reserved_is_zero() {
 #[test]
 fn test_zero_length_option() {
     let pkt = [133u8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 253, 0x0];
-    assert_eq!(icmppkt::parse(&pkt).is_ok(), false);
+    assert!(!icmppkt::parse(&pkt).is_ok());
 }
 
 /* Section 4.6.1:
@@ -151,7 +151,7 @@ fn target_lladdr_ignored_in_router_solicitations() {
     let pkt = [
         133u8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 2, 1, 1, 2, 3, 4, 5, 6,
     ];
-    assert_eq!(icmppkt::parse(&pkt).is_ok(), true);
+    assert!(icmppkt::parse(&pkt).is_ok());
 }
 
 /* Section 4.6.2
@@ -233,7 +233,7 @@ fn prefix_ignored_for_solicitation() {
         0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
-    assert_eq!(icmppkt::parse(&pkt).is_ok(), true);
+    assert!(icmppkt::parse(&pkt).is_ok());
 }
 
 /* Section 4.6.3
@@ -270,7 +270,7 @@ fn mtu_reserved_must_be_ignored() {
         134, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, 3, 4, 5, 6, 5, 1, 0xff,
         0xff, 0, 0, 5, 220,
     ];
-    assert_eq!(icmppkt::parse(&pkt).is_ok(), true);
+    assert!(icmppkt::parse(&pkt).is_ok());
 }
 
 /* Section 4.6.4

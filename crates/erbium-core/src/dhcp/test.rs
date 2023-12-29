@@ -101,7 +101,7 @@ fn test_parsing_inverse_serialising() {
     orig_pkt.pkt.options = orig_pkt
         .pkt
         .options
-        .set_option(&dhcppkt::OPTION_LEASETIME, &(321 as u32))
+        .set_option(&dhcppkt::OPTION_LEASETIME, &321_u32)
         .set_option(&dhcppkt::OPTION_SERVERID, &SERVER_IP)
         .set_option(&dhcppkt::OPTION_CLIENTID, &CLIENTID)
         .set_option(&dhcppkt::OPTION_NTPSERVERS, &EXAMPLE_IP4);

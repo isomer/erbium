@@ -1325,9 +1325,9 @@ fn domain_from_str() {
         "example.com".parse(),
         Ok(Domain(vec![
             Label(vec![
-                'e' as u8, 'x' as u8, 'a' as u8, 'm' as u8, 'p' as u8, 'l' as u8, 'e' as u8
+                b'e', b'x', b'a', b'm', b'p', b'l', b'e'
             ]),
-            Label(vec!['c' as u8, 'o' as u8, 'm' as u8])
+            Label(vec![b'c', b'o', b'm'])
         ]))
     );
 }

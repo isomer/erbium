@@ -908,7 +908,7 @@ pub fn parse_options(mut buf: pktparser::Buffer) -> Result<DhcpOptions, ParseErr
                 let l = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
                 raw_options
                     .entry(DhcpOption(x))
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .extend(
                         buf.get_bytes(l as usize)
                             .ok_or(ParseError::UnexpectedEndOfInput)?,
@@ -1170,7 +1170,7 @@ fn test_parse() {
         format!(
             "{}",
             DhcpOptionType::String
-                .decode(&vec![116, 101, 115, 116])
+                .decode(&[116, 101, 115, 116])
                 .unwrap()
         ),
         "test"
@@ -1178,7 +1178,7 @@ fn test_parse() {
     assert_eq!(
         format!(
             "{}",
-            DhcpOptionType::Ip.decode(&vec![192, 0, 2, 42]).unwrap()
+            DhcpOptionType::Ip.decode(&[192, 0, 2, 42]).unwrap()
         ),
         "192.0.2.42"
     );
@@ -1186,39 +1186,39 @@ fn test_parse() {
         format!(
             "{}",
             DhcpOptionType::IpList
-                .decode(&vec![192, 0, 2, 12, 192, 0, 2, 17])
+                .decode(&[192, 0, 2, 12, 192, 0, 2, 17])
                 .unwrap()
         ),
         "192.0.2.12,192.0.2.17"
     );
     assert_eq!(
-        format!("{}", DhcpOptionType::I32.decode(&vec![1, 2, 3, 4]).unwrap()),
+        format!("{}", DhcpOptionType::I32.decode(&[1, 2, 3, 4]).unwrap()),
         "16909060",
     );
     assert_eq!(
-        format!("{}", DhcpOptionType::U8.decode(&vec![251]).unwrap()),
+        format!("{}", DhcpOptionType::U8.decode(&[251]).unwrap()),
         "251",
     );
     assert_eq!(
-        format!("{}", DhcpOptionType::U16.decode(&vec![1, 2]).unwrap()),
+        format!("{}", DhcpOptionType::U16.decode(&[1, 2]).unwrap()),
         "258",
     );
     assert_eq!(
-        format!("{}", DhcpOptionType::U32.decode(&vec![1, 2, 3, 4]).unwrap()),
+        format!("{}", DhcpOptionType::U32.decode(&[1, 2, 3, 4]).unwrap()),
         "16909060",
     );
     assert_eq!(
-        format!("{}", DhcpOptionType::Bool.decode(&vec![0]).unwrap()),
+        format!("{}", DhcpOptionType::Bool.decode(&[0]).unwrap()),
         "0",
     );
     assert_eq!(
-        format!("{}", DhcpOptionType::Bool.decode(&vec![1]).unwrap()),
+        format!("{}", DhcpOptionType::Bool.decode(&[1]).unwrap()),
         "1",
     );
     assert_eq!(
         format!(
             "{}",
-            DhcpOptionType::Seconds16.decode(&vec![1, 0x2c]).unwrap()
+            DhcpOptionType::Seconds16.decode(&[1, 0x2c]).unwrap()
         ),
         "300",
     );
@@ -1226,7 +1226,7 @@ fn test_parse() {
         format!(
             "{}",
             DhcpOptionType::Seconds32
-                .decode(&vec![0, 1, 0x51, 0x80])
+                .decode(&[0, 1, 0x51, 0x80])
                 .unwrap()
         ),
         "86400",
@@ -1235,7 +1235,7 @@ fn test_parse() {
         format!(
             "{}",
             DhcpOptionType::HwAddr
-                .decode(&vec![0, 1, 2, 3, 4, 5])
+                .decode(&[0, 1, 2, 3, 4, 5])
                 .unwrap()
         ),
         "00:01:02:03:04:05"
@@ -1244,9 +1244,7 @@ fn test_parse() {
         format!(
             "{}",
             DhcpOptionType::Routes
-                .decode(&vec![
-                    24, 192, 0, 2, 0, 192, 0, 2, 254, 24, 198, 51, 100, 0, 192, 0, 2, 254
-                ])
+                .decode(&[24, 192, 0, 2, 0, 192, 0, 2, 254, 24, 198, 51, 100, 0, 192, 0, 2, 254])
                 .unwrap()
         ),
         "192.0.2.0/24->192.0.2.254,198.51.100.0/24->192.0.2.254"
