@@ -45,7 +45,7 @@ impl LldpPacket {
         }
 
         // Safe to unwrap four elements since we checked above.
-        let first: &LldpTlv = self.tlvs.get(0).unwrap();
+        let first: &LldpTlv = self.tlvs.first().unwrap();
         let second: &LldpTlv = self.tlvs.get(1).unwrap();
         let third: &LldpTlv = self.tlvs.get(2).unwrap();
         let last: &LldpTlv = self.tlvs.last().unwrap();
