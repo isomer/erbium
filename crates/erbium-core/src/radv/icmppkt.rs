@@ -13,10 +13,12 @@ pub enum Error {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(fuzzing, derive(Arbitrary))]
 struct Type(u8);
+const ICMP6_DESTINATION_UNREACHABLE: Type = Type(1);
 const ND_ROUTER_SOLICIT: Type = Type(133);
 const ND_ROUTER_ADVERT: Type = Type(134);
 const ND_NEIGHBOR_SOLICIT: Type = Type(135);
 const ND_NEIGHBOR_ADVERT: Type = Type(136);
+const ICMP6_REDIRECT: Type = Type(137);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(fuzzing, derive(Arbitrary))]
@@ -259,7 +261,7 @@ fn parse_nd_rtr_options(buf: &mut Buffer) -> Result<NDOptions, Error> {
                     prefix,
                 }));
             }
-            o => log::warn!("Unexpected ND RTR Solicit option {:?}", o),
+            o => log::trace!("Unexpected ND RTR Solicit option {:?}", o),
         }
     }
     Ok(options)
@@ -302,12 +304,14 @@ pub fn parse(pkt: &[u8]) -> Result<Icmp6, Error> {
     let _chksum = buf.get_be16().ok_or(Error::Truncated)?;
 
     match (ty, code) {
+        (ICMP6_DESTINATION_UNREACHABLE, _) => Ok(Icmp6::Unknown), /* Ignore */
         (ND_ROUTER_SOLICIT, 0) => parse_nd_rtr_solicit(&mut buf),
         (ND_ROUTER_ADVERT, 0) => parse_nd_rtr_advert(&mut buf),
         (ND_NEIGHBOR_SOLICIT, 0) => Ok(Icmp6::Unknown),
         (ND_NEIGHBOR_ADVERT, 0) => Ok(Icmp6::Unknown),
+        (ICMP6_REDIRECT, _) => Ok(Icmp6::Unknown), /* Ignore */
         (t, c) => {
-            log::warn!("Unexpected ICMP6 message: {:?}/{}", t, c);
+            log::trace!("Unexpected ICMP6 message: {:?}/{}", t, c);
             Ok(Icmp6::Unknown) /* Ignore other ICMP codes */
         }
     }
