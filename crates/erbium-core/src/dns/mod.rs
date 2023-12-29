@@ -1077,8 +1077,7 @@ impl DnsListenerHandler {
                     let in_reply = Self::recv_in_query(&q, &msg).await.unwrap();
                     let serialised =
                         Self::prepare_to_send(&in_reply, msg.in_query.bufsize as usize);
-                    let mut in_reply_bytes = vec![];
-                    in_reply_bytes.reserve(2 + serialised.len());
+                    let mut in_reply_bytes = Vec::with_capacity(2 + serialised.len());
                     in_reply_bytes.extend((serialised.len() as u16).to_be_bytes().iter());
                     in_reply_bytes.extend(serialised);
                     if let Err(io) = sock.write(&in_reply_bytes).await {

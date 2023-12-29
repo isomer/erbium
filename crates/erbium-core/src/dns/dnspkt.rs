@@ -887,8 +887,7 @@ impl EdnsData {
     pub fn set_cookie(&mut self, client: &[u8], server: &[u8]) {
         assert!(client.len() == 8);
         assert!(server.len() >= 8 && server.len() <= 32);
-        let mut data = vec![];
-        data.reserve(client.len() + server.len());
+        let mut data = Vec::with_capacity(client.len() + server.len());
         data.extend(client);
         data.extend(server);
         self.set_opt(EdnsOption {
@@ -1324,9 +1323,7 @@ fn domain_from_str() {
     assert_eq!(
         "example.com".parse(),
         Ok(Domain(vec![
-            Label(vec![
-                b'e', b'x', b'a', b'm', b'p', b'l', b'e'
-            ]),
+            Label(vec![b'e', b'x', b'a', b'm', b'p', b'l', b'e']),
             Label(vec![b'c', b'o', b'm'])
         ]))
     );
