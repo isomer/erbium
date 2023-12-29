@@ -32,6 +32,8 @@ async fn test_expiry() {
     let ck = CacheKey {
         qname: example_net.clone(),
         qtype: RR_A,
+        edns_do: false,
+        cd: false,
     };
 
     let mut now = Instant::now();
