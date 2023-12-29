@@ -29,7 +29,7 @@ env_logger = ">=0.9 ,<=0.10"
 erbium-net = { path = "../erbium-net", version="1.0.4" }
 futures = "0.3.8"
 hmac = "0.12.1"
-hyper = { version = "0.14.5", features=["server", "http1", "stream", "runtime", "tcp"], optional=true }
+hyper = { version = "0.14.5", features=["server", "http1"], optional=true }
 lazy_static = "1.4"
 log = "0.4"
 prometheus = { version="0.13", features=["process"] }
