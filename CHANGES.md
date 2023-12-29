@@ -2,6 +2,7 @@ UNRELEASED
    - Fix missing netlink messages at startup
    - Fix not passing through DO/CD dns bits
    - Reduce ICMP6 log spam
+   - Upgraded dependencies
 1.0.5
    - Upgraded dependencies
    - Fixed spinning in netinfo during startup.
