@@ -20,7 +20,13 @@
 use crate::acl;
 use ::prometheus;
 use erbium_net::addr::{tokio_to_unixaddr, NetAddr, ToNetAddr as _};
-use hyper::{Body, Request, Response};
+use http_body_util::Full;
+use hyper::{
+    body::{Body, Bytes},
+    Request, Response,
+};
+use hyper_util::rt::TokioIo;
+
 use std::convert::Infallible;
 // TODO: the code here that depends on nix should move into erbium-net
 use erbium_net::nix;
@@ -69,24 +75,28 @@ trait Accepter {
 }
 
 #[async_trait]
-impl Accepter for tokio::net::UnixListener {
-    type AcceptedSocket = tokio::net::UnixStream;
+impl Accepter for TokioIo<tokio::net::UnixListener> {
+    type AcceptedSocket = TokioIo<tokio::net::UnixStream>;
     async fn accept_connection(&self) -> Result<(Self::AcceptedSocket, NetAddr), std::io::Error> {
-        self.accept()
+        self.inner()
+            .accept()
             .await
-            .map(|(sock, addr)| (sock, tokio_to_unixaddr(&addr).to_net_addr()))
+            .map(|(sock, addr)| (TokioIo::new(sock), tokio_to_unixaddr(&addr).to_net_addr()))
     }
 }
 
 #[async_trait]
-impl Accepter for tokio::net::TcpListener {
-    type AcceptedSocket = tokio::net::TcpStream;
+impl Accepter for TokioIo<tokio::net::TcpListener> {
+    type AcceptedSocket = TokioIo<tokio::net::TcpStream>;
     async fn accept_connection(&self) -> Result<(Self::AcceptedSocket, NetAddr), std::io::Error> {
-        self.accept().await.map(|(sock, addr)| (sock, addr.into()))
+        self.inner()
+            .accept()
+            .await
+            .map(|(sock, addr)| (TokioIo::new(sock), addr.into()))
     }
 }
 
-async fn serve_metrics(_req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn serve_metrics<IB: Body>(_req: Request<IB>) -> Result<Response<Full<Bytes>>, Infallible> {
     use prometheus::{Encoder, TextEncoder};
 
     // Register & measure some metrics.
@@ -106,10 +116,10 @@ async fn serve_metrics(_req: Request<Body>) -> Result<Response<Body>, Infallible
         .unwrap())
 }
 
-async fn serve_leases(
-    _req: Request<Body>,
+async fn serve_leases<IB: Body>(
+    _req: Request<IB>,
     dhcp: &std::sync::Arc<crate::dhcp::DhcpService>,
-) -> Result<Response<Body>, Infallible> {
+) -> Result<Response<Full<Bytes>>, Infallible> {
     let mut leases = dhcp.get_leases().await;
     leases.sort();
     let buffer = format!(
@@ -144,7 +154,7 @@ async fn serve_leases(
         .unwrap())
 }
 
-fn permission_denied() -> Response<Body> {
+fn permission_denied() -> Response<Full<Bytes>> {
     use hyper::StatusCode;
     Response::builder()
         .status(StatusCode::FORBIDDEN)
@@ -167,7 +177,7 @@ fn require_http_permission(
     acl: &[acl::Acl],
     client: &acl::Attributes,
     perm: acl::PermissionType,
-) -> Option<Response<Body>> {
+) -> Option<Response<Full<Bytes>>> {
     match acl::require_permission(acl, client, perm) {
         Ok(()) => None,
         Err(err) => {
@@ -177,12 +187,12 @@ fn require_http_permission(
     }
 }
 
-async fn serve_request(
+async fn serve_request<IB: Body>(
     conf: crate::config::SharedConfig,
-    req: Request<Body>,
+    req: Request<IB>,
     addr: std::sync::Arc<NetAddr>,
     dhcp: std::sync::Arc<crate::dhcp::DhcpService>,
-) -> Result<Response<Body>, Infallible> {
+) -> Result<Response<Full<Bytes>>, Infallible> {
     use hyper::{Method, StatusCode};
 
     let client = acl::Attributes { addr: *addr };
@@ -236,8 +246,7 @@ async fn run_listener<L>(
 ) -> Result<(), hyper::Error>
 where
     L: Accepter + Unpin,
-    <L as Accepter>::AcceptedSocket:
-        Unpin + tokio::io::AsyncWrite + tokio::io::AsyncRead + Send + 'static,
+    <L as Accepter>::AcceptedSocket: Unpin + hyper::rt::Write + hyper::rt::Read + Send + 'static,
 {
     use hyper::service::service_fn;
 
@@ -253,9 +262,8 @@ where
         let dhcp_copy = dhcp.clone();
         let srv = move |req| serve_request(conf_copy.clone(), req, addr.clone(), dhcp_copy.clone());
         tokio::task::spawn(async move {
-            if let Err(http_err) = hyper::server::conn::Http::new()
-                .http1_only(true)
-                .http1_keep_alive(true)
+            if let Err(http_err) = hyper::server::conn::http1::Builder::new()
+                .keep_alive(true)
                 .serve_connection(stream, service_fn(srv))
                 .await
             {
@@ -280,7 +288,11 @@ pub async fn run(
                 let listener = TcpListener::bind((std::net::Ipv4Addr::from(s.ip()), s.port()))
                     .await
                     .map_err(|e| Error::ListenError(s.to_string(), e))?;
-                tokio::task::spawn(run_listener(conf.clone(), dhcp.clone(), listener));
+                tokio::task::spawn(run_listener(
+                    conf.clone(),
+                    dhcp.clone(),
+                    TokioIo::new(listener),
+                ));
             }
             Some(Inet6) => {
                 let s = addr.as_sockaddr_in6().unwrap();
@@ -288,7 +300,11 @@ pub async fn run(
                 let listener = TcpListener::bind((s.ip(), s.port()))
                     .await
                     .map_err(|e| Error::ListenError(s.to_string(), e))?;
-                tokio::task::spawn(run_listener(conf.clone(), dhcp.clone(), listener));
+                tokio::task::spawn(run_listener(
+                    conf.clone(),
+                    dhcp.clone(),
+                    TokioIo::new(listener),
+                ));
             }
             Some(Unix) => {
                 let s = addr.as_unix_addr().unwrap();
@@ -359,7 +375,11 @@ pub async fn run(
                     panic!("Unknown unix listener!");
                 }
                 log::trace!("Starting listener on {:?}", listener);
-                tokio::task::spawn(run_listener(conf.clone(), dhcp.clone(), listener));
+                tokio::task::spawn(run_listener(
+                    conf.clone(),
+                    dhcp.clone(),
+                    TokioIo::new(listener),
+                ));
             }
             _ => panic!("Unknown listener type!"),
         }
