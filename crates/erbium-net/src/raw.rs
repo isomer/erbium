@@ -74,6 +74,12 @@ impl AsRawFd for RawSocket {
     }
 }
 
+impl std::os::fd::AsFd for RawSocket {
+    fn as_fd(&self) -> std::os::fd::BorrowedFd {
+        self.fd.as_fd()
+    }
+}
+
 impl RawSocket {
     pub fn new(protocol: EthProto) -> Result<Self> {
         Ok(Self {
@@ -113,7 +119,7 @@ impl RawSocket {
         opt: O,
         val: &O::Val,
     ) -> Result<()> {
-        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(|e| e.into())
+        nix::sys::socket::setsockopt(self, opt, val).map_err(|e| e.into())
     }
 }
 
@@ -167,7 +173,7 @@ impl CookedRawSocket {
         opt: O,
         val: &O::Val,
     ) -> Result<()> {
-        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(|e| e.into())
+        nix::sys::socket::setsockopt(&self.fd, opt, val).map_err(|e| e.into())
     }
 }
 
@@ -179,6 +185,12 @@ pub struct Raw6Socket {
 impl AsRawFd for Raw6Socket {
     fn as_raw_fd(&self) -> RawFd {
         self.fd.as_raw_fd()
+    }
+}
+
+impl std::os::fd::AsFd for Raw6Socket {
+    fn as_fd(&self) -> std::os::fd::BorrowedFd {
+        self.fd.as_fd()
     }
 }
 
@@ -221,7 +233,7 @@ impl Raw6Socket {
         opt: O,
         val: &O::Val,
     ) -> Result<()> {
-        nix::sys::socket::setsockopt(self.as_raw_fd(), opt, val).map_err(|e| e.into())
+        nix::sys::socket::setsockopt(self, opt, val).map_err(|e| e.into())
     }
 }
 
@@ -271,10 +283,10 @@ impl Raw4Socket {
     }
 
     pub fn set_socket_option<O: nix::sys::socket::SetSockOpt>(
-        fd: RawFd,
+        fd: std::os::fd::BorrowedFd,
         opt: O,
         val: &O::Val,
     ) -> Result<()> {
-        nix::sys::socket::setsockopt(fd, opt, val).map_err(|e| e.into())
+        nix::sys::socket::setsockopt(&fd, opt, val).map_err(|e| e.into())
     }
 }

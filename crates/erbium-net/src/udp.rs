@@ -27,7 +27,6 @@ use crate::addr::NetAddr;
 use std::convert::TryFrom;
 use std::io;
 use std::net;
-use std::os::unix::io::AsRawFd as _;
 use tokio::io::unix::AsyncFd;
 
 use nix::libc;
@@ -103,29 +102,17 @@ impl UdpSocket {
     }
 
     pub fn set_opt_ipv4_packet_info(&self, b: bool) -> Result<(), io::Error> {
-        nix::sys::socket::setsockopt(
-            self.fd.get_ref().as_raw_fd(),
-            nix::sys::socket::sockopt::Ipv4PacketInfo,
-            &b,
-        )
-        .map_err(|e| e.into())
+        nix::sys::socket::setsockopt(&self.fd, nix::sys::socket::sockopt::Ipv4PacketInfo, &b)
+            .map_err(|e| e.into())
     }
 
     pub fn set_opt_ipv6_packet_info(&self, b: bool) -> Result<(), io::Error> {
-        nix::sys::socket::setsockopt(
-            self.fd.get_ref().as_raw_fd(),
-            nix::sys::socket::sockopt::Ipv6RecvPacketInfo,
-            &b,
-        )
-        .map_err(|e| e.into())
+        nix::sys::socket::setsockopt(&self.fd, nix::sys::socket::sockopt::Ipv6RecvPacketInfo, &b)
+            .map_err(|e| e.into())
     }
 
     pub fn set_opt_reuse_port(&self, b: bool) -> Result<(), io::Error> {
-        nix::sys::socket::setsockopt(
-            self.fd.get_ref().as_raw_fd(),
-            nix::sys::socket::sockopt::ReusePort,
-            &b,
-        )
-        .map_err(|e| e.into())
+        nix::sys::socket::setsockopt(&self.fd, nix::sys::socket::sockopt::ReusePort, &b)
+            .map_err(|e| e.into())
     }
 }
