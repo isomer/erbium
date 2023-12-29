@@ -135,7 +135,7 @@ fn test_reserved_is_zero() {
 #[test]
 fn test_zero_length_option() {
     let pkt = [133u8, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 253, 0x0];
-    assert!(!icmppkt::parse(&pkt).is_ok());
+    assert!(icmppkt::parse(&pkt).is_err());
 }
 
 /* Section 4.6.1:

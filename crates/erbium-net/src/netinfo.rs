@@ -20,10 +20,24 @@
 use netlink_packet_core::constants::*;
 use netlink_packet_core::NetlinkPayload::InnerMessage;
 use netlink_packet_core::*;
-use netlink_packet_route::RtnlMessage::*;
-use netlink_packet_route::{constants::*, AddressMessage, LinkMessage, RouteMessage, RtnlMessage};
+use netlink_packet_route::RouteNetlinkMessage::*;
+use netlink_packet_route::{
+    address::{AddressAttribute, AddressMessage},
+    link::{LinkAttribute, LinkFlag, LinkLayerType, LinkMessage},
+    route::{RouteAddress, RouteAttribute, RouteMessage},
+    AddressFamily, RouteNetlinkMessage,
+};
 use netlink_sys::TokioSocket as Socket;
 use netlink_sys::{protocols, AsyncSocket as _, AsyncSocketExt as _, SocketAddr};
+
+// These were removed in https://github.com/rust-netlink/netlink-packet-route/commit/88b1348cc0a257c55e520cae3bde3c66d5bc65a3 with no obvious replacement.
+// I imagine that .add_membership() will eventually be cleaned up to require some new type and
+// these will be redundant then.
+const RTNLGRP_LINK: u32 = 1;
+const RTNLGRP_IPV4_IFADDR: u32 = 5;
+const RTNLGRP_IPV4_ROUTE: u32 = 7;
+const RTNLGRP_IPV6_IFADDR: u32 = 9;
+const RTNLGRP_IPV6_ROUTE: u32 = 11;
 
 #[cfg(not(test))]
 use log::{trace, warn};
@@ -53,12 +67,12 @@ impl std::fmt::Debug for LinkLayer {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct IfFlags(u32);
+#[derive(Debug, Clone)]
+pub struct IfFlags(Vec<LinkFlag>);
 
 impl IfFlags {
-    pub const fn has_multicast(&self) -> bool {
-        self.0 & IFF_MULTICAST != 0
+    pub fn has_multicast(&self) -> bool {
+        self.0.iter().any(|&x| x == LinkFlag::Multicast)
     }
 }
 
@@ -117,32 +131,16 @@ impl NetInfo {
 #[derive(Clone)]
 pub struct SharedNetInfo(std::sync::Arc<tokio::sync::RwLock<NetInfo>>);
 
-fn convert_address(addr: &[u8], family: u16) -> std::net::IpAddr {
-    match family {
-        AF_INET => {
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]))
-        }
-        AF_INET6 => std::net::IpAddr::V6(
-            [
-                addr[0], addr[1], addr[2], addr[3], addr[4], addr[5], addr[6], addr[7], addr[8],
-                addr[9], addr[10], addr[11], addr[12], addr[13], addr[14], addr[15],
-            ]
-            .into(),
-        ),
-        x => panic!("Unknown address family {:?}", x),
-    }
-}
-
 struct NetLinkNetInfo {}
 
 impl NetLinkNetInfo {
-    fn decode_linklayer(linktype: u16, addr: &[u8]) -> LinkLayer {
+    fn decode_linklayer(linktype: LinkLayerType, addr: &[u8]) -> LinkLayer {
         match linktype {
-            ARPHRD_ETHER => {
+            LinkLayerType::Ether => {
                 LinkLayer::Ethernet([addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]])
             }
-            ARPHRD_LOOPBACK => LinkLayer::None,
-            ARPHRD_SIT => LinkLayer::None, // Actually this is a IpAddr, but we don't do DHCP over it, so...
+            LinkLayerType::Loopback => LinkLayer::None,
+            LinkLayerType::Sit => LinkLayer::None, // Actually this is a IpAddr, but we don't do DHCP over it, so...
             l => {
                 warn!("Unknown Linklayer: {:?}", l);
                 LinkLayer::None
@@ -151,13 +149,11 @@ impl NetLinkNetInfo {
     }
 
     fn parse_addr(addr: &AddressMessage) -> (std::net::IpAddr, u8) {
-        use netlink_packet_route::address::nlas::Nla::*;
         let mut ifaddr = None;
-        let iffamily = addr.header.family;
         let ifprefixlen = addr.header.prefix_len;
-        for i in &addr.nlas {
-            if let Address(a) = i {
-                ifaddr = Some(convert_address(a, iffamily.into()));
+        for i in &addr.attributes {
+            if let AddressAttribute::Address(a) = i {
+                ifaddr = Some(*a)
             }
         }
         (ifaddr.unwrap(), ifprefixlen)
@@ -203,17 +199,16 @@ impl NetLinkNetInfo {
     }
 
     async fn process_newlink(sni: &SharedNetInfo, link: &LinkMessage) {
-        use netlink_packet_route::link::nlas::Nla::*;
         let mut ifname: Option<String> = None;
         let mut ifmtu: Option<u32> = None;
         let mut ifaddr = None;
-        let ifflags = link.header.flags;
+        let ifflags = link.header.flags.clone();
         let ifidx = link.header.index;
-        for i in &link.nlas {
+        for i in &link.attributes {
             match i {
-                IfName(name) => ifname = Some(name.clone()),
-                Mtu(mtu) => ifmtu = Some(*mtu),
-                Address(addr) => ifaddr = Some(addr.clone()),
+                LinkAttribute::IfName(name) => ifname = Some(name.clone()),
+                LinkAttribute::Mtu(mtu) => ifmtu = Some(*mtu),
+                LinkAttribute::Address(addr) => ifaddr = Some(addr.clone()),
                 _ => (),
             }
         }
@@ -249,45 +244,35 @@ impl NetLinkNetInfo {
     }
 
     fn decode_route(route: &RouteMessage) -> Option<RouteInfo> {
-        use netlink_packet_route::rtnl::nlas::route::Nla::*;
-        use std::convert::TryFrom as _;
         let mut destination = None;
         let mut oifidx = None;
         let mut gateway = None;
-        for nla in &route.nlas {
+        for nla in &route.attributes {
             match nla {
-                Destination(dest) => {
-                    destination = match route.header.address_family as u16 {
-                        AF_INET => <[u8; 4]>::try_from(&dest[..])
-                            .map(std::net::IpAddr::from)
-                            .ok(),
-                        AF_INET6 => <[u8; 16]>::try_from(&dest[..])
-                            .map(std::net::IpAddr::from)
-                            .ok(),
-                        f => panic!("Unexpected family {}", f),
+                RouteAttribute::Destination(dest) => {
+                    destination = match dest {
+                        RouteAddress::Inet(addr) => Some((*addr).into()),
+                        RouteAddress::Inet6(addr) => Some((*addr).into()),
+                        f => panic!("Unexpected family {:?}", f),
                     }
                 }
-                Gateway(via) => {
-                    gateway = match route.header.address_family as u16 {
-                        AF_INET => <[u8; 4]>::try_from(&via[..])
-                            .map(std::net::IpAddr::from)
-                            .ok(),
-                        AF_INET6 => <[u8; 16]>::try_from(&via[..])
-                            .map(std::net::IpAddr::from)
-                            .ok(),
-                        f => panic!("Unexpected family {}", f),
+                RouteAttribute::Gateway(via) => {
+                    gateway = match via {
+                        RouteAddress::Inet(addr) => Some((*addr).into()),
+                        RouteAddress::Inet6(addr) => Some((*addr).into()),
+                        f => panic!("Unexpected family {:?}", f),
                     }
                 }
-                Oif(oif) => oifidx = Some(oif),
-                Table(254) => (),
-                Table(_) => return None, /* Skip routes that are not in the "main" table */
-                _ => (),                 /* Ignore unknown nlas */
+                RouteAttribute::Oif(oif) => oifidx = Some(oif),
+                RouteAttribute::Table(254) => (),
+                RouteAttribute::Table(_) => return None, /* Skip routes that are not in the "main" table */
+                _ => (),                                 /* Ignore unknown nlas */
             }
         }
         Some(RouteInfo {
-            addr: destination.unwrap_or_else(|| match route.header.address_family as u16 {
-                AF_INET => "0.0.0.0".parse().unwrap(),
-                AF_INET6 => "::".parse().unwrap(),
+            addr: destination.unwrap_or_else(|| match route.header.address_family {
+                AddressFamily::Inet => "0.0.0.0".parse().unwrap(),
+                AddressFamily::Inet6 => "::".parse().unwrap(),
                 _ => unreachable!(),
             }),
             prefixlen: route.header.destination_prefix_length,
@@ -320,7 +305,7 @@ impl NetLinkNetInfo {
         hdr.sequence_number = *seq;
         let mut packet = NetlinkMessage::new(
             hdr,
-            NetlinkPayload::from(RtnlMessage::GetLink(LinkMessage::default())),
+            NetlinkPayload::InnerMessage(RouteNetlinkMessage::GetLink(LinkMessage::default())),
         );
         *seq += 1;
 
@@ -347,9 +332,11 @@ impl NetLinkNetInfo {
         hdr.flags = NLM_F_REQUEST | NLM_F_DUMP;
         hdr.sequence_number = *seq;
         let mut rmsg = RouteMessage::default();
-        rmsg.header.address_family = address_family;
-        let mut packet =
-            NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::GetRoute(rmsg)));
+        rmsg.header.address_family = netlink_packet_route::AddressFamily::Other(address_family);
+        let mut packet = NetlinkMessage::new(
+            hdr,
+            NetlinkPayload::InnerMessage(RouteNetlinkMessage::GetRoute(rmsg)),
+        );
 
         *seq += 1;
 
@@ -364,12 +351,12 @@ impl NetLinkNetInfo {
 
         packet.serialize(&mut buf[..]);
 
-        match address_family as u16 {
-            AF_INET => socket
+        match address_family.into() {
+            AddressFamily::Inet => socket
                 .socket_mut()
                 .add_membership(RTNLGRP_IPV4_ROUTE)
                 .unwrap(),
-            AF_INET6 => socket
+            AddressFamily::Inet6 => socket
                 .socket_mut()
                 .add_membership(RTNLGRP_IPV6_ROUTE)
                 .unwrap(),
@@ -387,10 +374,12 @@ impl NetLinkNetInfo {
         hdr.sequence_number = *seq;
 
         let mut amsg = AddressMessage::default();
-        amsg.header.family = AF_PACKET as u8;
+        amsg.header.family = AddressFamily::Packet;
 
-        let mut packet =
-            NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::GetAddress(amsg)));
+        let mut packet = NetlinkMessage::new(
+            hdr,
+            NetlinkPayload::InnerMessage(RouteNetlinkMessage::GetAddress(amsg)),
+        );
 
         *seq += 1;
 
@@ -419,7 +408,10 @@ impl NetLinkNetInfo {
         }
     }
 
-    async fn process_message(sni: &SharedNetInfo, rx_packet: &NetlinkMessage<RtnlMessage>) -> bool {
+    async fn process_message(
+        sni: &SharedNetInfo,
+        rx_packet: &NetlinkMessage<RouteNetlinkMessage>,
+    ) -> bool {
         match &rx_packet.payload {
             InnerMessage(NewLink(link)) => {
                 NetLinkNetInfo::process_newlink(sni, link).await;
@@ -441,7 +433,7 @@ impl NetLinkNetInfo {
                 NetLinkNetInfo::process_delroute(sni, route).await;
                 false
             }
-            NetlinkPayload::Done => true,
+            NetlinkPayload::Done(_) => true,
             e => {
                 warn!("Unknown: {:?}", e);
                 false
@@ -467,7 +459,8 @@ impl NetLinkNetInfo {
         while let Ok((pkt, _)) = socket.recv_from_full().await {
             let mut offset = 0;
             while offset < pkt.len() {
-                let rx_packet = <NetlinkMessage<RtnlMessage>>::deserialize(&pkt[offset..]).unwrap();
+                let rx_packet =
+                    <NetlinkMessage<RouteNetlinkMessage>>::deserialize(&pkt[offset..]).unwrap();
                 offset += rx_packet.header.length as usize;
 
                 if NetLinkNetInfo::process_message(&sni, &rx_packet).await {
@@ -479,12 +472,22 @@ impl NetLinkNetInfo {
                         }
                         State::ReadingAddr => {
                             trace!("Finished Addr");
-                            NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET as u8).await;
+                            NetLinkNetInfo::send_routedump(
+                                &mut socket,
+                                &mut seq,
+                                AddressFamily::Inet.into(),
+                            )
+                            .await;
                             state = State::ReadingRoute4
                         }
                         State::ReadingRoute4 => {
                             trace!("Finished Route4");
-                            NetLinkNetInfo::send_routedump(&mut socket, &mut seq, AF_INET6 as u8).await;
+                            NetLinkNetInfo::send_routedump(
+                                &mut socket,
+                                &mut seq,
+                                AddressFamily::Inet6.into(),
+                            )
+                            .await;
                             state = State::ReadingRoute6
                         }
                         State::ReadingRoute6 => {
@@ -524,7 +527,7 @@ impl SharedNetInfo {
                 addresses: vec![("127.0.0.1".parse().unwrap(), 8)],
                 lladdr: LinkLayer::None,
                 mtu: 65536,
-                flags: IfFlags(IFF_MULTICAST),
+                flags: IfFlags(vec![LinkFlag::Multicast]),
             },
         );
         ni.add_interface(
@@ -534,7 +537,7 @@ impl SharedNetInfo {
                 addresses: vec![("192.0.2.254".parse().unwrap(), 24)],
                 lladdr: LinkLayer::Ethernet([0x00, 0x00, 0x5E, 0x00, 0x53, 0xFF]),
                 mtu: 1500,
-                flags: IfFlags(IFF_MULTICAST),
+                flags: IfFlags(vec![LinkFlag::Multicast]),
             },
         );
         SharedNetInfo(std::sync::Arc::new(tokio::sync::RwLock::new(ni)))
@@ -613,7 +616,12 @@ impl SharedNetInfo {
         }
     }
     pub async fn get_flags_by_ifidx(&self, ifidx: u32) -> Option<IfFlags> {
-        self.0.read().await.intf.get(&ifidx).map(|x| x.flags)
+        self.0
+            .read()
+            .await
+            .intf
+            .get(&ifidx)
+            .map(|x| x.flags.clone())
     }
 
     pub async fn get_ipv4_default_route(
@@ -657,46 +665,52 @@ impl SharedNetInfo {
 
 #[tokio::test]
 async fn test_interface() {
-    use netlink_packet_route::rtnl;
     const IFIDX: u32 = 10;
     let ni = SharedNetInfo::new_for_test();
     let mut hdr = NetlinkHeader::default();
     hdr.sequence_number = 1;
     let mut lmsg = LinkMessage::default();
     lmsg.header.index = IFIDX;
-    lmsg.header.link_layer_type = ARPHRD_ETHER;
-    lmsg.nlas = vec![
-        rtnl::link::nlas::Nla::IfName("test1".into()),
-        rtnl::link::nlas::Nla::Mtu(1500),
-        rtnl::link::nlas::Nla::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x00]),
-        rtnl::link::nlas::Nla::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+    lmsg.header.link_layer_type = LinkLayerType::Ether;
+    lmsg.attributes = vec![
+        LinkAttribute::IfName("test1".into()),
+        LinkAttribute::Mtu(1500),
+        LinkAttribute::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x00]),
+        LinkAttribute::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
     ];
     NetLinkNetInfo::process_message(
         &ni,
-        &NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::NewLink(lmsg))),
+        &NetlinkMessage::new(
+            hdr,
+            NetlinkPayload::from(RouteNetlinkMessage::NewLink(lmsg)),
+        ),
     )
     .await;
     hdr.sequence_number = 2;
     let mut amsg = AddressMessage::default();
     amsg.header.index = IFIDX;
-    amsg.header.family = AF_INET as u8;
+    amsg.header.family = AddressFamily::Inet;
     amsg.header.prefix_len = 24;
-    amsg.nlas = vec![rtnl::address::nlas::Nla::Address(vec![192, 0, 2, 1])];
+    amsg.attributes = vec![AddressAttribute::Address("192.0.2.1".parse().unwrap())];
     NetLinkNetInfo::process_message(
         &ni,
-        &NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::NewAddress(amsg))),
+        &NetlinkMessage::new(
+            hdr,
+            NetlinkPayload::from(RouteNetlinkMessage::NewAddress(amsg)),
+        ),
     )
     .await;
     let mut a6msg = AddressMessage::default();
     a6msg.header.index = IFIDX;
-    a6msg.header.family = AF_INET as u8;
+    a6msg.header.family = AddressFamily::Inet6;
     a6msg.header.prefix_len = 24;
-    a6msg.nlas = vec![rtnl::address::nlas::Nla::Address(vec![
-        0x20, 0x1, 0xd, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ])];
+    a6msg.attributes = vec![AddressAttribute::Address("2001:db8::".parse().unwrap())];
     NetLinkNetInfo::process_message(
         &ni,
-        &NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::NewAddress(a6msg))),
+        &NetlinkMessage::new(
+            hdr,
+            NetlinkPayload::from(RouteNetlinkMessage::NewAddress(a6msg)),
+        ),
     )
     .await;
     assert!(ni.get_interfaces().await.contains(&"test1".into()));
@@ -714,16 +728,19 @@ async fn test_interface() {
     hdr.sequence_number = 1;
     let mut lmsg = LinkMessage::default();
     lmsg.header.index = IFIDX;
-    lmsg.header.link_layer_type = ARPHRD_ETHER;
-    lmsg.nlas = vec![
-        rtnl::link::nlas::Nla::IfName("test1".into()),
-        rtnl::link::nlas::Nla::Mtu(1501),
-        rtnl::link::nlas::Nla::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x01]),
-        rtnl::link::nlas::Nla::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE]),
+    lmsg.header.link_layer_type = LinkLayerType::Ether;
+    lmsg.attributes = vec![
+        LinkAttribute::IfName("test1".into()),
+        LinkAttribute::Mtu(1501),
+        LinkAttribute::Address(vec![0x00, 0x53, 0x00, 0x00, 0x00, 0x01]),
+        LinkAttribute::Broadcast(vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE]),
     ];
     NetLinkNetInfo::process_message(
         &ni,
-        &NetlinkMessage::new(hdr, NetlinkPayload::from(RtnlMessage::NewLink(lmsg))),
+        &NetlinkMessage::new(
+            hdr,
+            NetlinkPayload::from(RouteNetlinkMessage::NewLink(lmsg)),
+        ),
     )
     .await;
     /* Did this disturb the data that was already there? */
