@@ -244,9 +244,14 @@ pub async fn recv_msg<F: std::os::unix::io::AsRawFd>(
 
     match nix::sys::socket::recvmsg(sock.get_ref().as_raw_fd(), iov, Some(&mut cmsg), flags) {
         Ok(rm) => {
-            let buf = rm.iovs().next().unwrap();
-            ev.retain_ready();
-            Ok(RecvMsg::new(rm, buf.into()))
+            if let Some(buf) = rm.iovs().next() {
+                ev.retain_ready();
+                Ok(RecvMsg::new(rm, buf.into()))
+            } else {
+                // Zero length datagram
+                ev.retain_ready();
+                Ok(RecvMsg::new(rm, vec![]))
+            }
         }
         Err(e) if e == nix::errno::Errno::EAGAIN => {
             ev.clear_ready();
