@@ -1,4 +1,4 @@
-UNRELEASED
+1.0.6
    - Fix missing netlink messages at startup
    - Fix not passing through DO/CD dns bits
    - Reduce ICMP6 log spam
