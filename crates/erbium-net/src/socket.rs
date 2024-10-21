@@ -130,19 +130,26 @@ impl RecvMsg {
             ipv6pktinfo: None,
         };
 
-        for cmsg in m.cmsgs() {
-            use nix::sys::socket::ControlMessageOwned;
-            match cmsg {
-                ControlMessageOwned::ScmTimestamp(rtime) => {
-                    r.timestamp = Some(rtime);
+        match m.cmsgs() {
+            Ok(cmsgs) => {
+                for cmsg in cmsgs {
+                    use nix::sys::socket::ControlMessageOwned;
+                    match cmsg {
+                        ControlMessageOwned::ScmTimestamp(rtime) => {
+                            r.timestamp = Some(rtime);
+                        }
+                        ControlMessageOwned::Ipv4PacketInfo(pi) => {
+                            r.ipv4pktinfo = Some(pi);
+                        }
+                        ControlMessageOwned::Ipv6PacketInfo(pi) => {
+                            r.ipv6pktinfo = Some(pi);
+                        }
+                        x => log::warn!("Unknown control message {:?}", x),
+                    }
                 }
-                ControlMessageOwned::Ipv4PacketInfo(pi) => {
-                    r.ipv4pktinfo = Some(pi);
-                }
-                ControlMessageOwned::Ipv6PacketInfo(pi) => {
-                    r.ipv6pktinfo = Some(pi);
-                }
-                x => log::warn!("Unknown control message {:?}", x),
+            }
+            Err(err) => {
+                log::warn!("Failed to decode control message: {:?}", err);
             }
         }
 

@@ -175,8 +175,8 @@ impl<'a> Fragment<'a> {
         let l = f.len();
         let mut pseudohdr = Self::from_tail(Tail::Fragment(Box::new(f.clone())));
         let udp_protocol: u8 = 17;
-        pseudohdr.push_bytes(&u32::to_be_bytes(src.ip()));
-        pseudohdr.push_bytes(&u32::to_be_bytes(dst.ip()));
+        pseudohdr.push_bytes(&src.ip().octets());
+        pseudohdr.push_bytes(&dst.ip().octets());
         pseudohdr.push_u8(0x00_u8);
         pseudohdr.push_u8(udp_protocol);
         pseudohdr.push_be16(l as u16);
