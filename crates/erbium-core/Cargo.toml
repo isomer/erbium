@@ -24,9 +24,9 @@ arbitrary = { version = "1.1", features = ["derive"], optional=true}
 async-trait = { version = "0.1.42" }
 byteorder = "1.4.3"
 bytes = "1.0"
-digest = "0.10.3"
-env_logger = ">=0.9 ,<=0.10"
-erbium-net = { path = "../erbium-net", version="1.0.4" }
+digest = ">=0.10.3,<=0.11"
+env_logger = ">=0.9 ,<=0.11"
+erbium-net = { path = "../erbium-net", version="1.0.7-dev" }
 futures = "0.3.8"
 hmac = "0.12.1"
 http-body-util = "0.1"
@@ -34,9 +34,9 @@ hyper = { version = "1.1", features=["server", "http1"], optional=true }
 hyper-util = { version = "0.1.2", features=["tokio"], optional=true }
 lazy_static = "1.4"
 log = "0.4"
-prometheus = { version="0.13", features=["process"] }
-rand = "0.8"
-rusqlite = { version = ">=0.28, <=0.30" }
+prometheus = { version=">=0.13,<=0.13", features=["process"] }
+rand = ">=0.8,<=0.8"
+rusqlite = { version = ">=0.28, <=0.37" }
 sha2 = "0.10"
 tokio-util = { version="0.7", features= ["codec"] }
 tokio = { version = "1.8.4", features = ["full"] }
@@ -60,7 +60,7 @@ name = "erbium"
 path = "src/lib.rs"
 
 [build-dependencies]
-vergen = ">=6,<=8"
+vergen = "8"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

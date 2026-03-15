@@ -1,5 +1,3 @@
-
-
 #[tokio::test]
 /* Extract examples from the config manpage.  Examples are between .EX/.EE pairs.  Once extracted,
  * run the config parser over them to make sure they're valid.

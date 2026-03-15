@@ -906,13 +906,10 @@ pub fn parse_options(mut buf: pktparser::Buffer) -> Result<DhcpOptions, ParseErr
             Some(255) => break, /* End Field */
             Some(x) => {
                 let l = buf.get_u8().ok_or(ParseError::UnexpectedEndOfInput)?;
-                raw_options
-                    .entry(DhcpOption(x))
-                    .or_default()
-                    .extend(
-                        buf.get_bytes(l as usize)
-                            .ok_or(ParseError::UnexpectedEndOfInput)?,
-                    );
+                raw_options.entry(DhcpOption(x)).or_default().extend(
+                    buf.get_bytes(l as usize)
+                        .ok_or(ParseError::UnexpectedEndOfInput)?,
+                );
             }
             None => return Err(ParseError::UnexpectedEndOfInput),
         }
@@ -1176,10 +1173,7 @@ fn test_parse() {
         "test"
     );
     assert_eq!(
-        format!(
-            "{}",
-            DhcpOptionType::Ip.decode(&[192, 0, 2, 42]).unwrap()
-        ),
+        format!("{}", DhcpOptionType::Ip.decode(&[192, 0, 2, 42]).unwrap()),
         "192.0.2.42"
     );
     assert_eq!(
@@ -1216,10 +1210,7 @@ fn test_parse() {
         "1",
     );
     assert_eq!(
-        format!(
-            "{}",
-            DhcpOptionType::Seconds16.decode(&[1, 0x2c]).unwrap()
-        ),
+        format!("{}", DhcpOptionType::Seconds16.decode(&[1, 0x2c]).unwrap()),
         "300",
     );
     assert_eq!(
@@ -1234,9 +1225,7 @@ fn test_parse() {
     assert_eq!(
         format!(
             "{}",
-            DhcpOptionType::HwAddr
-                .decode(&[0, 1, 2, 3, 4, 5])
-                .unwrap()
+            DhcpOptionType::HwAddr.decode(&[0, 1, 2, 3, 4, 5]).unwrap()
         ),
         "00:01:02:03:04:05"
     );
