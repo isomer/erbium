@@ -561,8 +561,8 @@ impl SharedNetInfo {
             .read()
             .await
             .intf
-            .iter()
-            .flat_map(|(_ifidx, x)| x.addresses.clone())
+            .values()
+            .flat_map(|x| x.addresses.clone())
             .collect()
     }
 
