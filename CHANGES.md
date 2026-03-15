@@ -1,3 +1,10 @@
+1.0.7
+   - Broadened dependency version constraints.
+   - Bumped edition to 2024.
+   - Bumped rand dependency to the latest version due to 2024 edition keyword.
+   - Fixed #48: Erbium was sending to a destination of 0.0.0.0 instead of
+     255.255.255.255 (if the broadcast bit is set), or yiaddr (if the broadcast
+     bit is not set)
 1.0.6
    - Fix missing netlink messages at startup
    - Fix not passing through DO/CD dns bits

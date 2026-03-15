@@ -1105,6 +1105,10 @@ impl Dhcp {
             .get_clientid()
             .unwrap_or_else(|| self.chaddr.clone())
     }
+
+    pub fn get_broadcast_flag(&self) -> bool {
+        self.flags & 0b1000_0000 != 0
+    }
 }
 
 #[cfg(test)]

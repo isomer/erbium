@@ -26,7 +26,7 @@ byteorder = "1.4.3"
 bytes = "1.0"
 digest = ">=0.10.3,<=0.11"
 env_logger = ">=0.9 ,<=0.11"
-erbium-net = { path = "../erbium-net", version="1.0.7-dev" }
+erbium-net = { path = "../erbium-net", version="1.0.7" }
 futures = "0.3.8"
 hmac = "0.12.1"
 http-body-util = "0.1"

@@ -782,7 +782,7 @@ impl DhcpService {
     async fn recvdhcp(&self, pkt: &[u8], src: NetAddr, intf: u32) {
         let raw = self.rawsock.clone();
         /* First, lets find the various metadata IP addresses */
-        let ip4 = src.as_sockaddr_in().unwrap();
+        let ip4 = *src.as_sockaddr_in().unwrap();
         let optional_dst = self.netinfo.get_ipv4_by_ifidx(intf).await;
         if optional_dst.is_none() {
             log::warn!(
@@ -908,12 +908,25 @@ impl DhcpService {
             return;
         };
 
+        let dst = if request.pkt.get_broadcast_flag() {
+            *std::net::Ipv4Addr::BROADCAST
+                .with_port(ip4.port())
+                .as_sockaddr_in()
+                .unwrap_or(&ip4)
+        } else {
+            *reply
+                .yiaddr
+                .with_port(ip4.port())
+                .as_sockaddr_in()
+                .unwrap_or(&ip4)
+        };
+
         /* Construct the raw packet from the reply to send */
         let replybuf = reply.serialise();
         let etherbuf = packet::Fragment::new_udp4(
             *request.serverip.with_port(67).as_sockaddr_in().unwrap(),
             &srcll,
-            *ip4,
+            dst,
             &chaddr,
             packet::Tail::Payload(&replybuf),
         )
