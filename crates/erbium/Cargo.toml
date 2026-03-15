@@ -1,7 +1,7 @@
 [package]
 name = "erbium"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
-edition = "2021"
+edition = "2024"
 default-run = "erbium"
 description = "Network services for small/home networks"
 build = "src/build.rs"

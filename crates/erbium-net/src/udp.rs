@@ -44,7 +44,7 @@ pub fn std_to_libc_in_addr(addr: net::Ipv4Addr) -> libc::in_addr {
         s_addr: addr
             .octets()
             .iter()
-            .fold(0, |acc, x| ((acc << 8) | (*x as u32))),
+            .fold(0, |acc, x| (acc << 8) | (*x as u32)),
     }
 }
 

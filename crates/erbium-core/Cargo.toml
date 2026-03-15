@@ -1,7 +1,7 @@
 [package]
 name = "erbium-core"
 authors = ["Perry Lorier <git@isomer.meta.net.nz>"]
-edition = "2021"
+edition = "2024"
 description = "Network services for small/home networks - Core code"
 license = "Apache-2.0"
 readme = "README.md"

@@ -55,7 +55,7 @@ pub fn parse_dns_route(name: &str, fragment: &yaml::Yaml) -> Result<Option<Route
                         return Err(Error::InvalidConfig(format!(
                             "{} type {} not supported",
                             name, kw,
-                        )))
+                        )));
                     }
                     None => return Err(Error::InvalidConfig(format!("{} cannot be null", name))),
                 },
@@ -63,13 +63,13 @@ pub fn parse_dns_route(name: &str, fragment: &yaml::Yaml) -> Result<Option<Route
                     return Err(Error::InvalidConfig(format!(
                         "Unknown {} keyword {}",
                         name, opt
-                    )))
+                    )));
                 }
                 None => {
                     return Err(Error::InvalidConfig(format!(
                         "Expected string in {}, not {:?}",
                         name, k
-                    )))
+                    )));
                 }
             }
         }
@@ -101,7 +101,7 @@ pub fn parse_dns_route(name: &str, fragment: &yaml::Yaml) -> Result<Option<Route
                 return Ok(Some(Route {
                     suffixes: suffix_domains,
                     dest: Handler::ForgeNxDomain,
-                }))
+                }));
             }
         }
     }

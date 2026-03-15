@@ -23,7 +23,7 @@ pub struct EdnsParser<'l> {
 }
 
 impl<'l> EdnsParser<'l> {
-    const fn new(buffer: &'l [u8]) -> EdnsParser {
+    const fn new(buffer: &'l [u8]) -> EdnsParser<'l> {
         EdnsParser { buffer }
     }
 
@@ -80,7 +80,7 @@ pub struct PktParser<'l> {
 }
 
 impl<'l> PktParser<'l> {
-    pub const fn new(buffer: &'l [u8]) -> PktParser {
+    pub const fn new(buffer: &'l [u8]) -> PktParser<'l> {
         PktParser { buffer, offset: 0 }
     }
     fn peek_u8(&mut self) -> Result<u8, String> {
@@ -351,9 +351,7 @@ impl<'l> PktParser<'l> {
         let ever = opt.map(|o| ((o.ttl >> 16) & 0xFF) as u8);
         let bufsize = std::cmp::max(opt.map_or(512, |o| o.class.0), 512);
         let ercode = opt.map_or(0, |o| o.ttl >> 24);
-        let edo = opt.map_or(false, |o| {
-            (o.ttl & 0b0000_0000_0000_0000_1000_0000_0000_0000) != 0
-        });
+        let edo = opt.is_some_and(|o| (o.ttl & 0b0000_0000_0000_0000_1000_0000_0000_0000) != 0);
 
         let edns = opt.map(|x| match &x.rdata {
             dnspkt::RData::Opt(o) => o.clone(),

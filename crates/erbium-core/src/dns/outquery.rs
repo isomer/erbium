@@ -231,10 +231,11 @@ impl TcpNameserver {
     }
 
     async fn send_tcp_query(&mut self, msg: TcpNameserverMessage) -> Result<(), Error> {
-        assert!(self
-            .qid2reply
-            .insert(msg.out_query.qid, msg.out_reply)
-            .is_none()); // TODO: Collisions!
+        assert!(
+            self.qid2reply
+                .insert(msg.out_query.qid, msg.out_reply)
+                .is_none()
+        ); // TODO: Collisions!
         if let Some(ref mut tcp_sock) = self.tcp {
             use tokio::io::AsyncWriteExt as _;
             let bytes = msg.out_query.serialise();

@@ -19,8 +19,8 @@
  *  etc are taken.
  */
 
-use super::dnspkt;
 use super::Error;
+use super::dnspkt;
 
 pub struct DnsRouteHandler {
     conf: crate::config::SharedConfig,

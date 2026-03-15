@@ -18,9 +18,9 @@
  */
 
 use crate::radv;
+use radv::ADV_DEFAULT_LIFETIME;
 use radv::config;
 use radv::icmppkt;
-use radv::ADV_DEFAULT_LIFETIME;
 
 impl Default for config::Pref64 {
     fn default() -> Self {

@@ -287,12 +287,11 @@ const fn hexdigit(c: u8) -> Result<u8, HexError> {
 
 fn hexbyte(st: &str) -> Result<u8, HexError> {
     let mut it = st.bytes();
-    if let Some(n1) = it.next() {
-        if let Some(n2) = it.next() {
-            if it.next().is_none() {
-                return Ok((hexdigit(n1)? << 4) | hexdigit(n2)?);
-            }
-        }
+    if let Some(n1) = it.next()
+        && let Some(n2) = it.next()
+        && it.next().is_none()
+    {
+        return Ok((hexdigit(n1)? << 4) | hexdigit(n2)?);
     }
     Err(HexError::WrongLength)
 }
@@ -433,7 +432,7 @@ fn str_duration(ost: Option<String>) -> Result<Option<std::time::Duration>, Erro
                     return Err(Error::InvalidConfig(format!(
                         "Unexpected {} in duration",
                         c
-                    )))
+                    )));
                 }
             }
         }
@@ -496,7 +495,7 @@ pub fn str_sockaddr(ost: Option<String>) -> Result<Option<NetAddr>, Error> {
         }
     }
     ost.map(|st| match st.get(0..1) {
-        Some("@") => UnixAddr::new_abstract(st[1..].as_bytes())
+        Some("@") => UnixAddr::new_abstract(&st.as_bytes()[1..])
             .map(to_net_addr)
             .map_err(|e| Error::InvalidConfig(format!("{} ({})", e, st))),
         Some(_) if st.contains('/') => UnixAddr::new(st.as_bytes())
@@ -768,7 +767,7 @@ impl AddressType {
 impl Default for AddressType {
     fn default() -> Self {
         AddressType::Addresses(vec![
-            std::net::SocketAddrV6::new(UNSPECIFIED6, 0, 0, 0).into()
+            std::net::SocketAddrV6::new(UNSPECIFIED6, 0, 0, 0).into(),
         ])
     }
 }
@@ -904,24 +903,20 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             dns_servers,
             dns_search,
             dns_listeners: dns_listeners.unwrap_or_else(|| match default_listen_style {
-                DefaultAddressType::Unspecified => {
-                    AddressType::Addresses(vec![std::net::SocketAddrV6::new(
-                        UNSPECIFIED6,
-                        53,
-                        0,
-                        0,
-                    )
-                    .into()])
-                }
+                DefaultAddressType::Unspecified => AddressType::Addresses(vec![
+                    std::net::SocketAddrV6::new(UNSPECIFIED6, 53, 0, 0).into(),
+                ]),
                 DefaultAddressType::Interface => AddressType::BindInterface,
             }),
             #[cfg(feature = "dns")]
             dns_routes: dns_routes.unwrap_or_default(),
             captive_portal,
             listeners: listeners.unwrap_or_else(|| {
-                vec![UnixAddr::new("/var/lib/erbium/control")
-                    .unwrap()
-                    .to_net_addr()]
+                vec![
+                    UnixAddr::new("/var/lib/erbium/control")
+                        .unwrap()
+                        .to_net_addr(),
+                ]
             }),
             acls: acls.unwrap_or_else(|| crate::acl::default_acls(&addresses)),
             addresses,

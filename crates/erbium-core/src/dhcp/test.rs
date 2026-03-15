@@ -43,7 +43,7 @@ fn mk_dhcp_request_pkt() -> dhcppkt::Dhcp {
         htype: dhcppkt::HWTYPE_ETHERNET,
         hlen: 6,
         hops: 0,
-        xid: rand::thread_rng().gen(),
+        xid: rand::thread_rng().r#gen(),
         secs: 0,
         flags: 0,
         ciaddr: net::Ipv4Addr::UNSPECIFIED,
@@ -257,6 +257,7 @@ fn broadcast_failed_renew() {
 /* rfc2131 Section 3.4: The server SHOULD check the network address in a DHCPINFORM message for
  * consistency, but MUST NOT check for an existing lease.
  */
+#[test]
 fn dhcpinform_dont_check_existing_lease() {
     /* TODO */
 }
@@ -481,26 +482,36 @@ async fn offer_required() {
     assert_eq!(reply.giaddr, request.pkt.giaddr);
     assert_eq!(reply.chaddr, request.pkt.chaddr);
     assert_eq!(reply.options.get_messagetype().unwrap(), dhcppkt::DHCPOFFER);
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_ADDRESSREQUEST)
-        .is_none());
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
-        .is_none());
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_SERVERID)
-        .is_some());
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_MAXMSGSIZE)
-        .is_none());
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_CLIENTID)
-        .is_none());
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_ADDRESSREQUEST)
+            .is_none()
+    );
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+            .is_none()
+    );
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_SERVERID)
+            .is_some()
+    );
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_MAXMSGSIZE)
+            .is_none()
+    );
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_CLIENTID)
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -535,26 +546,36 @@ async fn ack_required() {
     assert_eq!(reply.giaddr, request.pkt.giaddr);
     assert_eq!(reply.chaddr, request.pkt.chaddr);
     assert_eq!(reply.options.get_messagetype().unwrap(), dhcppkt::DHCPACK);
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_ADDRESSREQUEST)
-        .is_none());
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
-        .is_none());
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_SERVERID)
-        .is_some());
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_MAXMSGSIZE)
-        .is_none());
-    assert!(reply
-        .options
-        .get_option::<Vec<u8>>(&dhcppkt::OPTION_CLIENTID)
-        .is_none());
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_ADDRESSREQUEST)
+            .is_none()
+    );
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_PARAMLIST)
+            .is_none()
+    );
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_SERVERID)
+            .is_some()
+    );
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_MAXMSGSIZE)
+            .is_none()
+    );
+    assert!(
+        reply
+            .options
+            .get_option::<Vec<u8>>(&dhcppkt::OPTION_CLIENTID)
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -587,7 +608,7 @@ async fn test_full() {
     let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
-    let xid = rand::thread_rng().gen();
+    let xid = rand::thread_rng().r#gen();
     let secs = 0;
 
     /* Send DISCOVER */

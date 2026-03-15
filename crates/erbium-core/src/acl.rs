@@ -26,7 +26,7 @@
  */
 
 use crate::config::*;
-use erbium_net::addr::{NetAddr, NetAddrExt as _, WithPort as _, UNSPECIFIED6};
+use erbium_net::addr::{NetAddr, NetAddrExt as _, UNSPECIFIED6, WithPort as _};
 use yaml_rust::yaml;
 
 #[derive(Debug)]
@@ -86,11 +86,7 @@ impl Acl {
             ok = ok && attr.addr.as_unix_addr().is_some() == unix;
         }
 
-        if ok {
-            Some(&self.permission)
-        } else {
-            None
-        }
+        if ok { Some(&self.permission) } else { None }
     }
 }
 
@@ -235,13 +231,13 @@ pub(crate) fn parse_acl(name: &str, fragment: &yaml::Yaml) -> Result<Option<Acl>
                             })?;
                     }
                     (Some(m), _) => {
-                        return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)))
+                        return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)));
                     }
                     (None, _) => {
                         return Err(Error::InvalidConfig(format!(
                             "{} keys are expected to be strings",
                             name
-                        )))
+                        )));
                     }
                 }
             }

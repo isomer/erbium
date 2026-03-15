@@ -46,8 +46,8 @@ struct CookieKeys {
 
 impl CookieKeys {
     fn new() -> Self {
-        use rand::distributions::Distribution as _;
         use rand::Rng as _;
+        use rand::distributions::Distribution as _;
         use tokio::time::{Duration, Instant};
         let mut rng = rand::rngs::OsRng;
         Self {
@@ -57,8 +57,8 @@ impl CookieKeys {
                     Duration::from_secs(86400 + 86400 / 2),
                 )
                 .sample(&mut rng),
-            current: rng.gen(),
-            previous: rng.gen(),
+            current: rng.r#gen(),
+            previous: rng.r#gen(),
         }
     }
 
@@ -68,8 +68,8 @@ impl CookieKeys {
 
     // Gets the current and previous cookie keys, rotating them if they've expired.
     async fn get_keys(s: &tokio::sync::RwLock<Self>) -> (Key, Key) {
-        use rand::distributions::Distribution as _;
         use rand::Rng as _;
+        use rand::distributions::Distribution as _;
         use tokio::time::{Duration, Instant};
         if s.read().await.needs_rotation() {
             // TODO: This only does one rotation, it's possibly both keys have expired, in which
@@ -83,7 +83,7 @@ impl CookieKeys {
                         Duration::from_secs(86400 + 86400 / 2),
                     )
                     .sample(&mut rng),
-                current: rng.gen(),
+                current: rng.r#gen(),
                 previous: cookies.current,
             }
         }
@@ -767,8 +767,8 @@ impl DnsListenerHandler {
     }
 
     async fn create_in_error(msg: &DnsMessage, err: Error) -> dnspkt::DNSPkt {
-        use dnspkt::*;
         use Error::*;
+        use dnspkt::*;
         let mut edns: EdnsData = Default::default();
         Self::add_edns(&mut edns, msg).await;
         let rcode;

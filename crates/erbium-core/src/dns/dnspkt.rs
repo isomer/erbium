@@ -763,7 +763,7 @@ fn push_prefix(
     let label = &l[l.len() - 1];
     let prefix = &l[..l.len() - 1];
     let mut child = None;
-    if let Some(ref mut node) = node {
+    if let Some(node) = node {
         for it in &mut node.children {
             if it.label == *label {
                 child = Some(&mut *it);

@@ -60,8 +60,8 @@ pub struct Interface {
 
 impl Default for Interface {
     fn default() -> Self {
-        use std::time::Duration;
         use ConfigValue::*;
+        use std::time::Duration;
         Self {
             name: "default".into(),
             hoplimit: 0,
@@ -105,13 +105,13 @@ fn parse_prefix(name: &str, fragment: &yaml::Yaml) -> Result<Option<Prefix>, Err
                     (Some("valid"), d) => valid = parse_duration("valid", d)?,
                     (Some("preferred"), d) => preferred = parse_duration("preferred", d)?,
                     (Some(m), _) => {
-                        return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)))
+                        return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)));
                     }
                     (None, _) => {
                         return Err(Error::InvalidConfig(format!(
                             "{} keys are expected to be strings",
                             name,
-                        )))
+                        )));
                     }
                 }
             }
@@ -156,14 +156,14 @@ fn parse_rdnss(
                     lifetime = ConfigValue::from_option(parse_duration("lifetime", d)?)
                 }
                 (Some(m), _) => {
-                    return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)))
+                    return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)));
                 }
                 (None, _) => {
                     return Err(Error::InvalidConfig(format!(
                         "{} key should be string, not {}",
                         name,
                         type_to_name(k)
-                    )))
+                    )));
                 }
             }
         }
@@ -205,14 +205,14 @@ fn parse_dnssl(
                     lifetime = ConfigValue::from_option(parse_duration("lifetime", d)?)
                 }
                 (Some(m), _) => {
-                    return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)))
+                    return Err(Error::InvalidConfig(format!("Unknown {} key {}", name, m)));
                 }
                 (None, _) => {
                     return Err(Error::InvalidConfig(format!(
                         "{} key should be string, not {}",
                         name,
                         type_to_name(k)
-                    )))
+                    )));
                 }
             }
         }
@@ -235,14 +235,14 @@ fn parse_pref64(name: &str, fragment: &yaml::Yaml) -> Result<Option<Pref64>, Err
                 (Some("prefix"), p) => prefix = parse_string_prefix6("prefix", p)?,
                 (Some("lifetime"), d) => lifetime = parse_duration("lifetime", d)?,
                 (Some(n), _) => {
-                    return Err(Error::InvalidConfig(format!("Unknown {} key: {}", name, n)))
+                    return Err(Error::InvalidConfig(format!("Unknown {} key: {}", name, n)));
                 }
                 (None, _) => {
                     return Err(Error::InvalidConfig(format!(
                         "{} keys should be String, not {}",
                         name,
                         type_to_name(fragment)
-                    )))
+                    )));
                 }
             }
         }
@@ -285,7 +285,7 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                 (Some("interface"), _) => {
                     return Err(Error::InvalidConfig(
                         "interface name is no longer specified here".into(),
-                    ))
+                    ));
                 }
                 (Some("max-router-advertisement-interval"), i) => {
                     max_rtr_adv_interval = ConfigValue::from_option(parse_duration(
@@ -336,20 +336,24 @@ fn parse_interface(name: &str, fragment: &yaml::Yaml) -> Result<Option<Interface
                     return Err(Error::InvalidConfig(format!(
                         "Unknown {} key {}",
                         name, key
-                    )))
+                    )));
                 }
                 (None, _) => {
                     return Err(Error::InvalidConfig(format!(
                         "{} key is {} not String",
                         name,
                         type_to_name(k)
-                    )))
+                    )));
                 }
             }
         }
         match (&min_rtr_adv_interval, &max_rtr_adv_interval) {
             (ConfigValue::Value(min), ConfigValue::Value(max)) if *min > 3 * *max / 4 => {
-                return Err(Error::InvalidConfig(format!("min-router-advertisement-interval({}s) cannot be greater than 75% of max({}s) per RFC4861 section 6.2.1", min.as_secs(), max.as_secs())));
+                return Err(Error::InvalidConfig(format!(
+                    "min-router-advertisement-interval({}s) cannot be greater than 75% of max({}s) per RFC4861 section 6.2.1",
+                    min.as_secs(),
+                    max.as_secs()
+                )));
             }
             _ => (),
         }
@@ -403,7 +407,7 @@ pub fn parse(fragment: &yaml::Yaml) -> Result<Option<Config>, Error> {
                     return Err(Error::InvalidConfig(format!(
                         "router-advertisement keys should be names of interfaces, not {}",
                         type_to_name(k)
-                    )))
+                    )));
                 }
             }
         }

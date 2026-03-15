@@ -159,7 +159,8 @@ impl Pool {
             .map_err(|e| Error::emit("Creating table schema_version", &e))?;
 
         loop {
-            let upgraded_to_version = match self.conn
+            let upgraded_to_version = match self
+                .conn
                 .query_row(
                     "SELECT version FROM schema_version
                         WHERE key = ?1",
@@ -171,11 +172,13 @@ impl Pool {
             {
                 None => self.upgrade_schema_from_no_version()?,
                 Some(0) => self.upgrade_schema_from_version_0()?,
-                Some(1) => break,  // up to date
-                Some(v) => return Err(Error::DbError(format!(
-                    "Lease database has version {} which is newer than 1, the newest supported version",
-                    v
-                ))),
+                Some(1) => break, // up to date
+                Some(v) => {
+                    return Err(Error::DbError(format!(
+                        "Lease database has version {} which is newer than 1, the newest supported version",
+                        v
+                    )));
+                }
             };
             self.conn
                 .execute(
@@ -380,22 +383,20 @@ impl Pool {
                 },
             )
             .or_else(map_no_row_to_none)?
+            && let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>()
+            && addresses.contains(&ip)
         {
-            if let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>() {
-                if addresses.contains(&ip) {
-                    // We want leases to double in size.  But normally you renew your
-                    // lease at ½ the duration.  We don't want to always just double
-                    // the lease, because you can accidentally end up with a ridiculously
-                    // long lease if you renew rapidly.
-                    // So instead we just use 3*renew.
-                    let expiry = (ts as u32).saturating_sub(lease.2).saturating_mul(3);
-                    return Ok(Lease {
-                        ip,
-                        expire: std::time::Duration::from_secs(expiry.into()),
-                        lease_type: LeaseType::ReusingLease,
-                    });
-                }
-            }
+            // We want leases to double in size.  But normally you renew your
+            // lease at ½ the duration.  We don't want to always just double
+            // the lease, because you can accidentally end up with a ridiculously
+            // long lease if you renew rapidly.
+            // So instead we just use 3*renew.
+            let expiry = (ts as u32).saturating_sub(lease.2).saturating_mul(3);
+            return Ok(Lease {
+                ip,
+                expire: std::time::Duration::from_secs(expiry.into()),
+                lease_type: LeaseType::ReusingLease,
+            });
         }
 
         /* o The client's previous address as recorded in the client's (now
@@ -433,20 +434,18 @@ impl Pool {
                 },
             )
             .or_else(map_no_row_to_none)?
+            && let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>()
+            && addresses.contains(&ip)
         {
-            if let Ok(ip) = lease.0.parse::<std::net::Ipv4Addr>() {
-                if addresses.contains(&ip) {
-                    return Ok(Lease {
-                        ip,
-                        /* If a device is constantly asking for the same lease, we should double
-                         * the lease time.  This means transient devices get short leases, and
-                         * devices that are more permanent get longer leases.
-                         */
-                        expire: std::time::Duration::from_secs(2 * (lease.2 - lease.1) as u64),
-                        lease_type: LeaseType::Revived,
-                    });
-                }
-            }
+            return Ok(Lease {
+                ip,
+                /* If a device is constantly asking for the same lease, we should double
+                 * the lease time.  This means transient devices get short leases, and
+                 * devices that are more permanent get longer leases.
+                 */
+                expire: std::time::Duration::from_secs(2 * (lease.2 - lease.1) as u64),
+                lease_type: LeaseType::Revived,
+            });
         }
 
         /* o The address requested in the 'Requested IP Address' option, if that

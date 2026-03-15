@@ -24,7 +24,7 @@ use std::sync::Arc;
 use tokio::sync;
 
 use crate::dhcp::dhcppkt::Serialise;
-use erbium_net::addr::{NetAddr, ToNetAddr, WithPort as _, UNSPECIFIED4};
+use erbium_net::addr::{NetAddr, ToNetAddr, UNSPECIFIED4, WithPort as _};
 use erbium_net::packet;
 use erbium_net::raw;
 use erbium_net::udp;
@@ -340,7 +340,7 @@ impl ResponseOptions {
         option: &dhcppkt::DhcpOption,
         value: &T,
     ) {
-        if self.option.get(option).is_none() {
+        if !self.option.contains_key(option) {
             self.mutate_option(option, Some(value));
         }
     }
@@ -447,10 +447,10 @@ fn handle_request(
     base: &[config::Policy],
     conf: &super::config::Config,
 ) -> Result<dhcppkt::Dhcp, DhcpError> {
-    if let Some(si) = req.pkt.options.get_serverid() {
-        if !serverids.contains(&si) {
-            return Err(DhcpError::OtherServer(si));
-        }
+    if let Some(si) = req.pkt.options.get_serverid()
+        && !serverids.contains(&si)
+    {
+        return Err(DhcpError::OtherServer(si));
     }
     let mut response: Response = Response {
         options: ResponseOptions::default()
@@ -548,10 +548,9 @@ fn log_options(req: &dhcppkt::Dhcp) {
             .iter()
             // We already decode MSGTYPE and PARAMLIST elsewhere, so don't try and decode
             // them here.  It just leads to confusing looking messages.
-            .filter(|(&k, _)| k != dhcppkt::OPTION_MSGTYPE && k != dhcppkt::OPTION_PARAMLIST)
+            .filter(|(k, _)| **k != dhcppkt::OPTION_MSGTYPE && **k != dhcppkt::OPTION_PARAMLIST)
             .map(|(k, v)| format!(
-                "{}({})",
-                k.to_string(),
+                "{k}({})",
                 k.get_type()
                     .and_then(|x| x.decode(v))
                     .map(|x| format!("{}", x))
@@ -759,13 +758,13 @@ enum RunError {
     PoolError(pool::Error),
 }
 
-impl ToString for RunError {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for RunError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RunError::Io(e) => format!("I/O Error in DHCP: {}", e),
-            RunError::PoolError(e) => format!("DHCP Pool Error: {}", e),
-            RunError::ListenError(e) => format!("Failed to listen on DHCP: {}", e),
-            RunError::RecvError(e) => format!("Failed to receive a packet for DHCP: {}", e),
+            RunError::Io(e) => write!(f, "I/O Error in DHCP: {e}"),
+            RunError::PoolError(e) => write!(f, "DHCP Pool Error: {e}"),
+            RunError::ListenError(e) => write!(f, "Failed to listen on DHCP: {e}"),
+            RunError::RecvError(e) => write!(f, "Failed to receive a packet for DHCP: {e}"),
         }
     }
 }
@@ -1243,11 +1242,13 @@ async fn test_base() {
     /* The generated policy should not allocate 192.0.2.3, because that is allocated in the
      * custom dhcp policy provided.
      */
-    assert!(!base.policies[0]
-        .apply_address
-        .as_ref()
-        .unwrap()
-        .contains(&"192.0.2.3".parse().unwrap()));
+    assert!(
+        !base.policies[0]
+            .apply_address
+            .as_ref()
+            .unwrap()
+            .contains(&"192.0.2.3".parse().unwrap())
+    );
     println!("base={:#?}", base);
     println!("pkt={:?}", pkt);
     let resp = handle_discover(&mut pool, &pkt, &serverids, &[base], &conf)

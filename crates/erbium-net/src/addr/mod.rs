@@ -112,7 +112,7 @@ impl NetAddrExt for NetAddr {
     }
     fn ip(&self) -> Option<std::net::IpAddr> {
         if let Some(&v4) = self.as_sockaddr_in() {
-            Some(std::net::Ipv4Addr::from(v4.ip()).into())
+            Some(v4.ip().into())
         } else if let Some(&v6) = self.as_sockaddr_in6() {
             Some(v6.ip().into())
         } else {

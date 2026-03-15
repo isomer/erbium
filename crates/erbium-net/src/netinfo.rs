@@ -17,18 +17,18 @@
  *  API for finding out information about interfaces.
  *  Currently uses netlink, but ideally should eventually be generalised for other platforms.
  */
-use netlink_packet_core::constants::*;
 use netlink_packet_core::NetlinkPayload::InnerMessage;
+use netlink_packet_core::constants::*;
 use netlink_packet_core::*;
 use netlink_packet_route::RouteNetlinkMessage::*;
 use netlink_packet_route::{
+    AddressFamily, RouteNetlinkMessage,
     address::{AddressAttribute, AddressMessage},
     link::{LinkAttribute, LinkFlag, LinkLayerType, LinkMessage},
     route::{RouteAddress, RouteAttribute, RouteMessage},
-    AddressFamily, RouteNetlinkMessage,
 };
 use netlink_sys::TokioSocket as Socket;
-use netlink_sys::{protocols, AsyncSocket as _, AsyncSocketExt as _, SocketAddr};
+use netlink_sys::{AsyncSocket as _, AsyncSocketExt as _, SocketAddr, protocols};
 
 // These were removed in https://github.com/rust-netlink/netlink-packet-route/commit/88b1348cc0a257c55e520cae3bde3c66d5bc65a3 with no obvious replacement.
 // I imagine that .add_membership() will eventually be cleaned up to require some new type and
@@ -72,7 +72,7 @@ pub struct IfFlags(Vec<LinkFlag>);
 
 impl IfFlags {
     pub fn has_multicast(&self) -> bool {
-        self.0.iter().any(|&x| x == LinkFlag::Multicast)
+        self.0.contains(&LinkFlag::Multicast)
     }
 }
 
@@ -172,11 +172,7 @@ impl NetLinkNetInfo {
             let (ip, prefixlen) = ifaddr;
             trace!(
                 "Found addr {}/{} for {}(#{}), now {:?}",
-                ip,
-                prefixlen,
-                ii.name,
-                ifindex,
-                ii.addresses
+                ip, prefixlen, ii.name, ifindex, ii.addresses
             );
         }
     }
@@ -190,11 +186,7 @@ impl NetLinkNetInfo {
         let (ip, prefixlen) = ifaddr;
         trace!(
             "Lost addr {}/{} for {}(#{}), now {:?}",
-            ip,
-            prefixlen,
-            ii.name,
-            ifindex,
-            ii.addresses
+            ip, prefixlen, ii.name, ifindex, ii.addresses
         );
     }
 
@@ -235,10 +227,7 @@ impl NetLinkNetInfo {
 
         trace!(
             "Found new interface {}(#{}) {:?} ({:?})",
-            ifinfo.name,
-            ifidx,
-            ifinfo,
-            link
+            ifinfo.name, ifidx, ifinfo, link
         );
         netinfo.add_interface(ifidx, ifinfo);
     }

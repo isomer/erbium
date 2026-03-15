@@ -105,11 +105,11 @@ impl NDOptions {
         self.0
             .iter()
             .filter(|x| match (&o, &x) {
-                (&RDNSS, &NDOptionValue::RecursiveDnsServers(_)) => true,
+                (&RDNSS, NDOptionValue::RecursiveDnsServers(_)) => true,
                 (&RDNSS, _) => false,
-                (&DNSSL, &NDOptionValue::DnsSearchList(_)) => true,
+                (&DNSSL, NDOptionValue::DnsSearchList(_)) => true,
                 (&DNSSL, _) => false,
-                (&CAPTIVE_PORTAL, &NDOptionValue::CaptivePortal(_)) => true,
+                (&CAPTIVE_PORTAL, NDOptionValue::CaptivePortal(_)) => true,
                 (&CAPTIVE_PORTAL, _) => false,
                 (_, _) => unimplemented!(),
             })
@@ -390,7 +390,7 @@ fn serialise_router_advertisement(a: &RtrAdvertisement) -> Vec<u8> {
             NDOptionValue::SourceLLAddr(src) => {
                 use std::convert::TryFrom as _;
                 v.serialise(SOURCE_LL_ADDR.0);
-                v.serialise(u8::try_from((src.len() + 2 + 7) / 8).unwrap());
+                v.serialise(u8::try_from(src.len().div_ceil(8)).unwrap());
                 v.serialise(src);
             }
             NDOptionValue::Mtu(mtu) => {

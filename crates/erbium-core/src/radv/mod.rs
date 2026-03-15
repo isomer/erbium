@@ -450,14 +450,12 @@ impl RaAdvService {
                 let reply = self.build_announcement_by_ifidx(ifidx).await?;
                 self.send_announcement(reply, *dst, ifidx).await
             } else {
-                Err(Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                Err(Error::Io(std::io::Error::other(
                     "Missing destination address",
                 )))
             }
         } else {
-            Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(Error::Io(std::io::Error::other(
                 "Packet missing interface information",
             )))
         }
@@ -484,13 +482,13 @@ impl RaAdvService {
             ));
             tokio::time::sleep(timeout).await;
             for idx in self.netinfo.get_ifindexes().await {
-                if let Some(ifflags) = self.netinfo.get_flags_by_ifidx(idx).await {
-                    if ifflags.has_multicast() {
-                        match self.send_unsolicited(idx).await {
-                            Ok(_) => (),
-                            Err(Error::UnconfiguredInterface(_)) => (), // Ignore unconfigured interfaces.
-                            e => e?,
-                        }
+                if let Some(ifflags) = self.netinfo.get_flags_by_ifidx(idx).await
+                    && ifflags.has_multicast()
+                {
+                    match self.send_unsolicited(idx).await {
+                        Ok(_) => (),
+                        Err(Error::UnconfiguredInterface(_)) => (), // Ignore unconfigured interfaces.
+                        e => e?,
                     }
                 }
             }

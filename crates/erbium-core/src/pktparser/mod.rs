@@ -46,7 +46,7 @@ pub struct Buffer<'l> {
 }
 
 impl<'l> Buffer<'l> {
-    pub const fn new(buffer: &'l [u8]) -> Buffer {
+    pub const fn new(buffer: &'l [u8]) -> Buffer<'l> {
         Buffer { buffer, offset: 0 }
     }
 

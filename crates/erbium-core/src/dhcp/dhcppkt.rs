@@ -61,19 +61,19 @@ pub struct DhcpOp(u8);
 pub const OP_BOOTREQUEST: DhcpOp = DhcpOp(1);
 pub const OP_BOOTREPLY: DhcpOp = DhcpOp(2);
 
-impl ToString for DhcpOp {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for DhcpOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &OP_BOOTREQUEST => String::from("BOOTREQUEST"),
-            &OP_BOOTREPLY => String::from("BOOTREPLY"),
-            DhcpOp(x) => format!("#{}", x),
+            &OP_BOOTREQUEST => write!(f, "BOOTREQUEST"),
+            &OP_BOOTREPLY => write!(f, "BOOTREPLY"),
+            DhcpOp(x) => write!(f, "#{}", x),
         }
     }
 }
 
 impl fmt::Debug for DhcpOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "DhcpOp({})", self.to_string())
+        write!(f, "DhcpOp({})", self)
     }
 }
 
@@ -81,18 +81,18 @@ impl fmt::Debug for DhcpOp {
 pub struct HwType(u8);
 pub const HWTYPE_ETHERNET: HwType = HwType(1);
 
-impl ToString for HwType {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for HwType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &HWTYPE_ETHERNET => String::from("Ethernet"),
-            HwType(x) => format!("#{}", x),
+            &HWTYPE_ETHERNET => write!(f, "Ethernet"),
+            HwType(x) => write!(f, "#{x}"),
         }
     }
 }
 
 impl fmt::Debug for HwType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "HwType({})", self.to_string())
+        write!(f, "HwType({})", self)
     }
 }
 
@@ -108,26 +108,26 @@ pub const DHCPRELEASE: MessageType = MessageType(7);
 pub const DHCPINFORM: MessageType = MessageType(8);
 pub const DHCPFORCERENEW: MessageType = MessageType(9);
 
-impl ToString for MessageType {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for MessageType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            &DHCPDISCOVER => String::from("DHCPDISCOVER"),
-            &DHCPOFFER => String::from("DHCPOFFER"),
-            &DHCPREQUEST => String::from("DHCPREQUEST"),
-            &DHCPDECLINE => String::from("DHCPDECLINE"),
-            &DHCPACK => String::from("DHCPACK"),
-            &DHCPNAK => String::from("DHCPNAK"),
-            &DHCPRELEASE => String::from("DHCPRELEASE"),
-            &DHCPINFORM => String::from("DHCPINFORM"),
-            &DHCPFORCERENEW => String::from("DHCPFORCERENEW"),
-            MessageType(x) => format!("#{}", x),
+            &DHCPDISCOVER => write!(f, "DHCPDISCOVER"),
+            &DHCPOFFER => write!(f, "DHCPOFFER"),
+            &DHCPREQUEST => write!(f, "DHCPREQUEST"),
+            &DHCPDECLINE => write!(f, "DHCPDECLINE"),
+            &DHCPACK => write!(f, "DHCPACK"),
+            &DHCPNAK => write!(f, "DHCPNAK"),
+            &DHCPRELEASE => write!(f, "DHCPRELEASE"),
+            &DHCPINFORM => write!(f, "DHCPINFORM"),
+            &DHCPFORCERENEW => write!(f, "DHCPFORCERENEW"),
+            MessageType(x) => write!(f, "#{x}"),
         }
     }
 }
 
 impl fmt::Debug for MessageType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self)
     }
 }
 
@@ -589,20 +589,20 @@ pub fn name_to_option(lookup_name: &str) -> Option<DhcpOption> {
     None
 }
 
-impl ToString for DhcpOption {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for DhcpOption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (name, option, _ty) in OPT_INFO {
             if option == self {
-                return (*name).into();
+                return write!(f, "{name}");
             }
         }
-        format!("#{}", self.0)
+        write!(f, "#{}", self.0)
     }
 }
 
 impl fmt::Debug for DhcpOption {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self)
     }
 }
 
@@ -1233,7 +1233,9 @@ fn test_parse() {
         format!(
             "{}",
             DhcpOptionType::Routes
-                .decode(&[24, 192, 0, 2, 0, 192, 0, 2, 254, 24, 198, 51, 100, 0, 192, 0, 2, 254])
+                .decode(&[
+                    24, 192, 0, 2, 0, 192, 0, 2, 254, 24, 198, 51, 100, 0, 192, 0, 2, 254
+                ])
                 .unwrap()
         ),
         "192.0.2.0/24->192.0.2.254,198.51.100.0/24->192.0.2.254"

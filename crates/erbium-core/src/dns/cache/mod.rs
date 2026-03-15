@@ -76,8 +76,8 @@ pub struct CacheHandler {
  * So instead, we do some mappings to remove the std::io::Error
  */
 fn clone_out_reply(reply: &Result<dnspkt::DNSPkt, Error>) -> Result<dnspkt::DNSPkt, Error> {
-    use outquery::Error as OutReplyError;
     use Error::*;
+    use outquery::Error as OutReplyError;
     match reply {
         Ok(out_reply) => Ok(out_reply.clone()),
         Err(NotAuthoritative) => Err(NotAuthoritative),

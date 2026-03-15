@@ -75,7 +75,7 @@ impl AsRawFd for RawSocket {
 }
 
 impl std::os::fd::AsFd for RawSocket {
-    fn as_fd(&self) -> std::os::fd::BorrowedFd {
+    fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
         self.fd.as_fd()
     }
 }
@@ -189,7 +189,7 @@ impl AsRawFd for Raw6Socket {
 }
 
 impl std::os::fd::AsFd for Raw6Socket {
-    fn as_fd(&self) -> std::os::fd::BorrowedFd {
+    fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
         self.fd.as_fd()
     }
 }

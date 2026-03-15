@@ -403,7 +403,7 @@ impl Deserialise for ChassisIdType {
                     return Err(pktparser::ParseError::InvalidArgument(format!(
                         "Unknown ChassisIDType {}",
                         other
-                    )))
+                    )));
                 }
             },
         )
@@ -512,7 +512,7 @@ impl Deserialise for PortIdType {
                     return Err(pktparser::ParseError::InvalidArgument(format!(
                         "Unknown PortIDType: {}",
                         other
-                    )))
+                    )));
                 }
             },
         )
@@ -939,7 +939,10 @@ mod tests {
             0x20, 0x62, 0x79, 0x20, 0x77, 0x65, 0x69, 0x6c, 0x69, 0x75,
         ];
         let parsed = LldpTlv::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
-        assert_eq!("SystemDescription: Cisco IOS Software, C3560 Software (C3560-ADVIPSERVICESK9-M), Version 12.2(44)SE, RELEASE SOFTWARE (fc1)\nCopyright (c) 1986-2008 by Cisco Systems, Inc.\nCompiled Sat 05-Jan-08 00:15 by weiliu", parsed.to_string());
+        assert_eq!(
+            "SystemDescription: Cisco IOS Software, C3560 Software (C3560-ADVIPSERVICESK9-M), Version 12.2(44)SE, RELEASE SOFTWARE (fc1)\nCopyright (c) 1986-2008 by Cisco Systems, Inc.\nCompiled Sat 05-Jan-08 00:15 by weiliu",
+            parsed.to_string()
+        );
         let reserialized = parsed.to_wire().unwrap();
         assert_eq!(reserialized, bytes);
     }
@@ -1017,7 +1020,10 @@ mod tests {
             0x00, 0x00,
         ];
         let parsed = LldpPacket::from_wire(&mut pktparser::Buffer::new(&bytes)).unwrap();
-        assert_eq!("LLDP [\n\tChassisID type: MacAddress value: [00, 19, 2f, a7, b2, 8d]\n\tPortID type: InterfaceAlias value: [55, 70, 6c, 69, 6e, 6b, 20, 74, 6f, 20, 53, 31]\n\tTTL: 120 seconds\n\tSystemName: S2.cisco.com\n\tSystemDescription: Cisco IOS Software, C3560 Software (C3560-ADVIPSERVICESK9-M), Version 12.2(44)SE, RELEASE SOFTWARE (fc1)\nCopyright (c) 1986-2008 by Cisco Systems, Inc.\nCompiled Sat 05-Jan-08 00:15 by weiliu\n\tPortDescription: GigabitEthernet0/13\n\tSystemCapabilities system: 20, enabled: 4\n\tOrganizationSpecific oui: [00, 80, c2] subtype: 1, value: [00, 01]\n\tOrganizationSpecific oui: [00, 12, 0f] subtype: 1, value: [03, c0, 36, 00, 10]\n\tEnd of LLDPPDU\n]", parsed.to_string());
+        assert_eq!(
+            "LLDP [\n\tChassisID type: MacAddress value: [00, 19, 2f, a7, b2, 8d]\n\tPortID type: InterfaceAlias value: [55, 70, 6c, 69, 6e, 6b, 20, 74, 6f, 20, 53, 31]\n\tTTL: 120 seconds\n\tSystemName: S2.cisco.com\n\tSystemDescription: Cisco IOS Software, C3560 Software (C3560-ADVIPSERVICESK9-M), Version 12.2(44)SE, RELEASE SOFTWARE (fc1)\nCopyright (c) 1986-2008 by Cisco Systems, Inc.\nCompiled Sat 05-Jan-08 00:15 by weiliu\n\tPortDescription: GigabitEthernet0/13\n\tSystemCapabilities system: 20, enabled: 4\n\tOrganizationSpecific oui: [00, 80, c2] subtype: 1, value: [00, 01]\n\tOrganizationSpecific oui: [00, 12, 0f] subtype: 1, value: [03, c0, 36, 00, 10]\n\tEnd of LLDPPDU\n]",
+            parsed.to_string()
+        );
         let reserialized = parsed.to_wire().unwrap();
         assert_eq!(reserialized, bytes);
     }

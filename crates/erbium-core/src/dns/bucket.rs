@@ -77,15 +77,13 @@ impl GenericTokenBucket {
 
     // Remove some tokens
     pub fn deplete<T: Clock>(&mut self, tokens: u32) {
-        self.0 = self.get_tokens::<T>()
-            + (tokens + Self::TOKENS_PER_SECOND - 1) / Self::TOKENS_PER_SECOND;
+        self.0 = self.get_tokens::<T>() + tokens.div_ceil(Self::TOKENS_PER_SECOND);
     }
 
     // Add some tokens (independent of the passage of time)
     #[allow(dead_code)]
     pub fn refill<T: Clock>(&mut self, tokens: u32) {
-        self.0 = self.get_tokens::<T>()
-            - (tokens + Self::TOKENS_PER_SECOND - 1) / Self::TOKENS_PER_SECOND;
+        self.0 = self.get_tokens::<T>() - tokens.div_ceil(Self::TOKENS_PER_SECOND);
     }
 
     // Empty a bucket, ie: make the bucket has no available tokens.

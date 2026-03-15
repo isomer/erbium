@@ -120,7 +120,7 @@ impl Config {
                                 yaml::Yaml::Null => {
                                     return Err(Error::InvalidConfig(
                                         "Routes cannot have null keys".into(),
-                                    ))
+                                    ));
                                 }
                                 yaml::Yaml::String(s) if s == "next-hop" => {
                                     nexthop = Some(parse_string_ip4("next-hop", v)?.ok_or_else(
@@ -131,7 +131,7 @@ impl Config {
                                     yaml::Yaml::Null => {
                                         return Err(Error::InvalidConfig(
                                             "prefix cannot be null".into(),
-                                        ))
+                                        ));
                                     }
                                     yaml::Yaml::String(s) => {
                                         let mut it = s.split('/');
@@ -150,7 +150,7 @@ impl Config {
                                         return Err(Error::InvalidConfig(format!(
                                             "prefix has unexpected type {:?}",
                                             e,
-                                        )))
+                                        )));
                                     }
                                 },
                                 yaml::Yaml::String(s) => {
@@ -163,7 +163,7 @@ impl Config {
                                     return Err(Error::InvalidConfig(format!(
                                         "Key has unexpected type: {:?}",
                                         e
-                                    )))
+                                    )));
                                 }
                             }
                         }
@@ -328,13 +328,13 @@ impl Config {
                         return Err(Error::InvalidConfig(format!(
                             "Option {} not supported",
                             name
-                        )))
+                        )));
                     }
                     None => {
                         return Err(Error::InvalidConfig(format!(
                             "Missing type information for {}",
                             name
-                        )))
+                        )));
                     }
                 },
             ))
@@ -448,13 +448,13 @@ impl Config {
                                         return Err(Error::InvalidConfig(format!(
                                             "Unexpected key in range: {}",
                                             e
-                                        )))
+                                        )));
                                     }
                                     None => {
                                         return Err(Error::InvalidConfig(format!(
                                             "range key is not a string, instead: '{:?}'",
                                             rangek
-                                        )))
+                                        )));
                                     }
                                 }
                             }
@@ -510,7 +510,7 @@ impl Config {
                         return Err(Error::InvalidConfig(format!(
                             "Policy contains unknown field '{}'",
                             x
-                        )))
+                        )));
                     }
                     None => return Err(Error::InvalidConfig("Policy is not hash".into())),
                 }

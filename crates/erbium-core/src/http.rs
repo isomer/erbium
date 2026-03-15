@@ -19,11 +19,11 @@
 
 use crate::acl;
 use ::prometheus;
-use erbium_net::addr::{tokio_to_unixaddr, NetAddr, ToNetAddr as _};
+use erbium_net::addr::{NetAddr, ToNetAddr as _, tokio_to_unixaddr};
 use http_body_util::Full;
 use hyper::{
-    body::{Body, Bytes},
     Request, Response,
+    body::{Body, Bytes},
 };
 use hyper_util::rt::TokioIo;
 
@@ -285,7 +285,7 @@ pub async fn run(
             Some(Inet) => {
                 let s = addr.as_sockaddr_in().unwrap();
 
-                let listener = TcpListener::bind((std::net::Ipv4Addr::from(s.ip()), s.port()))
+                let listener = TcpListener::bind((s.ip(), s.port()))
                     .await
                     .map_err(|e| Error::ListenError(s.to_string(), e))?;
                 tokio::task::spawn(run_listener(

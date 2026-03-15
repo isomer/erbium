@@ -184,14 +184,7 @@ impl<'a> Fragment<'a> {
         f.buffer[6] = (netsum >> 8) as u8;
         f.buffer[7] = (netsum & 0xFF) as u8;
         let t = Tail::Fragment(Box::new(f.clone()));
-        Self::new_ipv4(
-            &src.ip().into(),
-            srcmac,
-            &dst.ip().into(),
-            dstmac,
-            udp_protocol,
-            t,
-        )
+        Self::new_ipv4(&src.ip(), srcmac, &dst.ip(), dstmac, udp_protocol, t)
     }
 }
 

@@ -25,7 +25,7 @@ pub fn std_to_libc_in_addr(addr: std::net::Ipv4Addr) -> libc::in_addr {
         s_addr: addr
             .octets()
             .iter()
-            .fold(0, |acc, x| ((acc << 8) | (*x as u32))),
+            .fold(0, |acc, x| (acc << 8) | (*x as u32)),
     }
 }
 
@@ -78,7 +78,7 @@ impl ControlMessage {
         self.pktinfo6.ipi6_ifindex = intf;
         self
     }
-    pub fn convert_to_cmsg(&mut self) -> Vec<nix::sys::socket::ControlMessage> {
+    pub fn convert_to_cmsg(&'_ mut self) -> Vec<nix::sys::socket::ControlMessage<'_>> {
         let mut cmsgs: Vec<nix::sys::socket::ControlMessage> = vec![];
 
         if let Some(addr) = self.send_from {
@@ -178,7 +178,7 @@ impl RecvMsg {
             )))
         } else if let Some(pi) = self.ipv4pktinfo {
             let ip = pi.ipi_addr.s_addr.to_ne_bytes(); // This is already in big endian form, don't try and perform a conversion.
-                                                       // It is a pity I haven't found a nicer way to do this conversion.
+            // It is a pity I haven't found a nicer way to do this conversion.
             Some(std::net::IpAddr::V4(std::net::Ipv4Addr::new(
                 ip[0], ip[1], ip[2], ip[3],
             )))
