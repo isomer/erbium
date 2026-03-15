@@ -17,11 +17,8 @@
  *  Send queries "out" to the next server.
  */
 
-use rand::RngCore;
-use std::cell::Cell;
-use std::sync::Arc;
 use tokio::net::UdpSocket;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 
 use crate::dns::dnspkt;
@@ -401,15 +398,11 @@ fn create_outquery(id: u16, in_query: &dnspkt::DNSPkt) -> dnspkt::DNSPkt {
 }
 
 #[derive(Clone)]
-pub struct OutQuery {
-    rng: Arc<Mutex<Cell<rand::rngs::OsRng>>>,
-}
+pub struct OutQuery;
 
 impl OutQuery {
     pub fn new() -> Self {
-        OutQuery {
-            rng: Arc::new(Mutex::new(Cell::new(rand::rngs::OsRng))),
-        }
+        OutQuery
     }
 
     // We want to send each UDP attempt on a different 5 tuple, because there might either be loss
@@ -522,7 +515,6 @@ impl OutQuery {
                         }
                     },
                 () = tokio::time::sleep(timeout).fuse() => {
-                    use rand::distributions::Distribution as _;
                     // Only allow for 3 attempts before we give up.  We don't want to retry
                     // fruitlessly forever.
                     if attempts.len() > 3 {
@@ -537,12 +529,8 @@ impl OutQuery {
 
                     // The jitter is not part of the security, thus we can use a cheap,
                     // fast random number generator.
-                    let mut rng = rand::thread_rng();
-                    let jitter = rand::distributions::Uniform::new(
-                        std::time::Duration::from_secs(0),
-                        timeout,
-                    )
-                        .sample(&mut rng);
+                    use rand::prelude::*;
+                    let jitter = rand::rng().random_range(std::time::Duration::from_secs(0)..timeout);
                     // This should increase by x1.5 to x2.5
                     timeout += (timeout / 2) + jitter;
                 },
@@ -555,7 +543,8 @@ impl OutQuery {
         msg: &super::DnsMessage,
         addr: std::net::SocketAddr,
     ) -> Result<dnspkt::DNSPkt, Error> {
-        let id = self.rng.lock().await.get().next_u32() as u16;
+        use rand::TryRng as _;
+        let id = rand::rngs::SysRng.try_next_u32().unwrap() as u16;
         let oq = create_outquery(id, &msg.in_query);
 
         let out_reply;

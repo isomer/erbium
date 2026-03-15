@@ -18,7 +18,6 @@
  */
 
 use erbium_net::addr::{ALL_NODES, ALL_ROUTERS};
-use rand::Rng;
 use std::convert::TryInto as _;
 // TODO: erbium_net is the only place that should use nix, so we should migrate the code here that
 // depends on nix to erbium_net, but in the meantime to keep everything consistent we rely on
@@ -475,9 +474,10 @@ impl RaAdvService {
     }
 
     async fn run_unsolicited(&self) -> Result<Void, Error> {
+        use rand::RngExt as _;
         loop {
             /* Update the time with jitter */
-            let timeout = std::time::Duration::from_secs(rand::thread_rng().gen_range(
+            let timeout = std::time::Duration::from_secs(rand::rng().random_range(
                 DEFAULT_MIN_RTR_ADV_INTERVAL.as_secs()..DEFAULT_MAX_RTR_ADV_INTERVAL.as_secs(),
             ));
             tokio::time::sleep(timeout).await;

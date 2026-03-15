@@ -19,6 +19,9 @@
 use erbium_net::addr::NetAddr;
 use erbium_net::udp;
 
+const HOURS_24: std::time::Duration = std::time::Duration::from_secs(24 * 3600);
+const HOURS_36: std::time::Duration = std::time::Duration::from_secs(36 * 3600);
+
 type UdpSocket = udp::UdpSocket;
 
 mod acl;
@@ -46,19 +49,29 @@ struct CookieKeys {
 
 impl CookieKeys {
     fn new() -> Self {
-        use rand::Rng as _;
-        use rand::distributions::Distribution as _;
-        use tokio::time::{Duration, Instant};
-        let mut rng = rand::rngs::OsRng;
         Self {
-            next_refresh: Instant::now()
-                + rand::distributions::Uniform::new(
-                    Duration::from_secs(86400 / 2),
-                    Duration::from_secs(86400 + 86400 / 2),
-                )
-                .sample(&mut rng),
-            current: rng.r#gen(),
-            previous: rng.r#gen(),
+            next_refresh: tokio::time::Instant::now(),
+            current: Default::default(),
+            previous: Default::default(),
+        }
+        .rotate()
+        .rotate()
+    }
+
+    fn rotate(&self) -> Self {
+        use rand::{RngExt as _, TryRng as _};
+        let mut rng = rand::rngs::SysRng;
+
+        let next_refresh =
+            tokio::time::Instant::now() + rand::rng().random_range(HOURS_24..HOURS_36);
+
+        let mut current: Key = Default::default();
+        rng.try_fill_bytes(&mut current).unwrap();
+
+        Self {
+            next_refresh,
+            current,
+            previous: self.current,
         }
     }
 
@@ -68,24 +81,11 @@ impl CookieKeys {
 
     // Gets the current and previous cookie keys, rotating them if they've expired.
     async fn get_keys(s: &tokio::sync::RwLock<Self>) -> (Key, Key) {
-        use rand::Rng as _;
-        use rand::distributions::Distribution as _;
-        use tokio::time::{Duration, Instant};
         if s.read().await.needs_rotation() {
-            // TODO: This only does one rotation, it's possibly both keys have expired, in which
+            // TODO: This only does one rotation, it's possible both keys have expired, in which
             // case we should rotate both.
             let mut cookies = s.write().await;
-            let mut rng = rand::rngs::OsRng;
-            *cookies = Self {
-                next_refresh: Instant::now()
-                    + rand::distributions::Uniform::new(
-                        Duration::from_secs(86400 / 2),
-                        Duration::from_secs(86400 + 86400 / 2),
-                    )
-                    .sample(&mut rng),
-                current: rng.r#gen(),
-                previous: cookies.current,
-            }
+            *cookies = cookies.rotate();
         }
 
         let cookies = s.read().await;
@@ -168,265 +168,9 @@ struct IpRateLimiter([Bucket; 256]);
 
 impl IpRateLimiter {
     fn new() -> Self {
-        let new = Bucket::default;
-        Self([
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-            new(),
-        ])
+        Self(std::array::from_fn(|_| {
+            Bucket::new(bucket::GenericTokenBucket::new())
+        }))
     }
 
     fn hash_ip(seed: u64, ip: std::net::IpAddr) -> usize {

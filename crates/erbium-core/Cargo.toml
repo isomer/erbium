@@ -35,7 +35,7 @@ hyper-util = { version = "0.1.2", features=["tokio"], optional=true }
 lazy_static = "1.4"
 log = "0.4"
 prometheus = { version=">=0.13,<=0.13", features=["process"] }
-rand = ">=0.8,<=0.8"
+rand = "0.10"
 rusqlite = { version = ">=0.28, <=0.37" }
 sha2 = "0.10"
 tokio-util = { version="0.7", features= ["codec"] }

@@ -22,7 +22,7 @@
 use crate::dhcp;
 use crate::dhcp::dhcppkt;
 use crate::dhcp::pool;
-use rand::Rng;
+use rand::prelude::*;
 use std::net;
 use tokio::sync;
 
@@ -43,7 +43,7 @@ fn mk_dhcp_request_pkt() -> dhcppkt::Dhcp {
         htype: dhcppkt::HWTYPE_ETHERNET,
         hlen: 6,
         hops: 0,
-        xid: rand::thread_rng().r#gen(),
+        xid: rand::rng().random(),
         secs: 0,
         flags: 0,
         ciaddr: net::Ipv4Addr::UNSPECIFIED,
@@ -608,7 +608,7 @@ async fn test_full() {
     let mut p = pool::Pool::new_in_memory().expect("Failed to create pool");
     let mut serverids: dhcp::ServerIds = dhcp::ServerIds::new();
     let conf = mk_default_config();
-    let xid = rand::thread_rng().r#gen();
+    let xid = rand::rng().random();
     let secs = 0;
 
     /* Send DISCOVER */
