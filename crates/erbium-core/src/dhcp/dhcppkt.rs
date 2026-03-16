@@ -176,6 +176,7 @@ pub const OPTION_TCPKEEPALIVEGARBAGE: DhcpOption = DhcpOption(39);
 pub const OPTION_NISDOMAIN: DhcpOption = DhcpOption(40);
 pub const OPTION_NISSERVERS: DhcpOption = DhcpOption(41);
 pub const OPTION_NTPSERVERS: DhcpOption = DhcpOption(42);
+pub const OPTION_VENDOR: DhcpOption = DhcpOption(43);
 pub const OPTION_NETBIOSNAMESRV: DhcpOption = DhcpOption(44);
 pub const OPTION_NETBIOSDISTSRV: DhcpOption = DhcpOption(45);
 pub const OPTION_NETBIOSTYPE: DhcpOption = DhcpOption(46);
@@ -211,10 +212,11 @@ pub const OPTION_PCODE: DhcpOption = DhcpOption(100); /* RFC4833 */
 pub const OPTION_TCODE: DhcpOption = DhcpOption(101); /* RFC4833 */
 pub const OPTION_AUTOCONF: DhcpOption = DhcpOption(103);
 pub const OPTION_SUBNETSELECT: DhcpOption = DhcpOption(104);
+pub const OPTION_IPV6PREFERRED: DhcpOption = DhcpOption(108);
+pub const OPTION_CAPTIVEPORTAL: DhcpOption = DhcpOption(114); /* RFC8910, previously in RFC7710 defined as 160 */
 pub const OPTION_DOMAINSEARCH: DhcpOption = DhcpOption(119);
 pub const OPTION_SIPSERVERS: DhcpOption = DhcpOption(120);
 pub const OPTION_CIDRROUTE: DhcpOption = DhcpOption(121);
-pub const OPTION_CAPTIVEPORTAL: DhcpOption = DhcpOption(160);
 pub const OPTION_WPAD: DhcpOption = DhcpOption(252);
 
 const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
@@ -289,6 +291,7 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
     ("nis-servers", OPTION_NISSERVERS, DhcpOptionType::IpList),
     ("ntp-servers", OPTION_NTPSERVERS, DhcpOptionType::IpList),
     // vendor specific options should be handled specially.
+    ("vendor", OPTION_VENDOR, DhcpOptionType::Unknown),
     (
         "netbios-namesrv",
         OPTION_NETBIOSNAMESRV,
@@ -388,17 +391,22 @@ const OPT_INFO: &[(&str, DhcpOption, DhcpOptionType)] = &[
         OPTION_DOMAINSEARCH,
         DhcpOptionType::DomainList,
     ), // RFC3397
+    (
+        "ipv6-preferred",
+        OPTION_IPV6PREFERRED,
+        DhcpOptionType::Seconds32,
+    ), // RFC8925
+    (
+        "captive-portal",
+        OPTION_CAPTIVEPORTAL,
+        DhcpOptionType::String,
+    ), // RFC8910
     ("sip-servers", OPTION_SIPSERVERS, DhcpOptionType::Unknown),   // RFC3361
     ("routes", OPTION_CIDRROUTE, DhcpOptionType::Routes),
     //122: Cablelabs Client configuration, RFC3495
     //123: GeoConf, RFC6225
     //124: Vendor Identifying Vendor Class -- needs special support, RFC3925
     //125: Vendor Identifying Vendor Specific Information -- needs special support, RFC3925
-    (
-        "captive-portal",
-        OPTION_CAPTIVEPORTAL,
-        DhcpOptionType::String,
-    ),
     ("wpad-url", OPTION_WPAD, DhcpOptionType::String),
 ];
 
