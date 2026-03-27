@@ -24,7 +24,7 @@ use netlink_packet_route::RouteNetlinkMessage::*;
 use netlink_packet_route::{
     AddressFamily, RouteNetlinkMessage,
     address::{AddressAttribute, AddressMessage},
-    link::{LinkAttribute, LinkFlag, LinkLayerType, LinkMessage},
+    link::{LinkAttribute, LinkFlags, LinkLayerType, LinkMessage},
     route::{RouteAddress, RouteAttribute, RouteMessage},
 };
 use netlink_sys::TokioSocket as Socket;
@@ -68,11 +68,11 @@ impl std::fmt::Debug for LinkLayer {
 }
 
 #[derive(Debug, Clone)]
-pub struct IfFlags(Vec<LinkFlag>);
+pub struct IfFlags(LinkFlags);
 
 impl IfFlags {
     pub fn has_multicast(&self) -> bool {
-        self.0.contains(&LinkFlag::Multicast)
+        self.0.contains(LinkFlags::Multicast)
     }
 }
 
@@ -516,7 +516,7 @@ impl SharedNetInfo {
                 addresses: vec![("127.0.0.1".parse().unwrap(), 8)],
                 lladdr: LinkLayer::None,
                 mtu: 65536,
-                flags: IfFlags(vec![LinkFlag::Multicast]),
+                flags: IfFlags(LinkFlags::Multicast),
             },
         );
         ni.add_interface(
@@ -526,7 +526,7 @@ impl SharedNetInfo {
                 addresses: vec![("192.0.2.254".parse().unwrap(), 24)],
                 lladdr: LinkLayer::Ethernet([0x00, 0x00, 0x5E, 0x00, 0x53, 0xFF]),
                 mtu: 1500,
-                flags: IfFlags(vec![LinkFlag::Multicast]),
+                flags: IfFlags(LinkFlags::Multicast),
             },
         );
         SharedNetInfo(std::sync::Arc::new(tokio::sync::RwLock::new(ni)))
