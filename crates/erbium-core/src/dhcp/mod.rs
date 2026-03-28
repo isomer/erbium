@@ -1174,9 +1174,9 @@ async fn test_defaults() {
     pkt.pkt.options.mutate_option(
         &dhcppkt::OPTION_PARAMLIST,
         &vec![
-            6u8, /* Domain Server */
-            119, /* Domain Search */
-            160, /* Captive Portal */
+            dhcppkt::OPTION_DOMAINSERVER,
+            dhcppkt::OPTION_DOMAINSEARCH,
+            dhcppkt::OPTION_CAPTIVEPORTAL,
         ],
     );
 
@@ -1222,9 +1222,9 @@ async fn test_base() {
     pkt.pkt.options.mutate_option(
         &dhcppkt::OPTION_PARAMLIST,
         &vec![
-            6u8, /* Domain Server */
-            119, /* Domain Search */
-            160, /* Captive Portal */
+            dhcppkt::OPTION_DOMAINSERVER,
+            dhcppkt::OPTION_DOMAINSEARCH,
+            dhcppkt::OPTION_CAPTIVEPORTAL,
         ],
     );
 
