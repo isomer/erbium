@@ -12,7 +12,7 @@ futures = "0.3.8"
 log = "0.4"
 mio = { version = ">=0.8,<=1.1", features=["net", "os-poll"] }
 netlink-packet-core = ">=0.4, <=0.7"
-netlink-packet-route = ">=0.20, <=0.20"
+netlink-packet-route = ">=0.20, <=0.23"
 netlink-sys = { version="0.8", features=["tokio_socket"] }
 nix = { version = ">=0.29,<=0.31", features=["net", "socket", "uio", "fs"] }
 tokio = { version = "1.8.4", features = ["full"] }
