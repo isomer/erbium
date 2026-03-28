@@ -1,3 +1,7 @@
+1.0.8
+   - Bumped versions, fixed up default.nix etc.
+   - Change the Captive Portal option to the version accepted by IANA, and
+     apparently used by clients.
 1.0.7
    - Broadened dependency version constraints.
    - Bumped edition to 2024.
