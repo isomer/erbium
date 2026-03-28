@@ -3277,9 +3277,9 @@ rec {
       };
       "netlink-packet-route" = rec {
         crateName = "netlink-packet-route";
-        version = "0.19.0";
+        version = "0.20.1";
         edition = "2021";
-        sha256 = "1x4bjc97nq6ckvn25l8qysybf324jbinqx6s11vqrvmlfz6p3hbl";
+        sha256 = "10yxm24n6imvqfi0c48pwb48m6p2flxsrssxbgkwb6hgrakvvram";
         libName = "netlink_packet_route";
         authors = [
           "Corentin Henry <corentinhenry@gmail.com>"
@@ -3288,6 +3288,10 @@ rec {
           {
             name = "anyhow";
             packageId = "anyhow";
+          }
+          {
+            name = "bitflags";
+            packageId = "bitflags";
           }
           {
             name = "byteorder";
