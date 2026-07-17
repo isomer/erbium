@@ -58,6 +58,13 @@ dns-routes:
 ## problems with address already in use.
 # default-listen-style: bind-unspecified
 
+### mDNS / DNS-SD advertising of the HTTP API.
+## Enabled automatically when the API listens on a TCP socket, so tools like
+## Home Assistant can discover erbium.  Configure or disable it here.
+# mdns:
+#   enable: true
+#   instance-name: erbium
+
 ### ACLs
 ## ACLs are a list of match rules, and permissions to apply if the match rule
 ## succeeds.  First match wins.  If nothing matches, no permissions are granted.

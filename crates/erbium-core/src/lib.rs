@@ -26,6 +26,8 @@ pub mod dns;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod lldp;
+#[cfg(feature = "mdns")]
+pub mod mdns;
 pub mod pktparser;
 pub mod radv;
 

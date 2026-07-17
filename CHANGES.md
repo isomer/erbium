@@ -1,3 +1,6 @@
+Unreleased
+   - Fixed #52: Advertise the HTTP API over mDNS / DNS-SD as a _erbium._tcp
+     service so it can be discovered by tools such as Home Assistant.
 1.0.8
    - Bumped versions, fixed up default.nix etc.
    - Change the Captive Portal option to the version accepted by IANA, and
