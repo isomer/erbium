@@ -54,7 +54,7 @@ dns-routes:
 ### Listener addresses
 # api-listeners: ["/var/lib/erbium/control", "@erbium", "[::]:9968"]
 # dns-listeners: ["[::]:53"]
-## This lets you configure the default bind style.  Set this to "bind-interfaces-addresses" if you're having
+## This lets you configure the default bind style.  Set this to "bind-addresses-interfaces" if you're having
 ## problems with address already in use.
 # default-listen-style: bind-unspecified
 
