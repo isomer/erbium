@@ -11,12 +11,13 @@ homepage = "https://github.com/isomer/erbium"
 version.workspace = true
 
 [features]
-full=["dhcp", "radv", "http", "dns"]
-default=["dhcp", "radv", "http", "dns"]
+full=["dhcp", "radv", "http", "dns", "mdns"]
+default=["dhcp", "radv", "http", "dns", "mdns"]
 dhcp=["erbium-core/dhcp"]
 dns=["erbium-core/dns"]
 radv=["erbium-core/radv"]
 http=["erbium-core/http"]
+mdns=["erbium-core/mdns", "http"]
 static=["erbium-core/static"] # Statically link dependencies.
 
 [dependencies]

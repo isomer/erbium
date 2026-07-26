@@ -785,6 +785,8 @@ pub struct Config {
     pub dns_listeners: AddressType,
     #[cfg(feature = "dns")]
     pub dns_routes: Vec<crate::dns::config::Route>,
+    #[cfg(feature = "mdns")]
+    pub mdns: crate::mdns::config::Config,
     pub acls: Vec<crate::acl::Acl>,
 }
 
@@ -828,6 +830,8 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
         let mut dns_listeners = None;
         #[cfg(feature = "dns")]
         let mut dns_routes = None;
+        #[cfg(feature = "mdns")]
+        let mut mdns = None;
         let mut default_listen_style = DefaultAddressType::Unspecified;
         let mut acls = None;
         for (k, v) in fragment {
@@ -881,6 +885,13 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
                     dns_routes = crate::dns::config::parse_dns_routes("dns-routes", s)?;
                     }
                 }
+                #[cfg(feature = "mdns")]
+                (Some("mdns"), s) => {
+                    mdns = Some(crate::mdns::config::parse(s)
+                        .map_err(|e| e.annotate("while parsing mdns"))?);
+                }
+                #[cfg(not(feature = "mdns"))]
+                (Some("mdns"), _) => (),
                 (Some(x), _) => {
                     return Err(Error::InvalidConfig(format!(
                         "Unknown configuration option {}",
@@ -910,6 +921,8 @@ fn load_config_from_string(cfg: &str) -> Result<SharedConfig, Error> {
             }),
             #[cfg(feature = "dns")]
             dns_routes: dns_routes.unwrap_or_default(),
+            #[cfg(feature = "mdns")]
+            mdns: mdns.unwrap_or_default(),
             captive_portal,
             listeners: listeners.unwrap_or_else(|| {
                 vec![

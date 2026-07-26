@@ -106,6 +106,17 @@ async fn go() -> Result<(), Error> {
         .await
         .map_err(|x| Error::Service(x.to_string()))?;
 
+    #[cfg(feature = "mdns")]
+    {
+        match mdns::MdnsService::new(conf.clone()).await {
+            Ok(m) => {
+                services.push(tokio::spawn(async move { m.run().await }));
+            }
+            /* Not advertising over mDNS is not fatal; just note why. */
+            Err(e) => info!("Not starting mDNS advertiser: {}", e),
+        }
+    }
+
     /* TODO: Perhaps drop some of the capabilities we don't need? */
 
     /* Now start running them */

@@ -104,6 +104,22 @@ IPv4 (ip:port) and IPv6 ([ip]:port) are also supported.
 You may wish to use ["/var/lib/erbium/control", "[::1]:9968"] to allow scraping
 prometheus metrics from ip6-localhost.
 
+.IP "\fBmdns:\fP \fImdns-options\fP"
+(defaults to enabled when there is a TCP api\-listener)
+Advertises the HTTP API over mDNS / DNS\-SD as a \fB_erbium._tcp\fP service, so
+that tools such as Home Assistant can discover erbium on the local network.
+The advertisement is only made when the API is listening on a TCP socket
+(IPv4 or IPv6); a unix domain socket cannot be reached over the network and so
+is not advertised.
+.RS
+.IP "\fBenable:\fP \fBtrue\fP|\fBfalse\fP"
+(defaults to true)
+Set to \fBfalse\fP to disable mDNS advertising.
+.IP "\fBinstance\-name:\fP \fIstring\fP"
+(defaults to the system host name)
+The DNS\-SD instance name to advertise the service under.
+.RE
+
 .IP "\fBacls:\fP \fIarray-of-acls\fP"
 (default see the ACLs section below)
 This introduces the array of ACLs.
@@ -482,6 +498,10 @@ dns-routes:
   - domain-suffixes: [""]
     type: forward
     dns-servers: [2001:4860:4860::8888]
+
+mdns:
+  enable: true
+  instance-name: erbium
 .EE
 .PP
 Imagine a router with 3 interfaces.

@@ -27,6 +27,13 @@ pub mod udp;
 pub use nix;
 pub use nix::sys::socket::sockopt::*;
 
+/// Returns the system host name, if it can be determined.
+pub fn hostname() -> Option<String> {
+    nix::unistd::gethostname()
+        .ok()
+        .and_then(|h| h.into_string().ok())
+}
+
 // TODO: Write better Debug or to_string() method.
 #[derive(Clone, Copy, Debug)]
 pub struct Ipv4Subnet {
