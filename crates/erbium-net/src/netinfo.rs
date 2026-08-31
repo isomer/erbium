@@ -18,7 +18,6 @@
  *  Currently uses netlink, but ideally should eventually be generalised for other platforms.
  */
 use netlink_packet_core::NetlinkPayload::InnerMessage;
-use netlink_packet_core::constants::*;
 use netlink_packet_core::*;
 use netlink_packet_route::RouteNetlinkMessage::*;
 use netlink_packet_route::{
